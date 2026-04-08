@@ -1,0 +1,6 @@
+interface:
+  display_name: "Vue Agent Delivery"
+  short_description: "Plan and implement the Vue frontend architecture and delivery flow."
+  default_prompt: "Use this skill to implement a Vue frontend slice using existing theme tokens."
+policy:
+  allow_implicit_invocation: true

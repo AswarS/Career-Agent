@@ -1,0 +1,35 @@
+:root {
+  color-scheme: light;
+  --font-sans: "Avenir Next", "Segoe UI", "PingFang SC", "Hiragino Sans GB", sans-serif;
+  --font-display: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", "STSong", serif;
+
+  --color-bg: #f3efe7;
+  --color-bg-subtle: #fbf8f3;
+  --color-surface: rgba(255, 252, 247, 0.84);
+  --color-surface-strong: #fffaf2;
+  --color-text: #23313b;
+  --color-text-muted: #61707c;
+  --color-primary: #1d736d;
+  --color-primary-hover: #155851;
+  --color-primary-soft: #d9f0eb;
+  --color-secondary: #d88f48;
+  --color-secondary-strong: #9c6130;
+  --color-secondary-soft: #f9e5cf;
+  --color-accent: #f0b058;
+  --color-accent-soft: #fdebd1;
+  --color-success: #25876c;
+  --color-warning: #cc7d2a;
+  --color-warning-strong: #925215;
+  --color-warning-soft: #fbe8cf;
+  --color-danger: #bc5d59;
+  --color-border: rgba(96, 114, 126, 0.16);
+  --color-border-strong: rgba(67, 81, 90, 0.2);
+  --color-focus-ring: rgba(29, 115, 109, 0.26);
+  --color-on-primary: #f8f5ef;
+
+  --chart-growth: #58b09c;
+  --chart-balance: #7f92a0;
+  --chart-opportunity: #d88f48;
+
+  --shadow-card: 0 20px 60px rgba(41, 57, 71, 0.08);
+}

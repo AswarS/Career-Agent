@@ -1,0 +1,186 @@
+import type { CareerAgentClient } from './careerAgentClient';
+import type {
+  ArtifactRecord,
+  ProfileRecord,
+  ThreadMessage,
+  ThreadSummary,
+} from '../types/entities';
+
+const threads: ThreadSummary[] = [
+  {
+    id: 'thread-001',
+    title: 'Weekly Planning',
+    preview: 'Clarify this week’s priorities and open the plan artifact.',
+    updatedAt: '2026-04-08T09:00:00Z',
+    status: 'active',
+  },
+  {
+    id: 'thread-002',
+    title: 'Career Direction',
+    preview: 'Review target roles, risks, and next milestones.',
+    updatedAt: '2026-04-07T18:20:00Z',
+    status: 'active',
+  },
+];
+
+const messagesByThread: Record<string, ThreadMessage[]> = {
+  'thread-001': [
+    {
+      id: 'message-001',
+      threadId: 'thread-001',
+      role: 'user',
+      kind: 'markdown',
+      content: 'I need a weekly plan that balances current delivery work, study time, and recovery.',
+      createdAt: '2026-04-08 09:00',
+    },
+    {
+      id: 'message-002',
+      threadId: 'thread-001',
+      role: 'assistant',
+      kind: 'markdown',
+      content:
+        'I can map that into a weekly artifact. The frontend currently hosts the artifact shell, while upstream systems will later provide realtime payload updates.',
+      createdAt: '2026-04-08 09:01',
+    },
+  ],
+  'thread-002': [
+    {
+      id: 'message-003',
+      threadId: 'thread-002',
+      role: 'user',
+      kind: 'markdown',
+      content: 'Compare frontend platform roles with AI-product-facing frontend roles.',
+      createdAt: '2026-04-07 18:20',
+    },
+    {
+      id: 'message-004',
+      threadId: 'thread-002',
+      role: 'assistant',
+      kind: 'markdown',
+      content: 'The roadmap artifact will later summarize medium-term career direction, skill gaps, and sequencing.',
+      createdAt: '2026-04-07 18:21',
+    },
+  ],
+};
+
+const profile: ProfileRecord = {
+  displayName: 'Fancy',
+  locale: 'zh-CN',
+  timezone: 'Asia/Singapore',
+  currentRole: 'Frontend-focused builder',
+  employmentStatus: 'Exploring next role while shipping side work',
+  experienceSummary: 'Frontend implementation, API coordination, and AI-assisted delivery.',
+  educationSummary: 'Structured self-learning with product-driven practice.',
+  locationRegion: 'Singapore / remote-friendly',
+  targetRole: 'AI product frontend engineer',
+  targetIndustries: ['AI tools', 'developer products', 'career tooling'],
+  shortTermGoal: 'Ship the first agent workspace frontend slice with stable contracts.',
+  longTermGoal: 'Grow into a frontend lead for AI-native products.',
+  weeklyTimeBudget: '10-12 focused hours outside fixed work',
+  constraints: ['Need sustainable pacing', 'Cannot rely on unstable backend contracts'],
+  workPreferences: ['Calm workspace', 'Clear contracts', 'Visible product outcomes'],
+  learningPreferences: ['Learn by shipping', 'Prefer one slice at a time'],
+  keyStrengths: ['Frontend implementation', 'API coordination', 'Product-oriented iteration'],
+  riskSignals: ['Over-scoping too early', 'Too many parallel directions'],
+  portfolioLinks: ['https://example.com/portfolio'],
+};
+
+const artifacts: ArtifactRecord[] = [
+  {
+    id: 'artifact-weekly-plan',
+    type: 'weekly-plan',
+    title: 'Weekly Plan',
+    status: 'ready',
+    renderMode: 'html',
+    revision: 3,
+    updatedAt: '2026-04-08T09:04:00Z',
+    summary: 'Short-horizon plan balancing delivery, study, and recovery.',
+    payload: {
+      html: `
+        <html lang="en">
+          <body style="margin:0;font-family:Inter,system-ui,sans-serif;background:#fffaf2;color:#23313b;">
+            <div style="padding:24px;">
+              <div style="padding:18px;border:1px solid rgba(96,114,126,0.16);border-radius:18px;background:#fffcf7;">
+                <p style="margin:0 0 10px;color:#61707c;font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;">Weekly Plan</p>
+                <h1 style="margin:0;font-size:26px;line-height:1.1;">Protect delivery time, keep study focused, preserve recovery.</h1>
+                <ul style="margin:18px 0 0;padding-left:18px;line-height:1.8;color:#61707c;">
+                  <li>Mon-Tue: shell and route skeleton</li>
+                  <li>Wed: profile-lite and typed adapters</li>
+                  <li>Thu: artifact host and iframe path</li>
+                  <li>Fri: integration review with upstream team</li>
+                </ul>
+              </div>
+            </div>
+          </body>
+        </html>`,
+    },
+  },
+  {
+    id: 'artifact-profile-summary',
+    type: 'profile-summary',
+    title: 'Profile Summary',
+    status: 'ready',
+    renderMode: 'html',
+    revision: 1,
+    updatedAt: '2026-04-08T09:03:00Z',
+    summary: 'Structured summary based on explicit profile fields.',
+    payload: {
+      html: `
+        <html lang="en">
+          <body style="margin:0;font-family:Inter,system-ui,sans-serif;background:#fffcf7;color:#23313b;">
+            <div style="padding:24px;">
+              <h1 style="margin:0 0 12px;font-size:24px;">Profile Summary</h1>
+              <p style="margin:0 0 8px;color:#61707c;">Target role: AI product frontend engineer</p>
+              <p style="margin:0 0 8px;color:#61707c;">Strengths: frontend implementation, API coordination, product iteration</p>
+              <p style="margin:0;color:#61707c;">Risk: over-scoping before contracts are stable</p>
+            </div>
+          </body>
+        </html>`,
+    },
+  },
+  {
+    id: 'artifact-career-roadmap',
+    type: 'career-roadmap',
+    title: 'Career Roadmap',
+    status: 'stale',
+    renderMode: 'html',
+    revision: 2,
+    updatedAt: '2026-04-07T18:21:00Z',
+    summary: 'Medium-term direction artifact reserved as the third supported type.',
+    payload: {
+      html: `
+        <html lang="en">
+          <body style="margin:0;font-family:Inter,system-ui,sans-serif;background:#fffaf2;color:#23313b;">
+            <div style="padding:24px;">
+              <h1 style="margin:0 0 14px;font-size:24px;">Career Roadmap</h1>
+              <ol style="margin:0;padding-left:18px;line-height:1.8;color:#61707c;">
+                <li>Stabilize the agent workspace shell</li>
+                <li>Ship one end-to-end artifact workflow</li>
+                <li>Use shipped work to strengthen portfolio narrative</li>
+              </ol>
+            </div>
+          </body>
+        </html>`,
+    },
+  },
+];
+
+export function createMockCareerAgentClient(): CareerAgentClient {
+  return {
+    async listThreads() {
+      return threads;
+    },
+    async getThreadMessages(threadId: string) {
+      return messagesByThread[threadId] ?? [];
+    },
+    async getProfile() {
+      return profile;
+    },
+    async listArtifacts() {
+      return artifacts;
+    },
+    async getArtifact(artifactId: string) {
+      return artifacts.find((artifact) => artifact.id === artifactId) ?? null;
+    },
+  };
+}
