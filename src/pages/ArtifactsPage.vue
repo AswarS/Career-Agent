@@ -2,6 +2,7 @@
 import { computed, onMounted } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useWorkspaceStore } from '../stores/workspace';
+import type { ArtifactRecord } from '../types/entities';
 
 const workspaceStore = useWorkspaceStore();
 const { artifacts } = storeToRefs(workspaceStore);
@@ -11,34 +12,66 @@ onMounted(() => {
 });
 
 const groupedArtifacts = computed(() => artifacts.value);
+
+function formatArtifactType(artifact: ArtifactRecord) {
+  switch (artifact.type) {
+    case 'weekly-plan':
+      return '周计划';
+    case 'profile-summary':
+      return '画像摘要';
+    case 'career-roadmap':
+      return '职业路线图';
+    default:
+      return artifact.type;
+  }
+}
+
+function formatArtifactStatus(artifact: ArtifactRecord) {
+  switch (artifact.status) {
+    case 'idle':
+      return '未激活';
+    case 'loading':
+      return '加载中';
+    case 'streaming':
+      return '更新中';
+    case 'ready':
+      return '就绪';
+    case 'stale':
+      return '待刷新';
+    case 'error':
+      return '错误';
+    default:
+      return artifact.status;
+  }
+}
 </script>
 
 <template>
   <section class="page-section">
     <header class="page-header">
       <div>
-        <p class="eyebrow">Artifacts</p>
-        <h1>First-pass artifact catalog</h1>
+        <p class="eyebrow">工件中心</p>
+        <h1>阶段成果工件总览</h1>
       </div>
       <p class="support-copy">
-        This page verifies that the frontend can list typed artifacts without depending on live backend integration.
+        这个页面用于展示前端已经可以独立列出结构化工件，而不依赖实时后端联调。
       </p>
     </header>
 
     <div class="artifact-list">
       <article v-for="artifact in groupedArtifacts" :key="artifact.id" class="card">
         <div class="card-meta">
-          <span>{{ artifact.type }}</span>
-          <span>{{ artifact.status }}</span>
+          <span>{{ formatArtifactType(artifact) }}</span>
+          <span>{{ formatArtifactStatus(artifact) }}</span>
         </div>
         <h2>{{ artifact.title }}</h2>
         <p>{{ artifact.summary }}</p>
         <div class="action-row">
           <button class="primary-button" @click="workspaceStore.openArtifact(artifact.id)">
-            Open In Host
+            在右侧打开
           </button>
           <button class="secondary-button" @click="workspaceStore.openArtifact(artifact.id).then(() => workspaceStore.refreshArtifact(artifact.id))">
-            Refresh Revision
+            刷新版本
           </button>
         </div>
       </article>

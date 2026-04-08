@@ -80,7 +80,7 @@ function beginEditing() {
 
   draftProfile.value = cloneProfile(profile.value);
   isEditing.value = true;
-  localSaveMessage.value = 'Draft editing started. Profile data will not change until you save explicitly.';
+  localSaveMessage.value = '已进入草稿编辑状态。在你明确保存之前，正式画像数据不会变化。';
 }
 
 function cancelEditing() {
@@ -89,7 +89,7 @@ function cancelEditing() {
   }
 
   isEditing.value = false;
-  localSaveMessage.value = 'Draft changes were discarded. Structured profile remains unchanged.';
+  localSaveMessage.value = '草稿修改已丢弃，结构化画像保持不变。';
 }
 
 function updateScalarField(key: ScalarProfileFieldKey, value: string) {
@@ -142,7 +142,7 @@ function applySuggestion(suggestion: ProfileSuggestion) {
     ...normalizedPatch,
   };
   isEditing.value = true;
-  localSaveMessage.value = `Applied suggestion: ${suggestion.title}. Review the draft, then save explicitly if it looks right.`;
+  localSaveMessage.value = `已应用建议：${suggestion.title}。请先检查草稿，再决定是否正式保存。`;
 }
 
 async function saveProfile() {
@@ -154,9 +154,9 @@ async function saveProfile() {
     const savedProfile = await workspaceStore.saveProfileDraft(cloneProfile(draftProfile.value));
     draftProfile.value = cloneProfile(savedProfile);
     isEditing.value = false;
-    localSaveMessage.value = 'Profile saved through the typed adapter. Structured data is now updated.';
+    localSaveMessage.value = '画像已通过类型化适配层保存，结构化数据已更新。';
   } catch {
-    localSaveMessage.value = 'Profile save failed. The draft is still local and can be retried.';
+    localSaveMessage.value = '画像保存失败。当前草稿仍保留在本地，可以继续重试。';
   }
 }
 
@@ -165,7 +165,22 @@ function resolveSourceLabel(suggestion: ProfileSuggestion) {
     return null;
   }
 
-  return suggestion.sourceThreadId === activeThread.value?.id ? 'Active thread' : suggestion.sourceThreadId.replace('thread-', 'Thread ');
+  return suggestion.sourceThreadId === activeThread.value?.id ? '当前会话' : suggestion.sourceThreadId.replace('thread-', '会话 ');
+}
+
+function formatSuggestionStatus(status: typeof profileSuggestionsStatus.value) {
+  switch (status) {
+    case 'idle':
+      return '未加载';
+    case 'loading':
+      return '加载中';
+    case 'ready':
+      return `已就绪 ${profileSuggestions.value.length} 条`;
+    case 'error':
+      return '加载失败';
+    default:
+      return status;
+  }
 }
 </script>
 
@@ -173,28 +188,28 @@ function resolveSourceLabel(suggestion: ProfileSuggestion) {
   <section class="page-section">
     <header class="page-header">
       <div>
-        <p class="eyebrow">Profile Lite</p>
-        <h1>{{ profile?.displayName ?? 'Loading profile...' }}</h1>
+        <p class="eyebrow">轻量画像</p>
+        <h1>{{ profile?.displayName ?? '正在加载画像...' }}</h1>
       </div>
       <div class="header-actions">
         <p class="support-copy">
-          Structured profile data is the source of truth. Conversation suggestions can enter a local draft, but cannot silently rewrite this view.
+          结构化画像数据是当前唯一可信源。对话建议可以进入本地草稿，但不会静默改写正式视图。
         </p>
         <div class="action-group">
           <button class="secondary-button" @click="workspaceStore.openArtifact('artifact-profile-summary')">
-            Open Profile Summary
+            打开画像摘要
           </button>
           <button v-if="!isEditing" class="primary-button" :disabled="!profile" @click="beginEditing">
-            Start Editing
+            开始编辑
           </button>
           <template v-else>
-            <button class="secondary-button" @click="cancelEditing">Discard Draft</button>
+            <button class="secondary-button" @click="cancelEditing">放弃草稿</button>
             <button
               class="primary-button"
               :disabled="!hasUnsavedChanges || profileSaveStatus === 'loading'"
               @click="saveProfile"
             >
-              {{ profileSaveStatus === 'loading' ? 'Saving...' : 'Save Profile' }}
+              {{ profileSaveStatus === 'loading' ? '保存中...' : '保存画像' }}
             </button>
           </template>
         </div>
@@ -202,14 +217,14 @@ function resolveSourceLabel(suggestion: ProfileSuggestion) {
     </header>
 
     <section v-if="profileStatus === 'loading'" class="state-card">
-      <p class="eyebrow">Loading</p>
-      <h2>Loading structured profile...</h2>
+      <p class="eyebrow">加载中</p>
+      <h2>正在加载结构化画像...</h2>
     </section>
 
     <section v-else-if="profileStatus === 'error'" class="state-card error">
-      <p class="eyebrow">Error</p>
-      <h2>Profile could not be loaded.</h2>
-      <p>{{ errorMessage ?? 'Unknown profile error.' }}</p>
+      <p class="eyebrow">错误</p>
+      <h2>画像加载失败。</h2>
+      <p>{{ errorMessage ?? '发生未知画像错误。' }}</p>
     </section>
 
     <section v-else-if="profile && draftProfile" class="profile-layout">
@@ -226,16 +241,16 @@ function resolveSourceLabel(suggestion: ProfileSuggestion) {
         <section class="editor-card">
           <div class="editor-head">
             <div>
-              <p class="eyebrow">Editable Draft</p>
-              <h2>Explicit changes only</h2>
+              <p class="eyebrow">可编辑草稿</p>
+              <h2>仅保留显式修改</h2>
             </div>
             <span class="status-chip" :class="{ active: isEditing }">
-              {{ isEditing ? 'Draft active' : 'Read synced' }}
+              {{ isEditing ? '草稿编辑中' : '已与正式数据同步' }}
             </span>
           </div>
 
           <p class="editor-copy">
-            Suggestions can be applied to this draft, but nothing becomes source-of-truth until you click `Save Profile`.
+            建议内容可以先应用到这个草稿里，但只有点击“保存画像”后才会成为正式数据。
           </p>
 
           <p v-if="localSaveMessage" class="notice-copy">{{ localSaveMessage }}</p>
@@ -270,7 +285,7 @@ function resolveSourceLabel(suggestion: ProfileSuggestion) {
                 :aria-label="field.label"
                 @input="updateListField(field.key, ($event.target as HTMLTextAreaElement).value)"
               ></textarea>
-              <small>{{ field.description }} Use one item per line.</small>
+              <small>{{ field.description }} 每行填写一项。</small>
             </label>
           </div>
         </section>
@@ -278,20 +293,20 @@ function resolveSourceLabel(suggestion: ProfileSuggestion) {
         <section class="suggestions-panel">
           <div class="panel-head">
             <div>
-              <p class="eyebrow">Conversation Suggestions</p>
-              <h2>Non-destructive profile updates</h2>
+              <p class="eyebrow">对话建议</p>
+              <h2>非破坏式画像更新</h2>
             </div>
             <span class="status-chip">
-              {{ profileSuggestionsStatus === 'ready' ? `${profileSuggestions.length} ready` : profileSuggestionsStatus }}
+              {{ formatSuggestionStatus(profileSuggestionsStatus) }}
             </span>
           </div>
 
           <section v-if="profileSuggestionsStatus === 'loading'" class="state-card compact">
-            <h2>Loading suggestions...</h2>
+            <h2>正在加载建议...</h2>
           </section>
 
           <section v-else-if="profileSuggestionsStatus === 'error'" class="state-card compact error">
-            <h2>Suggestions could not be loaded.</h2>
+            <h2>建议加载失败。</h2>
           </section>
 
           <div v-else class="suggestion-list">

@@ -26,7 +26,7 @@ const previewLines = computed(() => buildPatchPreviewLines(props.suggestion));
   <article class="suggestion-card">
     <div class="card-head">
       <div>
-        <p class="eyebrow">Suggestion</p>
+        <p class="eyebrow">建议</p>
         <h2>{{ suggestion.title }}</h2>
       </div>
       <span v-if="sourceLabel" class="source-chip">{{ sourceLabel }}</span>
@@ -42,7 +42,7 @@ const previewLines = computed(() => buildPatchPreviewLines(props.suggestion));
     </div>
 
     <button type="button" class="secondary-button" :disabled="disabled" @click="emit('apply', suggestion)">
-      Apply To Draft
+      应用到草稿
     </button>
   </article>
 </template>

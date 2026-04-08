@@ -357,7 +357,7 @@ export const useWorkspaceStore = defineStore('workspace', {
         threadId: this.activeThreadId,
         role: 'system',
         kind: 'status',
-        content: 'Upstream send path is not connected yet. This turn is stored locally to validate frontend composer and message rendering.',
+        content: '上游发送链路尚未接通。当前消息仅保存在本地，用于验证前端输入区和消息渲染流程。',
         createdAt: timestamp,
       });
     },

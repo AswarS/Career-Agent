@@ -9,10 +9,10 @@ const route = useRoute();
 const { threads, activeThreadId, sideRailCollapsed } = storeToRefs(workspaceStore);
 
 const navItems = computed(() => [
-  { label: 'Threads', compactLabel: 'T', to: `/threads/${activeThreadId.value ?? 'thread-001'}` },
-  { label: 'Profile', compactLabel: 'P', to: '/profile' },
-  { label: 'Artifacts', compactLabel: 'A', to: '/artifacts' },
-  { label: 'Settings', compactLabel: 'S', to: '/settings' },
+  { label: '会话', compactLabel: '话', to: `/threads/${activeThreadId.value ?? 'thread-001'}` },
+  { label: '画像', compactLabel: '像', to: '/profile' },
+  { label: '工件', compactLabel: '件', to: '/artifacts' },
+  { label: '设置', compactLabel: '设', to: '/settings' },
 ]);
 
 const isThreadRoute = computed(() => route.name === 'thread');
@@ -35,15 +35,15 @@ function getThreadGlyph(title: string) {
           <div class="brand-mark" aria-hidden="true">CA</div>
         </template>
         <template v-else>
-          <p class="eyebrow">Career Agent</p>
-          <h1>Frontend</h1>
-          <p class="support-copy">Workspace shell, typed adapters, and artifact host.</p>
+          <p class="eyebrow">职业规划助手</p>
+          <h1>前端演示版</h1>
+          <p class="support-copy">展示工作台外壳、类型化适配层与工件宿主面板。</p>
         </template>
       </div>
       <button
         type="button"
         class="collapse-button"
-        :aria-label="sideRailCollapsed ? 'Expand left rail' : 'Collapse left rail'"
+        :aria-label="sideRailCollapsed ? '展开左侧导航' : '收起左侧导航'"
         :aria-expanded="!sideRailCollapsed"
         :aria-controls="sideRailContentId"
         @click="toggleSideRail"
@@ -69,8 +69,8 @@ function getThreadGlyph(title: string) {
 
       <section class="thread-block">
         <div v-if="!sideRailCollapsed" class="section-head">
-          <span>{{ sideRailCollapsed ? 'Th' : 'Mock Threads' }}</span>
-          <span v-if="isThreadRoute && !sideRailCollapsed">active</span>
+          <span>{{ sideRailCollapsed ? '话' : '演示会话' }}</span>
+          <span v-if="isThreadRoute && !sideRailCollapsed">当前</span>
         </div>
         <div v-else class="section-divider" aria-hidden="true"></div>
 

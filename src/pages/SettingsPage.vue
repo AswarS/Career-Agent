@@ -2,53 +2,53 @@
   <section class="page-section">
     <header class="page-header">
       <div>
-        <p class="eyebrow">Settings</p>
-        <h1>Integration Runtime</h1>
+        <p class="eyebrow">设置</p>
+        <h1>集成运行态</h1>
       </div>
       <p class="support-copy">
-        This page exposes the current frontend runtime mode, the expected upstream routes, and the contract edges that still need team alignment.
+        这里展示当前前端运行模式、预留的上游接口，以及仍需团队对齐的边界约束。
       </p>
     </header>
 
     <section class="status-grid">
       <article class="status-card">
-        <p class="card-label">Client Mode</p>
-        <strong>{{ runtimeConfig.clientMode }}</strong>
+        <p class="card-label">客户端模式</p>
+        <strong>{{ clientModeLabel }}</strong>
         <p>{{ clientModeBody }}</p>
       </article>
       <article class="status-card">
-        <p class="card-label">API Base URL</p>
-        <strong>{{ runtimeConfig.apiBaseUrl ?? 'Not configured' }}</strong>
+        <p class="card-label">API 基础地址</p>
+        <strong>{{ runtimeConfig.apiBaseUrl ?? '未配置' }}</strong>
         <p>{{ apiBaseUrlBody }}</p>
       </article>
       <article class="status-card">
-        <p class="card-label">Artifact Transport</p>
-        <strong>{{ runtimeConfig.artifactTransport }}</strong>
+        <p class="card-label">工件传输方式</p>
+        <strong>{{ artifactTransportLabel }}</strong>
         <p>{{ artifactTransportBody }}</p>
       </article>
       <article class="status-card">
-        <p class="card-label">Voice Input</p>
-        <strong>{{ runtimeConfig.voiceInputEnabled ? 'Enabled' : 'Disabled' }}</strong>
-        <p>Voice remains a later-phase UI path and is off by default.</p>
+        <p class="card-label">语音输入</p>
+        <strong>{{ runtimeConfig.voiceInputEnabled ? '已启用' : '已关闭' }}</strong>
+        <p>语音仍属于后续阶段能力，当前默认关闭。</p>
       </article>
     </section>
 
     <section class="contract-card">
       <div class="section-heading">
         <div>
-          <p class="eyebrow">Upstream Contract</p>
-          <h2>Reserved API Paths</h2>
+          <p class="eyebrow">上游契约</p>
+          <h2>预留 API 路径</h2>
         </div>
         <p class="support-copy">
-          These routes define the current frontend expectation for the upstream `claude-code-rev` integration.
+          这些路由定义了当前前端对上游 `claude-code-rev` 集成的接口预期。
         </p>
       </div>
 
-      <div class="route-table" role="table" aria-label="Career agent API routes">
+      <div class="route-table" role="table" aria-label="职业规划助手 API 路由">
         <div class="route-table-row route-table-head" role="row">
-          <span role="columnheader">Method</span>
-          <span role="columnheader">Path</span>
-          <span role="columnheader">Purpose</span>
+          <span role="columnheader">方法</span>
+          <span role="columnheader">路径</span>
+          <span role="columnheader">用途</span>
         </div>
         <div
           v-for="route in routeDescriptors"
@@ -66,19 +66,19 @@
     <section class="contract-card">
       <div class="section-heading">
         <div>
-          <p class="eyebrow">Review Checklist</p>
-          <h2>Cross-Team Decisions Still Needed</h2>
+          <p class="eyebrow">评审清单</p>
+          <h2>仍待跨团队确认的事项</h2>
         </div>
         <p class="support-copy">
-          The frontend is now typed for these boundaries, but the final answers still belong to the integration discussion.
+          前端已经为这些边界建立了类型约束，但最终方案仍需在联调阶段确认。
         </p>
       </div>
 
       <ul class="checklist">
-        <li>Confirm whether upstream artifact pushes land via polling, SSE, or WebSocket.</li>
-        <li>Confirm the final artifact payload field names if they differ from the current snake_case route contract.</li>
-        <li>Confirm whether profile updates always require explicit UI confirmation before persistence.</li>
-        <li>Confirm auth and session requirements before replacing mock runtime mode.</li>
+        <li>确认上游工件更新最终通过轮询、SSE 还是 WebSocket 下发。</li>
+        <li>确认工件载荷字段名是否会与当前 snake_case 契约不同。</li>
+        <li>确认画像更新在持久化前是否始终需要显式 UI 确认。</li>
+        <li>在替换 mock 运行模式前，确认认证与会话机制要求。</li>
       </ul>
     </section>
   </section>
@@ -91,22 +91,41 @@ import { CAREER_AGENT_API_ROUTE_DESCRIPTORS } from '../services/careerAgentApiRo
 
 const routeDescriptors = CAREER_AGENT_API_ROUTE_DESCRIPTORS;
 
+const clientModeLabel = computed(() => (
+  runtimeConfig.clientMode === 'mock' ? '本地模拟' : '上游联调'
+));
+
+const artifactTransportLabel = computed(() => {
+  switch (runtimeConfig.artifactTransport) {
+    case 'mock':
+      return '本地模拟';
+    case 'polling':
+      return '轮询';
+    case 'sse':
+      return 'SSE';
+    case 'websocket':
+      return 'WebSocket';
+    default:
+      return runtimeConfig.artifactTransport;
+  }
+});
+
 const clientModeBody = computed(() => (
   runtimeConfig.clientMode === 'mock'
-    ? 'The workspace uses local typed mock data. No upstream dependency is required for frontend development.'
-    : 'The workspace will call the upstream API client. This mode should only be used after route and payload alignment.'
+    ? '当前工作台使用本地类型化 mock 数据，前端开发不依赖上游服务。'
+    : '当前工作台会调用上游 API 客户端，这个模式应只在路由和载荷对齐后启用。'
 ));
 
 const apiBaseUrlBody = computed(() => (
   runtimeConfig.upstreamConfigured
-    ? 'The upstream adapter is configured and can be wired without changing the store boundary.'
-    : 'The frontend remains in a safe local mode until a real upstream base URL is ready.'
+    ? '上游适配层已经具备接线条件，无需调整 store 边界即可接入。'
+    : '在真实上游地址准备好之前，前端仍保持安全的本地运行模式。'
 ));
 
 const artifactTransportBody = computed(() => (
   runtimeConfig.artifactTransport === 'mock'
-    ? 'Artifact revisions are simulated locally for now.'
-    : 'The transport is reserved for real artifact updates once upstream delivery is connected.'
+    ? '当前工件版本更新由本地模拟。'
+    : '该传输方式预留给后续真实上游工件更新。'
 ));
 </script>
 

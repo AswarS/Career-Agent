@@ -2,20 +2,33 @@
 import MarkdownContent from '../../components/MarkdownContent.vue';
 import type { ThreadMessage } from '../../types/entities';
 
-defineProps<{
+const props = defineProps<{
   message: ThreadMessage;
 }>();
+
+function formatRoleLabel(role: ThreadMessage['role']) {
+  switch (role) {
+    case 'user':
+      return '用户';
+    case 'assistant':
+      return '助手';
+    case 'system':
+      return '系统';
+    default:
+      return role;
+  }
+}
 </script>
 
 <template>
-  <article class="message-card" :class="message.role">
+  <article class="message-card" :class="props.message.role">
     <div class="message-topline">
-      <strong>{{ message.role }}</strong>
-      <span>{{ message.createdAt }}</span>
+      <strong>{{ formatRoleLabel(props.message.role) }}</strong>
+      <span>{{ props.message.createdAt }}</span>
     </div>
 
-    <MarkdownContent v-if="message.kind === 'markdown'" :source="message.content" />
-    <p v-else class="status-copy">{{ message.content }}</p>
+    <MarkdownContent v-if="props.message.kind === 'markdown'" :source="props.message.content" />
+    <p v-else class="status-copy">{{ props.message.content }}</p>
   </article>
 </template>
 

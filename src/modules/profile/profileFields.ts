@@ -42,65 +42,65 @@ export interface ProfileSnapshotItem {
 }
 
 export const scalarProfileFields: ScalarProfileFieldConfig[] = [
-  { key: 'displayName', label: 'Display Name', input: 'text', description: 'How this user should be identified in the workspace.' },
-  { key: 'locale', label: 'Locale', input: 'text', description: 'Preferred language and formatting locale.' },
-  { key: 'timezone', label: 'Timezone', input: 'text', description: 'Primary timezone for plans and reminders.' },
-  { key: 'currentRole', label: 'Current Role', input: 'text', description: 'Current work identity or operating mode.' },
-  { key: 'employmentStatus', label: 'Employment Status', input: 'text', description: 'Current job or search context.' },
-  { key: 'locationRegion', label: 'Location Region', input: 'text', description: 'Location and remote preference context.' },
-  { key: 'weeklyTimeBudget', label: 'Weekly Time Budget', input: 'text', description: 'Available focused time for career progress.' },
-  { key: 'targetRole', label: 'Target Role', input: 'text', description: 'Next role or direction the user is moving toward.' },
-  { key: 'shortTermGoal', label: 'Short-Term Goal', input: 'textarea', description: 'Near-term execution target.' },
-  { key: 'longTermGoal', label: 'Long-Term Goal', input: 'textarea', description: 'Longer-horizon direction.' },
-  { key: 'experienceSummary', label: 'Experience Summary', input: 'textarea', description: 'Compact explanation of previous work and strengths.' },
-  { key: 'educationSummary', label: 'Education Summary', input: 'textarea', description: 'Formal and self-directed learning context.' },
+  { key: 'displayName', label: '展示名称', input: 'text', description: '用户在工作台中的显示名称。' },
+  { key: 'locale', label: '语言区域', input: 'text', description: '偏好的语言和格式区域设置。' },
+  { key: 'timezone', label: '时区', input: 'text', description: '计划与提醒使用的主要时区。' },
+  { key: 'currentRole', label: '当前角色', input: 'text', description: '当前的工作身份或状态定位。' },
+  { key: 'employmentStatus', label: '就业状态', input: 'text', description: '当前工作或求职背景。' },
+  { key: 'locationRegion', label: '所在地区', input: 'text', description: '地区与远程协作偏好背景。' },
+  { key: 'weeklyTimeBudget', label: '每周可投入时间', input: 'text', description: '可用于职业推进的专注时间。' },
+  { key: 'targetRole', label: '目标角色', input: 'text', description: '下一阶段希望发展的岗位或方向。' },
+  { key: 'shortTermGoal', label: '短期目标', input: 'textarea', description: '近期需要完成的执行目标。' },
+  { key: 'longTermGoal', label: '长期目标', input: 'textarea', description: '更长期的发展方向。' },
+  { key: 'experienceSummary', label: '经验概述', input: 'textarea', description: '对过往经历与优势的简要总结。' },
+  { key: 'educationSummary', label: '学习背景', input: 'textarea', description: '正式教育与自我学习情况。' },
 ];
 
 export const listProfileFields: ListProfileFieldConfig[] = [
-  { key: 'targetIndustries', label: 'Target Industries', description: 'Industries or product categories of interest.' },
-  { key: 'constraints', label: 'Constraints', description: 'Limits or realities the planning system must respect.' },
-  { key: 'workPreferences', label: 'Work Preferences', description: 'Preferred working style and product environment.' },
-  { key: 'learningPreferences', label: 'Learning Preferences', description: 'How the user best learns and upskills.' },
-  { key: 'keyStrengths', label: 'Key Strengths', description: 'Strength clusters worth leaning on.' },
-  { key: 'riskSignals', label: 'Risk Signals', description: 'Risks that should be monitored explicitly.' },
-  { key: 'portfolioLinks', label: 'Portfolio Links', description: 'URLs or references that support the profile.' },
+  { key: 'targetIndustries', label: '目标行业', description: '感兴趣的行业或产品方向。' },
+  { key: 'constraints', label: '约束条件', description: '规划系统必须尊重的现实限制。' },
+  { key: 'workPreferences', label: '工作偏好', description: '偏好的工作方式与产品环境。' },
+  { key: 'learningPreferences', label: '学习偏好', description: '最适合自己的学习与提升方式。' },
+  { key: 'keyStrengths', label: '核心优势', description: '值得持续放大的能力组合。' },
+  { key: 'riskSignals', label: '风险信号', description: '需要被显式关注的风险项。' },
+  { key: 'portfolioLinks', label: '作品链接', description: '支持画像判断的网址或资料引用。' },
 ];
 
 export function buildProfileSnapshotSections(profile: ProfileRecord) {
   return [
     {
-      title: 'Identity And Context',
+      title: '身份与背景',
       items: [
-        { label: 'Display Name', value: profile.displayName },
-        { label: 'Current Role', value: profile.currentRole },
-        { label: 'Employment Status', value: profile.employmentStatus },
-        { label: 'Location Region', value: profile.locationRegion },
-        { label: 'Weekly Time Budget', value: profile.weeklyTimeBudget },
+        { label: '展示名称', value: profile.displayName },
+        { label: '当前角色', value: profile.currentRole },
+        { label: '就业状态', value: profile.employmentStatus },
+        { label: '所在地区', value: profile.locationRegion },
+        { label: '每周可投入时间', value: profile.weeklyTimeBudget },
       ] satisfies ProfileSnapshotItem[],
     },
     {
-      title: 'Direction',
+      title: '发展方向',
       items: [
-        { label: 'Target Role', value: profile.targetRole },
-        { label: 'Short-Term Goal', value: profile.shortTermGoal },
-        { label: 'Long-Term Goal', value: profile.longTermGoal },
-        { label: 'Target Industries', value: profile.targetIndustries },
+        { label: '目标角色', value: profile.targetRole },
+        { label: '短期目标', value: profile.shortTermGoal },
+        { label: '长期目标', value: profile.longTermGoal },
+        { label: '目标行业', value: profile.targetIndustries },
       ] satisfies ProfileSnapshotItem[],
     },
     {
-      title: 'Strengths And Constraints',
+      title: '优势与约束',
       items: [
-        { label: 'Key Strengths', value: profile.keyStrengths },
-        { label: 'Constraints', value: profile.constraints },
-        { label: 'Risk Signals', value: profile.riskSignals },
+        { label: '核心优势', value: profile.keyStrengths },
+        { label: '约束条件', value: profile.constraints },
+        { label: '风险信号', value: profile.riskSignals },
       ] satisfies ProfileSnapshotItem[],
     },
     {
-      title: 'Preferences',
+      title: '偏好设置',
       items: [
-        { label: 'Work Preferences', value: profile.workPreferences },
-        { label: 'Learning Preferences', value: profile.learningPreferences },
-        { label: 'Portfolio Links', value: profile.portfolioLinks },
+        { label: '工作偏好', value: profile.workPreferences },
+        { label: '学习偏好', value: profile.learningPreferences },
+        { label: '作品链接', value: profile.portfolioLinks },
       ] satisfies ProfileSnapshotItem[],
     },
   ];

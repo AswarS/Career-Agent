@@ -14,33 +14,63 @@ const artifactMarkup = computed(() => {
   return activeArtifact.value.payload.html;
 });
 
+const artifactTypeLabel = computed(() => {
+  switch (activeArtifact.value?.type) {
+    case 'weekly-plan':
+      return '周计划';
+    case 'profile-summary':
+      return '画像摘要';
+    case 'career-roadmap':
+      return '职业路线图';
+    default:
+      return activeArtifact.value?.type ?? '未分类';
+  }
+});
+
+const artifactStatusLabel = computed(() => {
+  switch (activeArtifact.value?.status) {
+    case 'loading':
+      return '加载中';
+    case 'streaming':
+      return '更新中';
+    case 'stale':
+      return '待刷新';
+    case 'error':
+      return '错误';
+    case 'ready':
+      return '就绪';
+    default:
+      return '未激活';
+  }
+});
+
 const statusTitle = computed(() => {
   switch (activeArtifact.value?.status) {
     case 'loading':
-      return 'Preparing artifact shell';
+      return '正在准备工件容器';
     case 'streaming':
-      return 'Applying streamed update';
+      return '正在应用流式更新';
     case 'stale':
-      return 'Artifact is stale';
+      return '当前工件版本已过期';
     case 'error':
-      return 'Artifact refresh failed';
+      return '工件刷新失败';
     default:
-      return 'Artifact ready';
+      return '工件已就绪';
   }
 });
 
 const statusBody = computed(() => {
   switch (activeArtifact.value?.status) {
     case 'loading':
-      return 'The host has reserved the surface and is waiting for the next revision payload.';
+      return '宿主面板已预留显示区域，正在等待下一版载荷。';
     case 'streaming':
-      return 'A mock refresh is in progress. The current revision will be replaced without leaving the shell.';
+      return '模拟刷新正在进行，当前版本会在保留面板上下文的情况下被替换。';
     case 'stale':
-      return 'This artifact is older than the latest known context. Refresh it before relying on the output.';
+      return '当前工件落后于最新上下文，建议刷新后再作为展示依据。';
     case 'error':
-      return 'The last refresh attempt did not complete cleanly. You can retry without losing the current shell state.';
+      return '上一次刷新未成功完成，可以在不丢失当前界面状态的前提下重试。';
     default:
-      return 'The current revision is ready inside the isolated host surface.';
+      return '当前版本已经在独立宿主面板中准备完成。';
   }
 });
 </script>
@@ -50,8 +80,8 @@ const statusBody = computed(() => {
     <div class="artifact-panel">
       <div class="artifact-header">
         <div>
-          <p class="eyebrow">{{ artifactImmersiveMode ? 'Immersive Canvas' : 'Artifact Host' }}</p>
-          <h2>{{ activeArtifact?.title ?? 'No Active Artifact' }}</h2>
+          <p class="eyebrow">{{ artifactImmersiveMode ? '沉浸画布' : '工件宿主' }}</p>
+          <h2>{{ activeArtifact?.title ?? '当前没有打开的工件' }}</h2>
         </div>
         <div v-if="artifactPaneOpen" class="artifact-actions">
           <button
@@ -60,47 +90,47 @@ const statusBody = computed(() => {
             :disabled="activeArtifact.status === 'loading' || activeArtifact.status === 'streaming'"
             @click="workspaceStore.refreshArtifact()"
           >
-            Refresh
+            刷新
           </button>
           <button
             v-if="activeArtifact && !artifactFocusMode && !artifactImmersiveMode"
             class="ghost-button"
             @click="workspaceStore.promoteArtifactFocus()"
           >
-            Focus
+            聚焦
           </button>
           <button
             v-if="activeArtifact && !artifactImmersiveMode"
             class="ghost-button"
             @click="workspaceStore.promoteArtifactImmersive()"
           >
-            Immersive
+            沉浸
           </button>
           <button
             v-if="activeArtifact && artifactImmersiveMode"
             class="ghost-button"
             @click="workspaceStore.restoreArtifactFocus()"
           >
-            Back To Focus
+            返回聚焦
           </button>
           <button
             v-if="activeArtifact && (artifactFocusMode || artifactImmersiveMode)"
             class="ghost-button"
             @click="workspaceStore.restoreArtifactPane()"
           >
-            Back To Pane
+            返回侧栏
           </button>
           <button class="ghost-button" @click="workspaceStore.closeArtifact()">
-            Close
+            关闭
           </button>
         </div>
       </div>
 
       <template v-if="activeArtifact">
         <div class="artifact-meta">
-          <span>{{ activeArtifact.type }}</span>
-          <span>{{ activeArtifact.status }}</span>
-          <span>rev {{ activeArtifact.revision }}</span>
+          <span>{{ artifactTypeLabel }}</span>
+          <span>{{ artifactStatusLabel }}</span>
+          <span>版本 {{ activeArtifact.revision }}</span>
         </div>
 
         <div class="artifact-state" :class="activeArtifact.status">
@@ -113,17 +143,17 @@ const statusBody = computed(() => {
           class="artifact-frame"
           sandbox=""
           :srcdoc="artifactMarkup"
-          title="Artifact preview"
+          title="工件预览"
         ></iframe>
 
         <div v-else class="artifact-empty">
-          <p>This artifact render mode is reserved for a later pass.</p>
+          <p>这种工件渲染模式留待后续阶段实现。</p>
         </div>
       </template>
 
       <div v-else class="artifact-empty">
-        <p>No artifact is open.</p>
-        <p class="muted">Use the conversation workspace or artifacts list to open `weekly-plan`, `profile-summary`, or `career-roadmap`.</p>
+        <p>当前没有打开工件。</p>
+        <p class="muted">可以在对话工作台或工件列表中打开 `weekly-plan`、`profile-summary` 或 `career-roadmap`。</p>
       </div>
     </div>
   </aside>

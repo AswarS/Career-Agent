@@ -29,34 +29,34 @@ function handleSubmit(value: string) {
   <section class="page-section">
     <header class="page-header">
       <div>
-        <p class="eyebrow">Conversation Workspace</p>
-        <h1>{{ activeThread?.title ?? 'Loading thread...' }}</h1>
+        <p class="eyebrow">对话工作台</p>
+        <h1>{{ activeThread?.title ?? '正在加载会话...' }}</h1>
       </div>
       <div class="action-group">
         <button class="secondary-button" @click="workspaceStore.openArtifact('artifact-profile-summary')">
-          Open Profile Summary
+          打开画像摘要
         </button>
         <button class="primary-button" @click="workspaceStore.openArtifact('artifact-weekly-plan')">
-          Open Weekly Plan
+          打开周计划
         </button>
       </div>
     </header>
 
     <section v-if="messagesStatus === 'loading'" class="state-card">
-      <p class="eyebrow">Loading</p>
-      <h2>Loading thread messages...</h2>
+      <p class="eyebrow">加载中</p>
+      <h2>正在加载会话消息...</h2>
     </section>
 
     <section v-else-if="messagesStatus === 'error'" class="state-card error">
-      <p class="eyebrow">Error</p>
-      <h2>Messages could not be loaded.</h2>
-      <p>{{ errorMessage ?? 'Unknown conversation error.' }}</p>
+      <p class="eyebrow">错误</p>
+      <h2>消息加载失败。</h2>
+      <p>{{ errorMessage ?? '发生未知会话错误。' }}</p>
     </section>
 
     <section v-else-if="messages.length === 0" class="state-card">
-      <p class="eyebrow">Empty</p>
-      <h2>This thread has no messages yet.</h2>
-      <p>Use the composer below to create the first local draft turn.</p>
+      <p class="eyebrow">空状态</p>
+      <h2>这个会话还没有消息。</h2>
+      <p>可以使用下方输入区创建第一条本地草稿消息。</p>
     </section>
 
     <section v-else class="message-stream">

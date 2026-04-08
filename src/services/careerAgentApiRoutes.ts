@@ -14,42 +14,42 @@ export const CAREER_AGENT_API_ROUTE_DESCRIPTORS = [
   {
     method: 'GET',
     path: CAREER_AGENT_API_ROUTE_PATTERNS.listThreads,
-    purpose: 'Populate the left-side thread rail.',
+    purpose: '填充左侧会话导航栏。',
   },
   {
     method: 'GET',
     path: CAREER_AGENT_API_ROUTE_PATTERNS.threadMessages,
-    purpose: 'Load the active thread timeline.',
+    purpose: '加载当前会话的消息时间线。',
   },
   {
     method: 'GET',
     path: CAREER_AGENT_API_ROUTE_PATTERNS.profile,
-    purpose: 'Read the structured profile source of truth.',
+    purpose: '读取结构化画像正式数据。',
   },
   {
     method: 'PUT',
     path: CAREER_AGENT_API_ROUTE_PATTERNS.profile,
-    purpose: 'Persist explicit profile edits from the frontend.',
+    purpose: '持久化前端显式提交的画像编辑。',
   },
   {
     method: 'GET',
     path: CAREER_AGENT_API_ROUTE_PATTERNS.profileSuggestions,
-    purpose: 'Load non-destructive profile suggestions linked to conversation context.',
+    purpose: '加载与对话上下文关联的非破坏式画像建议。',
   },
   {
     method: 'GET',
     path: CAREER_AGENT_API_ROUTE_PATTERNS.listArtifacts,
-    purpose: 'Load the artifact catalog and revisions.',
+    purpose: '加载工件目录及其版本信息。',
   },
   {
     method: 'GET',
     path: CAREER_AGENT_API_ROUTE_PATTERNS.artifact,
-    purpose: 'Open a single artifact in the host pane.',
+    purpose: '在宿主面板中打开单个工件。',
   },
   {
     method: 'POST',
     path: CAREER_AGENT_API_ROUTE_PATTERNS.refreshArtifact,
-    purpose: 'Request a fresh artifact revision.',
+    purpose: '请求新的工件版本。',
   },
 ] as const;
 

@@ -20,7 +20,7 @@ defineProps<{
           <ul v-if="item.value.length > 0" class="pill-list">
             <li v-for="entry in item.value" :key="entry">{{ entry }}</li>
           </ul>
-          <p v-else class="empty-copy">No explicit value yet.</p>
+          <p v-else class="empty-copy">暂未填写明确内容。</p>
         </template>
 
         <p v-else class="value-copy">{{ item.value }}</p>

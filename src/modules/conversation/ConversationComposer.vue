@@ -27,12 +27,12 @@ function handleSubmit() {
   <section class="composer-card">
     <div class="composer-head">
       <div>
-        <p class="eyebrow">Composer</p>
-        <h2>Text-first input, with multimodal controls reserved.</h2>
+        <p class="eyebrow">输入区</p>
+        <h2>以文本输入为主，多模态入口暂时预留。</h2>
       </div>
       <div class="composer-tools">
-        <button type="button" class="tool-button" disabled>Image</button>
-        <button type="button" class="tool-button" disabled>Voice</button>
+        <button type="button" class="tool-button" disabled>图片</button>
+        <button type="button" class="tool-button" disabled>语音</button>
       </div>
     </div>
 
@@ -40,16 +40,16 @@ function handleSubmit() {
       v-model="draft"
       class="composer-input"
       :disabled="disabled"
-      aria-label="Message"
-      placeholder="Describe the next career planning task or ask the agent to open an artifact..."
+      aria-label="消息输入框"
+      placeholder="输入下一步职业规划任务，或要求助手打开某个工件..."
     ></textarea>
 
     <div class="composer-footer">
       <p class="support-copy">
-        Current behavior is mock-driven. Submission appends a local draft turn and preserves frontend contract boundaries.
+        当前行为由 mock 数据驱动。发送后会追加本地草稿消息，并保留前端契约边界。
       </p>
       <button type="button" class="primary-button" :disabled="!canSubmit" @click="handleSubmit">
-        Send
+        发送
       </button>
     </div>
   </section>
