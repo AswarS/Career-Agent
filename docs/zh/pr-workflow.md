@@ -46,20 +46,24 @@
 
 ### 6. 等待 Copilot 自动审查
 
-通常需要几分钟。
+通常需要 `5` 分钟以上。
 
 要求：
 
+- 不要在 PR 创建后立刻通过评论或命令主动召唤 Copilot
+- 先等待自动审查进入队列并返回
 - 不要在 Copilot review 返回前就直接请求你合并
 
-如果几分钟后还没有返回评论，默认补救动作：
+推荐等待窗口：
 
-- 使用 `gh pr edit <pr-number> --add-reviewer @copilot` 主动请求 Copilot review
+- 先等待约 `5-10` 分钟
+- 再检查一次 PR review 状态
 
-说明：
+如果超过这个窗口仍然没有返回评论，再进入补救动作：
 
-- GitHub 现在已经支持通过 `gh` 直接把 Copilot 加为 reviewer
-- 所以后续流程不需要完全依赖仓库是否开启自动 review
+- 确认 PR 已经是 `Ready for review`
+- 确认 GitHub 不是单纯排队延迟
+- 只有这时才允许主动请求 Copilot reviewer
 
 ### 7. 检查 Copilot 评论
 
@@ -97,7 +101,7 @@
 
 - PR 用中文写，方便你审查
 - Copilot review 返回 1 轮后即可收口
-- 如果自动 review 没触发，就由 Codex 主动通过 `gh` 请求 Copilot 审查
+- 如果自动 review 在合理等待窗口后仍没触发，再由 Codex 主动通过 `gh` 请求 Copilot 审查
 - 如无阻塞问题，修完有效评论后由 Codex 直接合并
 
 ## Codex 执行约束

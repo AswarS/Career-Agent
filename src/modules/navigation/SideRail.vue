@@ -9,10 +9,10 @@ const route = useRoute();
 const { threads, activeThreadId, sideRailCollapsed } = storeToRefs(workspaceStore);
 
 const navItems = computed(() => [
-  { label: 'Threads', shortLabel: 'Th', to: `/threads/${activeThreadId.value ?? 'thread-001'}` },
-  { label: 'Profile', shortLabel: 'Pr', to: '/profile' },
-  { label: 'Artifacts', shortLabel: 'Ar', to: '/artifacts' },
-  { label: 'Settings', shortLabel: 'St', to: '/settings' },
+  { label: 'Threads', compactLabel: 'T', to: `/threads/${activeThreadId.value ?? 'thread-001'}` },
+  { label: 'Profile', compactLabel: 'P', to: '/profile' },
+  { label: 'Artifacts', compactLabel: 'A', to: '/artifacts' },
+  { label: 'Settings', compactLabel: 'S', to: '/settings' },
 ]);
 
 const isThreadRoute = computed(() => route.name === 'thread');
@@ -22,23 +22,23 @@ function toggleSideRail() {
   workspaceStore.toggleSideRailCollapsed();
 }
 
-function getThreadMonogram(title: string) {
-  return title
-    .split(/\s+/)
-    .map((segment) => segment[0] ?? '')
-    .join('')
-    .slice(0, 2)
-    .toUpperCase();
+function getThreadGlyph(title: string) {
+  return title.trim().charAt(0).toUpperCase();
 }
 </script>
 
 <template>
   <aside class="side-rail" :class="{ collapsed: sideRailCollapsed }">
     <div class="rail-header">
-      <div class="brand-block">
-        <p class="eyebrow">Career Agent</p>
-        <h1>{{ sideRailCollapsed ? 'CA' : 'Frontend' }}</h1>
-        <p v-if="!sideRailCollapsed" class="support-copy">Workspace shell, typed adapters, and artifact host.</p>
+      <div class="brand-block" :class="{ compact: sideRailCollapsed }">
+        <template v-if="sideRailCollapsed">
+          <div class="brand-mark" aria-hidden="true">CA</div>
+        </template>
+        <template v-else>
+          <p class="eyebrow">Career Agent</p>
+          <h1>Frontend</h1>
+          <p class="support-copy">Workspace shell, typed adapters, and artifact host.</p>
+        </template>
       </div>
       <button
         type="button"
@@ -63,15 +63,16 @@ function getThreadMonogram(title: string) {
           :aria-label="item.label"
         >
           <span class="nav-label" v-if="!sideRailCollapsed">{{ item.label }}</span>
-          <span class="nav-short" v-else>{{ item.shortLabel }}</span>
+          <span class="nav-glyph" v-else>{{ item.compactLabel }}</span>
         </RouterLink>
       </nav>
 
       <section class="thread-block">
-        <div class="section-head">
+        <div v-if="!sideRailCollapsed" class="section-head">
           <span>{{ sideRailCollapsed ? 'Th' : 'Mock Threads' }}</span>
           <span v-if="isThreadRoute && !sideRailCollapsed">active</span>
         </div>
+        <div v-else class="section-divider" aria-hidden="true"></div>
 
         <div class="thread-list">
           <RouterLink
@@ -83,7 +84,8 @@ function getThreadMonogram(title: string) {
             :title="thread.title"
             :aria-label="thread.title"
           >
-            <strong>{{ sideRailCollapsed ? getThreadMonogram(thread.title) : thread.title }}</strong>
+            <strong v-if="!sideRailCollapsed">{{ thread.title }}</strong>
+            <span v-else class="thread-glyph">{{ getThreadGlyph(thread.title) }}</span>
             <span v-if="!sideRailCollapsed">{{ thread.preview }}</span>
           </RouterLink>
         </div>
@@ -114,10 +116,35 @@ function getThreadMonogram(title: string) {
 .side-rail-scroll {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  gap: 24px;
+  gap: 22px;
   min-height: 0;
   flex: 1;
   overflow: hidden;
+}
+
+.brand-block {
+  min-width: 0;
+}
+
+.brand-block.compact {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--color-primary-soft) 42%, white);
+  color: var(--color-text);
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
 }
 
 .brand-block h1 {
@@ -172,7 +199,7 @@ function getThreadMonogram(title: string) {
 }
 
 .nav-label,
-.nav-short {
+.nav-glyph {
   display: block;
 }
 
@@ -197,6 +224,7 @@ function getThreadMonogram(title: string) {
   display: grid;
   gap: 10px;
   min-height: 0;
+  align-content: start;
   overflow-y: auto;
   padding-right: 4px;
 }
@@ -208,7 +236,8 @@ function getThreadMonogram(title: string) {
 }
 
 .thread-link strong,
-.thread-link span {
+.thread-link span,
+.thread-glyph {
   display: block;
 }
 
@@ -237,28 +266,93 @@ function getThreadMonogram(title: string) {
 }
 
 .side-rail.collapsed {
-  padding-inline: 14px;
+  padding-inline: 12px;
 }
 
 .side-rail.collapsed .rail-header {
   flex-direction: column;
   align-items: center;
+  gap: 14px;
 }
 
-.side-rail.collapsed .brand-block,
-.side-rail.collapsed .section-head {
-  text-align: center;
+.side-rail.collapsed .side-rail-scroll {
+  gap: 18px;
+}
+
+.side-rail.collapsed .nav-block,
+.side-rail.collapsed .thread-list {
+  justify-items: center;
 }
 
 .side-rail.collapsed .nav-link,
 .side-rail.collapsed .thread-link.compact {
-  padding-inline: 0.72rem;
-  text-align: center;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  padding: 0;
+  background: transparent;
 }
 
-.side-rail.collapsed .thread-link.compact strong {
-  font-size: 0.82rem;
-  letter-spacing: 0.08em;
+.side-rail.collapsed .nav-glyph,
+.side-rail.collapsed .thread-glyph {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: var(--color-bg-subtle);
+  color: var(--color-text);
+  font-size: 0.86rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.side-rail.collapsed .nav-link.router-link-active {
+  background: transparent;
+  color: inherit;
+}
+
+.side-rail.collapsed .nav-link.router-link-active .nav-glyph {
+  border-color: transparent;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.section-divider {
+  width: 24px;
+  height: 1px;
+  margin: 2px auto 0;
+  background: var(--color-border);
+}
+
+.side-rail.collapsed .thread-list {
+  gap: 12px;
+  padding-right: 0;
+}
+
+.side-rail.collapsed .thread-link.compact {
+  border: 0;
+}
+
+.side-rail.collapsed .thread-link.compact .thread-glyph {
+  background: color-mix(in srgb, var(--color-bg-subtle) 74%, white);
+}
+
+.side-rail.collapsed .thread-link.compact.active,
+.side-rail.collapsed .thread-link.compact:hover {
+  background: transparent;
+  border-color: transparent;
+}
+
+.side-rail.collapsed .thread-link.compact.active .thread-glyph,
+.side-rail.collapsed .thread-link.compact:hover .thread-glyph {
+  border-color: var(--color-border);
+  background: var(--color-surface-strong);
+}
+
+.side-rail.collapsed .thread-block {
+  gap: 14px;
 }
 
 @media (max-width: 960px) {

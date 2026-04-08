@@ -257,6 +257,7 @@ These are not considered blockers for starting framework work.
 These decisions are intentionally not part of Phase 6A:
 
 - thread folders or project-tree navigation
+- separate-browser-window simulations as a default task model
 - free-floating draggable artifact windows
 - unconstrained pane dragging
 - making voice a primary interaction path

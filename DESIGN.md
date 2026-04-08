@@ -252,6 +252,8 @@ Do not hard-code hex values inside leaf components.
 - pane body should support live HTML or previews
 - artifact should feel like a working canvas, not a modal
 - the surface may host planning outputs, simulations, coding tasks, or visual learning flows
+- immersive simulation states may hide the left rail and most conversation chrome
+- immersive mode should keep a slim top recovery bar instead of opening a detached window by default
 
 ### Input Composer
 

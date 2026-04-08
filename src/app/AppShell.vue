@@ -33,7 +33,7 @@ onMounted(() => {
 <style scoped>
 .app-shell {
   --side-rail-expanded-width: 280px;
-  --side-rail-collapsed-width: 96px;
+  --side-rail-collapsed-width: 88px;
   --side-rail-width: var(--side-rail-expanded-width);
   --artifact-pane-width: clamp(340px, 36vw, 440px);
   --workspace-padding: 18px;

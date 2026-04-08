@@ -433,6 +433,19 @@ Layout:
 - artifact takes most of the screen
 - conversation reduced to tray, tab, or collapsible panel
 
+For immersive simulations or guided learning:
+
+- prefer an `Immersive Canvas` variant of this mode
+- hide the left rail by default
+- minimize conversation chrome to a slim return path
+- keep exit and recovery controls visible
+
+MVP rule:
+
+- prefer in-app immersive canvas over opening a separate browser window
+- a separate window may be added later as an advanced option, not as the
+  default path
+
 ### Mode D: Profile Setup
 
 Use when:
@@ -545,6 +558,8 @@ Product intent:
 - support re-render and version replacement
 - keep the work canvas usable as a primary task surface, not just a preview pane
 - preserve the feedback loop between interactive canvas actions and the agent
+- support immersive task modes without making the user lose their path back to
+  the conversation workspace
 
 ### Safety Constraints
 
