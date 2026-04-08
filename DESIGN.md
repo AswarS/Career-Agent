@@ -232,6 +232,8 @@ Do not hard-code hex values inside leaf components.
 - subtle section labels
 - active item uses soft tinted fill, not heavy contrast
 - thread list should feel quiet and scannable
+- collapsed rail should use intentional glyph or badge-like markers, not raw compressed abbreviations
+- collapsed navigation must still feel designed, not like a squeezed full-width sidebar
 
 ### Conversation
 
