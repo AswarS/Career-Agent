@@ -2,8 +2,8 @@
 
 ## Status
 
-Phase 2 started. The repository now contains the shell, typed mock adapters,
-and the first conversation workspace pass.
+Phase 3 started. The repository now contains the shell, typed mock adapters,
+the first conversation workspace pass, and explicit profile draft editing.
 
 ## Goal
 

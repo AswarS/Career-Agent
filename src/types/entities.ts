@@ -43,6 +43,14 @@ export interface ProfileRecord {
   portfolioLinks: string[];
 }
 
+export interface ProfileSuggestion {
+  id: string;
+  title: string;
+  rationale: string;
+  sourceThreadId: string | null;
+  patch: Partial<ProfileRecord>;
+}
+
 export type ArtifactType = 'weekly-plan' | 'profile-summary' | 'career-roadmap';
 export type ArtifactStatus = 'idle' | 'loading' | 'streaming' | 'ready' | 'stale' | 'error';
 export type ArtifactRenderMode = 'html' | 'markdown' | 'cards';

@@ -2,6 +2,7 @@ import type { CareerAgentClient } from './careerAgentClient';
 import type {
   ArtifactRecord,
   ProfileRecord,
+  ProfileSuggestion,
   ThreadMessage,
   ThreadSummary,
 } from '../types/entities';
@@ -64,7 +65,7 @@ const messagesByThread: Record<string, ThreadMessage[]> = {
   ],
 };
 
-const profile: ProfileRecord = {
+let profile: ProfileRecord = {
   displayName: 'Fancy',
   locale: 'zh-CN',
   timezone: 'Asia/Singapore',
@@ -85,6 +86,90 @@ const profile: ProfileRecord = {
   riskSignals: ['Over-scoping too early', 'Too many parallel directions'],
   portfolioLinks: ['https://example.com/portfolio'],
 };
+
+const profileSuggestions: ProfileSuggestion[] = [
+  {
+    id: 'suggestion-target-role',
+    title: 'Tighten the target role wording',
+    rationale: 'Thread feedback suggests the current target should emphasize AI-native product delivery rather than generic frontend scope.',
+    sourceThreadId: 'thread-002',
+    patch: {
+      targetRole: 'AI-native frontend engineer for developer and career products',
+    },
+  },
+  {
+    id: 'suggestion-short-term-goal',
+    title: 'Make the short-term goal more concrete',
+    rationale: 'The current workspace slice is already clear enough to turn into a tighter execution goal.',
+    sourceThreadId: 'thread-001',
+    patch: {
+      shortTermGoal: 'Ship profile-lite and artifact-host flows with stable typed adapters and explicit save boundaries.',
+    },
+  },
+  {
+    id: 'suggestion-strengths',
+    title: 'Sharpen the strengths cluster',
+    rationale: 'Your strongest positioning is not only implementation but shipping with AI-assisted iteration discipline.',
+    sourceThreadId: 'thread-002',
+    patch: {
+      keyStrengths: ['Frontend implementation', 'API coordination', 'AI-assisted product delivery'],
+    },
+  },
+];
+
+function cloneProfileRecord(input: ProfileRecord): ProfileRecord {
+  return {
+    ...input,
+    targetIndustries: [...input.targetIndustries],
+    constraints: [...input.constraints],
+    workPreferences: [...input.workPreferences],
+    learningPreferences: [...input.learningPreferences],
+    keyStrengths: [...input.keyStrengths],
+    riskSignals: [...input.riskSignals],
+    portfolioLinks: [...input.portfolioLinks],
+  };
+}
+
+function cloneProfileSuggestionPatch(patch: Partial<ProfileRecord>) {
+  return Object.fromEntries(
+    Object.entries(patch).map(([key, value]) => [key, Array.isArray(value) ? [...value] : value]),
+  ) as Partial<ProfileRecord>;
+}
+
+function cloneArtifactRecord(input: ArtifactRecord): ArtifactRecord {
+  return {
+    ...input,
+    payload: {
+      ...input.payload,
+    },
+  };
+}
+
+function buildProfileSummaryArtifact(nextProfile: ProfileRecord, revision: number): ArtifactRecord {
+  return {
+    id: 'artifact-profile-summary',
+    type: 'profile-summary',
+    title: 'Profile Summary',
+    status: 'ready',
+    renderMode: 'html',
+    revision,
+    updatedAt: new Date().toISOString(),
+    summary: `Structured summary for ${nextProfile.displayName} based on explicit profile fields.`,
+    payload: {
+      html: `
+        <html lang="en">
+          <body style="margin:0;font-family:Inter,system-ui,sans-serif;background:#fffcf7;color:#23313b;">
+            <div style="padding:24px;">
+              <h1 style="margin:0 0 12px;font-size:24px;">Profile Summary</h1>
+              <p style="margin:0 0 8px;color:#61707c;">Target role: ${nextProfile.targetRole}</p>
+              <p style="margin:0 0 8px;color:#61707c;">Strengths: ${nextProfile.keyStrengths.join(', ')}</p>
+              <p style="margin:0;color:#61707c;">Risk: ${nextProfile.riskSignals[0] ?? 'No primary risk signal recorded'}</p>
+            </div>
+          </body>
+        </html>`,
+    },
+  };
+}
 
 const artifacts: ArtifactRecord[] = [
   {
@@ -116,29 +201,7 @@ const artifacts: ArtifactRecord[] = [
         </html>`,
     },
   },
-  {
-    id: 'artifact-profile-summary',
-    type: 'profile-summary',
-    title: 'Profile Summary',
-    status: 'ready',
-    renderMode: 'html',
-    revision: 1,
-    updatedAt: '2026-04-08T09:03:00Z',
-    summary: 'Structured summary based on explicit profile fields.',
-    payload: {
-      html: `
-        <html lang="en">
-          <body style="margin:0;font-family:Inter,system-ui,sans-serif;background:#fffcf7;color:#23313b;">
-            <div style="padding:24px;">
-              <h1 style="margin:0 0 12px;font-size:24px;">Profile Summary</h1>
-              <p style="margin:0 0 8px;color:#61707c;">Target role: AI product frontend engineer</p>
-              <p style="margin:0 0 8px;color:#61707c;">Strengths: frontend implementation, API coordination, product iteration</p>
-              <p style="margin:0;color:#61707c;">Risk: over-scoping before contracts are stable</p>
-            </div>
-          </body>
-        </html>`,
-    },
-  },
+  buildProfileSummaryArtifact(profile, 1),
   {
     id: 'artifact-career-roadmap',
     type: 'career-roadmap',
@@ -175,13 +238,33 @@ export function createMockCareerAgentClient(): CareerAgentClient {
       return messagesByThread[threadId] ?? [];
     },
     async getProfile() {
-      return profile;
+      return cloneProfileRecord(profile);
+    },
+    async updateProfile(nextProfile) {
+      profile = cloneProfileRecord(nextProfile);
+
+      const artifactIndex = artifacts.findIndex((artifact) => artifact.id === 'artifact-profile-summary');
+
+      if (artifactIndex >= 0) {
+        const currentArtifact = artifacts[artifactIndex];
+        artifacts[artifactIndex] = buildProfileSummaryArtifact(profile, currentArtifact.revision + 1);
+      }
+
+      return cloneProfileRecord(profile);
+    },
+    async listProfileSuggestions() {
+      return profileSuggestions.map((suggestion) => ({
+        ...suggestion,
+        patch: cloneProfileSuggestionPatch(suggestion.patch),
+      }));
     },
     async listArtifacts() {
-      return artifacts;
+      return artifacts.map(cloneArtifactRecord);
     },
     async getArtifact(artifactId: string) {
-      return artifacts.find((artifact) => artifact.id === artifactId) ?? null;
+      const artifact = artifacts.find((entry) => entry.id === artifactId);
+
+      return artifact ? cloneArtifactRecord(artifact) : null;
     },
   };
 }

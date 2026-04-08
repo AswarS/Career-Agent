@@ -4,6 +4,7 @@ import type {
   ArtifactRecord,
   LoadState,
   ProfileRecord,
+  ProfileSuggestion,
   ThreadMessage,
   ThreadSummary,
 } from '../types/entities';
@@ -33,6 +34,7 @@ interface WorkspaceState {
   threads: ThreadSummary[];
   messages: ThreadMessage[];
   profile: ProfileRecord | null;
+  profileSuggestions: ProfileSuggestion[];
   artifacts: ArtifactRecord[];
   activeThreadId: string | null;
   activeArtifactId: string | null;
@@ -40,6 +42,8 @@ interface WorkspaceState {
   threadsStatus: LoadState;
   messagesStatus: LoadState;
   profileStatus: LoadState;
+  profileSuggestionsStatus: LoadState;
+  profileSaveStatus: LoadState;
   artifactsStatus: LoadState;
   errorMessage: string | null;
 }
@@ -50,6 +54,7 @@ export const useWorkspaceStore = defineStore('workspace', {
     threads: [],
     messages: [],
     profile: null,
+    profileSuggestions: [],
     artifacts: [],
     activeThreadId: null,
     activeArtifactId: null,
@@ -57,6 +62,8 @@ export const useWorkspaceStore = defineStore('workspace', {
     threadsStatus: 'idle',
     messagesStatus: 'idle',
     profileStatus: 'idle',
+    profileSuggestionsStatus: 'idle',
+    profileSaveStatus: 'idle',
     artifactsStatus: 'idle',
     errorMessage: null,
   }),
@@ -82,29 +89,35 @@ export const useWorkspaceStore = defineStore('workspace', {
       initializePromise = (async () => {
         this.threadsStatus = 'loading';
         this.profileStatus = 'loading';
+        this.profileSuggestionsStatus = 'loading';
         this.artifactsStatus = 'loading';
         this.errorMessage = null;
 
         try {
-          const [threads, profile, artifacts] = await Promise.all([
+          const [threads, profile, profileSuggestions, artifacts] = await Promise.all([
             client.listThreads(),
             client.getProfile(),
+            client.listProfileSuggestions(),
             client.listArtifacts(),
           ]);
 
           this.threads = threads;
           this.profile = profile;
+          this.profileSuggestions = profileSuggestions;
           this.artifacts = artifacts;
           this.activeThreadId ??= threads[0]?.id ?? null;
           this.initialized = true;
 
           this.threadsStatus = 'ready';
           this.profileStatus = 'ready';
+          this.profileSuggestionsStatus = 'ready';
           this.artifactsStatus = 'ready';
           this.messagesStatus = 'idle';
+          this.profileSaveStatus = 'idle';
         } catch (error) {
           this.threadsStatus = 'error';
           this.profileStatus = 'error';
+          this.profileSuggestionsStatus = 'error';
           this.artifactsStatus = 'error';
           this.messagesStatus = 'error';
           this.errorMessage = error instanceof Error ? error.message : 'Unknown initialization error';
@@ -171,6 +184,39 @@ export const useWorkspaceStore = defineStore('workspace', {
 
       this.activeArtifactId = artifact.id;
       this.artifactPaneOpen = true;
+    },
+    async saveProfileDraft(nextProfile: ProfileRecord) {
+      await this.initialize();
+      this.profileSaveStatus = 'loading';
+      this.errorMessage = null;
+
+      try {
+        const savedProfile = await client.updateProfile(nextProfile);
+        const refreshedProfileSummary = await client.getArtifact('artifact-profile-summary');
+
+        this.profile = savedProfile;
+
+        if (refreshedProfileSummary) {
+          const artifactIndex = this.artifacts.findIndex((artifact) => artifact.id === refreshedProfileSummary.id);
+
+          if (artifactIndex >= 0) {
+            this.artifacts[artifactIndex] = refreshedProfileSummary;
+          } else {
+            this.artifacts.push(refreshedProfileSummary);
+          }
+
+          if (this.activeArtifactId === refreshedProfileSummary.id) {
+            this.activeArtifactId = refreshedProfileSummary.id;
+          }
+        }
+
+        this.profileSaveStatus = 'ready';
+        return savedProfile;
+      } catch (error) {
+        this.profileSaveStatus = 'error';
+        this.errorMessage = error instanceof Error ? error.message : 'Unknown profile save error';
+        throw error;
+      }
     },
     submitDraftMessage(content: string) {
       if (!this.activeThreadId || !content.trim()) {
