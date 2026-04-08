@@ -10,6 +10,7 @@ export interface ThreadSummary {
 
 export type MessageRole = 'user' | 'assistant' | 'system';
 export type MessageKind = 'markdown' | 'status';
+export type LoadState = 'idle' | 'loading' | 'ready' | 'error';
 
 export interface ThreadMessage {
   id: string;

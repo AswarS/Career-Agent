@@ -1,22 +1,28 @@
 <script setup lang="ts">
-import { computed, onMounted, watch } from 'vue';
+import { computed, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useRoute } from 'vue-router';
+import ConversationComposer from '../modules/conversation/ConversationComposer.vue';
+import ConversationMessageCard from '../modules/conversation/ConversationMessageCard.vue';
 import { useWorkspaceStore } from '../stores/workspace';
 
 const route = useRoute();
 const workspaceStore = useWorkspaceStore();
-const { activeThread, messages } = storeToRefs(workspaceStore);
+const { activeThread, errorMessage, messages, messagesStatus } = storeToRefs(workspaceStore);
 
 const threadId = computed(() => String(route.params.threadId ?? 'thread-001'));
 
-onMounted(async () => {
-  await workspaceStore.setActiveThread(threadId.value);
-});
+watch(
+  threadId,
+  async (value) => {
+    await workspaceStore.setActiveThread(value);
+  },
+  { immediate: true },
+);
 
-watch(threadId, async (value) => {
-  await workspaceStore.setActiveThread(value);
-});
+function handleSubmit(value: string) {
+  workspaceStore.submitDraftMessage(value);
+}
 </script>
 
 <template>
@@ -36,23 +42,28 @@ watch(threadId, async (value) => {
       </div>
     </header>
 
-    <section class="message-stream">
-      <article v-for="message in messages" :key="message.id" class="message-card" :class="message.role">
-        <div class="message-topline">
-          <strong>{{ message.role }}</strong>
-          <span>{{ message.createdAt }}</span>
-        </div>
-        <p>{{ message.content }}</p>
-      </article>
+    <section v-if="messagesStatus === 'loading'" class="state-card">
+      <p class="eyebrow">Loading</p>
+      <h2>Loading thread messages...</h2>
     </section>
 
-    <section class="composer-card">
-      <p class="eyebrow">Composer Placeholder</p>
-      <h2>Text, markdown, and image preview enter here in later passes.</h2>
-      <p>
-        Voice remains phase 2. Backend interaction is still mock-driven through typed adapters.
-      </p>
+    <section v-else-if="messagesStatus === 'error'" class="state-card error">
+      <p class="eyebrow">Error</p>
+      <h2>Messages could not be loaded.</h2>
+      <p>{{ errorMessage ?? 'Unknown conversation error.' }}</p>
     </section>
+
+    <section v-else-if="messages.length === 0" class="state-card">
+      <p class="eyebrow">Empty</p>
+      <h2>This thread has no messages yet.</h2>
+      <p>Use the composer below to create the first local draft turn.</p>
+    </section>
+
+    <section v-else class="message-stream">
+      <ConversationMessageCard v-for="message in messages" :key="message.id" :message="message" />
+    </section>
+
+    <ConversationComposer :disabled="messagesStatus === 'loading'" @submit="handleSubmit" />
   </section>
 </template>
 
@@ -64,8 +75,7 @@ watch(threadId, async (value) => {
   gap: 14px;
 }
 
-.message-card,
-.composer-card {
+.state-card {
   padding: 22px;
   border-radius: 24px;
   border: 1px solid var(--color-border);
@@ -73,40 +83,21 @@ watch(threadId, async (value) => {
   box-shadow: var(--shadow-card);
 }
 
-.message-card.assistant {
-  background: color-mix(in srgb, var(--color-primary-soft) 46%, white);
+.state-card.error {
+  background: color-mix(in srgb, var(--color-warning-soft) 62%, white);
 }
 
-.message-topline {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 10px;
-}
-
-.message-topline strong {
-  color: var(--color-text);
-  text-transform: capitalize;
-}
-
-.message-topline span {
-  color: var(--color-text-muted);
-  font-size: 0.82rem;
-}
-
-.message-card p,
-.composer-card p {
+.state-card h2 {
   margin: 0;
-  color: var(--color-text-muted);
-  line-height: 1.7;
-}
-
-.composer-card h2 {
-  margin: 0 0 12px;
   color: var(--color-text);
   font-family: var(--font-display);
   font-size: 1.32rem;
+}
+
+.state-card p:not(.eyebrow) {
+  margin: 10px 0 0;
+  color: var(--color-text-muted);
+  line-height: 1.7;
 }
 
 .action-group {
@@ -134,5 +125,11 @@ watch(threadId, async (value) => {
   border: 1px solid var(--color-border);
   background: var(--color-surface-strong);
   color: var(--color-text);
+}
+
+@media (max-width: 860px) {
+  .action-group {
+    width: 100%;
+  }
 }
 </style>

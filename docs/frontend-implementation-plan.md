@@ -2,7 +2,8 @@
 
 ## Status
 
-Phase 1 started. The repository now contains the first framework skeleton.
+Phase 2 started. The repository now contains the shell, typed mock adapters,
+and the first conversation workspace pass.
 
 ## Goal
 

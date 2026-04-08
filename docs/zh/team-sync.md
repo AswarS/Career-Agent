@@ -96,18 +96,26 @@
 
 ## 开发环境提醒
 
-### GitHub PR 自动化
+### GitHub PR 工作流
 
-当前状态：
+当前默认做法：
 
-- Git 分支推送正常
-- 本机已经安装 `gh`
-- 当前分支对应的 draft PR 已存在
-- 可以在终端中查看和更新 GitHub PR
+- 使用仓库内中文 PR 模版
+- 提交后由 Codex 在终端里把 draft PR 切到 `Ready for review`
+- 优先等待 Copilot 自动审查返回
+- 如果几分钟内没返回，就由 Codex 执行 `gh pr edit <pr-number> --add-reviewer @copilot`
+- Copilot 返回后，再检查并修正有效问题
 
-当前 PR：
+你可以重点查看：
 
-- `https://github.com/bit-dyf/frontend/pull/1`
+- `docs/zh/pr-workflow.md`
+
+如果某次 PR 没有等到 Copilot 自动评论，需要确认：
+
+- 仓库是否启用了对应的 Copilot review 能力
+- PR 是否已经切换到 `Ready for review`
+- GitHub 本身是否只是审查延迟
+- 是否已经主动请求 `@copilot` reviewer
 
 ## 当你发现团队开始分歧时
 

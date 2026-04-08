@@ -47,3 +47,15 @@ Primary product and implementation documents:
 - design direction is locked as a frontend visual system
 - demo UI has been reset into a non-product placeholder
 - framework skeleton and typed mock integration have started
+
+## Contribution Workflow
+
+- pull requests should be written in Chinese for human review
+- use the repository PR template
+- after local validation, switch the PR to `Ready for review`
+- wait for Copilot review before the final merge recommendation
+- if automatic review does not appear, request it with `gh pr edit <pr-number> --add-reviewer @copilot`
+
+Useful references:
+
+- [Chinese PR workflow](./docs/zh/pr-workflow.md)

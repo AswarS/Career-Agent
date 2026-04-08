@@ -30,7 +30,7 @@ const messagesByThread: Record<string, ThreadMessage[]> = {
       threadId: 'thread-001',
       role: 'user',
       kind: 'markdown',
-      content: 'I need a weekly plan that balances current delivery work, study time, and recovery.',
+      content: 'I need a **weekly plan** that balances current delivery work, study time, and recovery.',
       createdAt: '2026-04-08 09:00',
     },
     {
@@ -39,7 +39,7 @@ const messagesByThread: Record<string, ThreadMessage[]> = {
       role: 'assistant',
       kind: 'markdown',
       content:
-        'I can map that into a weekly artifact. The frontend currently hosts the artifact shell, while upstream systems will later provide realtime payload updates.',
+        'I can map that into a weekly artifact.\n\n- Protect shell work first\n- Keep profile updates explicit\n- Use the artifact host for plan rendering\n\nThe frontend currently hosts the artifact shell, while upstream systems will later provide realtime payload updates.',
       createdAt: '2026-04-08 09:01',
     },
   ],
@@ -49,7 +49,7 @@ const messagesByThread: Record<string, ThreadMessage[]> = {
       threadId: 'thread-002',
       role: 'user',
       kind: 'markdown',
-      content: 'Compare frontend platform roles with AI-product-facing frontend roles.',
+      content: 'Compare **frontend platform roles** with **AI-product-facing frontend roles**.',
       createdAt: '2026-04-07 18:20',
     },
     {
@@ -57,7 +57,8 @@ const messagesByThread: Record<string, ThreadMessage[]> = {
       threadId: 'thread-002',
       role: 'assistant',
       kind: 'markdown',
-      content: 'The roadmap artifact will later summarize medium-term career direction, skill gaps, and sequencing.',
+      content:
+        'The roadmap artifact will later summarize medium-term career direction, skill gaps, and sequencing.\n\n`career-roadmap` is currently the third locked artifact type.',
       createdAt: '2026-04-07 18:21',
     },
   ],
