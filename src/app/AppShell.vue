@@ -7,11 +7,12 @@ import SideRail from '../modules/navigation/SideRail.vue';
 import { useWorkspaceStore } from '../stores/workspace';
 
 const workspaceStore = useWorkspaceStore();
-const { artifactFocusMode, artifactPaneOpen, sideRailCollapsed } = storeToRefs(workspaceStore);
+const { artifactFocusMode, artifactImmersiveMode, artifactPaneOpen, sideRailCollapsed } = storeToRefs(workspaceStore);
 
 const shellClasses = computed(() => ({
   'artifact-open': artifactPaneOpen.value,
   'artifact-focus': artifactFocusMode.value,
+  'artifact-immersive': artifactImmersiveMode.value,
   'side-rail-collapsed': sideRailCollapsed.value,
 }));
 
@@ -22,8 +23,8 @@ onMounted(() => {
 
 <template>
   <div class="app-shell" :class="shellClasses">
-    <SideRail />
-    <main class="workspace-main">
+    <SideRail v-if="!artifactImmersiveMode" />
+    <main v-if="!artifactImmersiveMode" class="workspace-main">
       <RouterView />
     </main>
     <ArtifactHost />
@@ -49,6 +50,10 @@ onMounted(() => {
 
 .app-shell.artifact-focus {
   grid-template-columns: var(--side-rail-width) minmax(0, 1fr);
+}
+
+.app-shell.artifact-immersive {
+  grid-template-columns: 1fr;
 }
 
 .workspace-main {

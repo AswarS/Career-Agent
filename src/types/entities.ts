@@ -54,7 +54,7 @@ export interface ProfileSuggestion {
 export type ArtifactType = 'weekly-plan' | 'profile-summary' | 'career-roadmap';
 export type ArtifactStatus = 'idle' | 'loading' | 'streaming' | 'ready' | 'stale' | 'error';
 export type ArtifactRenderMode = 'html' | 'markdown' | 'cards';
-export type ArtifactViewMode = 'pane' | 'focus';
+export type ArtifactViewMode = 'pane' | 'focus' | 'immersive';
 
 export interface ArtifactHtmlPayload {
   html: string;

@@ -3,8 +3,8 @@
 ## Status
 
 - current branch/state: `main`
-- current stable commit: `843575f`
-- repository state: clean
+- current stable commit: see latest `main` history for the newest post-Phase-6A shell pass
+- repository state: clean after each direct-main sync
 
 This handoff marks the end of `Phase 6A: Shell Behavior Optimization`.
 
@@ -47,6 +47,19 @@ For simulations and guided learning:
 - left rail may be hidden by default
 - conversation should reduce to a slim recovery path
 - do not default to opening a separate browser window in MVP
+
+### 3.1 Immersive canvas shell mode was implemented
+
+The shell now supports a true immersive canvas state:
+
+- left rail is fully hidden
+- conversation workspace is removed from the active layout
+- the work canvas takes over the main viewport
+- recovery controls remain visible in the top action area
+
+Reference screenshot:
+
+- `output/playwright/workspace-canvas-immersive.png`
 
 ### 4. Compact rail design was refined
 

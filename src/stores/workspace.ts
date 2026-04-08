@@ -87,6 +87,9 @@ export const useWorkspaceStore = defineStore('workspace', {
     artifactFocusMode(state) {
       return state.artifactPaneOpen && state.artifactViewMode === 'focus';
     },
+    artifactImmersiveMode(state) {
+      return state.artifactPaneOpen && state.artifactViewMode === 'immersive';
+    },
   },
   actions: {
     setSideRailCollapsed(collapsed: boolean) {
@@ -221,6 +224,22 @@ export const useWorkspaceStore = defineStore('workspace', {
       this.artifactViewMode = 'pane';
     },
     promoteArtifactFocus() {
+      if (!this.activeArtifactId) {
+        return;
+      }
+
+      this.artifactPaneOpen = true;
+      this.artifactViewMode = 'focus';
+    },
+    promoteArtifactImmersive() {
+      if (!this.activeArtifactId) {
+        return;
+      }
+
+      this.artifactPaneOpen = true;
+      this.artifactViewMode = 'immersive';
+    },
+    restoreArtifactFocus() {
       if (!this.activeArtifactId) {
         return;
       }

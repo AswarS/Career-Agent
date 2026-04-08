@@ -4,7 +4,7 @@ import { storeToRefs } from 'pinia';
 import { useWorkspaceStore } from '../../stores/workspace';
 
 const workspaceStore = useWorkspaceStore();
-const { activeArtifact, artifactFocusMode, artifactPaneOpen } = storeToRefs(workspaceStore);
+const { activeArtifact, artifactFocusMode, artifactImmersiveMode, artifactPaneOpen } = storeToRefs(workspaceStore);
 
 const artifactMarkup = computed(() => {
   if (activeArtifact.value?.renderMode !== 'html') {
@@ -46,11 +46,11 @@ const statusBody = computed(() => {
 </script>
 
 <template>
-  <aside class="artifact-host" :class="{ open: artifactPaneOpen, focus: artifactFocusMode }">
+  <aside class="artifact-host" :class="{ open: artifactPaneOpen, focus: artifactFocusMode, immersive: artifactImmersiveMode }">
     <div class="artifact-panel">
       <div class="artifact-header">
         <div>
-          <p class="eyebrow">Artifact Host</p>
+          <p class="eyebrow">{{ artifactImmersiveMode ? 'Immersive Canvas' : 'Artifact Host' }}</p>
           <h2>{{ activeArtifact?.title ?? 'No Active Artifact' }}</h2>
         </div>
         <div v-if="artifactPaneOpen" class="artifact-actions">
@@ -63,14 +63,28 @@ const statusBody = computed(() => {
             Refresh
           </button>
           <button
-            v-if="activeArtifact && !artifactFocusMode"
+            v-if="activeArtifact && !artifactFocusMode && !artifactImmersiveMode"
             class="ghost-button"
             @click="workspaceStore.promoteArtifactFocus()"
           >
             Focus
           </button>
           <button
-            v-if="activeArtifact && artifactFocusMode"
+            v-if="activeArtifact && !artifactImmersiveMode"
+            class="ghost-button"
+            @click="workspaceStore.promoteArtifactImmersive()"
+          >
+            Immersive
+          </button>
+          <button
+            v-if="activeArtifact && artifactImmersiveMode"
+            class="ghost-button"
+            @click="workspaceStore.restoreArtifactFocus()"
+          >
+            Back To Focus
+          </button>
+          <button
+            v-if="activeArtifact && (artifactFocusMode || artifactImmersiveMode)"
             class="ghost-button"
             @click="workspaceStore.restoreArtifactPane()"
           >
@@ -139,6 +153,14 @@ const statusBody = computed(() => {
   z-index: 20;
 }
 
+.artifact-host.immersive {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  max-width: 100vw;
+  z-index: 30;
+}
+
 .artifact-panel {
   display: flex;
   flex-direction: column;
@@ -159,6 +181,14 @@ const statusBody = computed(() => {
   min-width: 0;
   border-left: 1px solid var(--color-border);
   box-shadow: -20px 0 40px rgba(35, 49, 59, 0.08);
+}
+
+.artifact-host.immersive .artifact-panel {
+  width: 100vw;
+  max-width: 100vw;
+  padding: 20px 24px;
+  border-left: 0;
+  box-shadow: none;
 }
 
 .artifact-header {
@@ -257,6 +287,10 @@ h2 {
 
 .artifact-host.focus .artifact-frame {
   min-height: calc(100vh - 210px);
+}
+
+.artifact-host.immersive .artifact-frame {
+  min-height: calc(100vh - 206px);
 }
 
 .artifact-empty {

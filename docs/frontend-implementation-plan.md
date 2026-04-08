@@ -175,6 +175,7 @@ Scope:
 - keep left rail scroll independent from the main workspace
 - let long thread lists scroll inside the rail without moving shell chrome
 - refine responsive behavior between conversation + artifact and artifact focus
+- add an immersive canvas shell mode that can fully hide the left rail
 - preserve the current pane + focus model instead of introducing floating windows
 
 Exit criteria:
