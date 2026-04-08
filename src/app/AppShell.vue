@@ -7,10 +7,12 @@ import SideRail from '../modules/navigation/SideRail.vue';
 import { useWorkspaceStore } from '../stores/workspace';
 
 const workspaceStore = useWorkspaceStore();
-const { artifactFocusMode } = storeToRefs(workspaceStore);
+const { artifactFocusMode, artifactPaneOpen, sideRailCollapsed } = storeToRefs(workspaceStore);
 
 const shellClasses = computed(() => ({
+  'artifact-open': artifactPaneOpen.value,
   'artifact-focus': artifactFocusMode.value,
+  'side-rail-collapsed': sideRailCollapsed.value,
 }));
 
 onMounted(() => {
@@ -30,10 +32,19 @@ onMounted(() => {
 
 <style scoped>
 .app-shell {
-  --side-rail-width: 280px;
+  --side-rail-expanded-width: 280px;
+  --side-rail-collapsed-width: 96px;
+  --side-rail-width: var(--side-rail-expanded-width);
+  --artifact-pane-width: clamp(340px, 36vw, 440px);
+  --workspace-padding: 18px;
   display: grid;
   grid-template-columns: var(--side-rail-width) minmax(0, 1fr) auto;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.app-shell.side-rail-collapsed {
+  --side-rail-width: var(--side-rail-collapsed-width);
 }
 
 .app-shell.artifact-focus {
@@ -42,19 +53,43 @@ onMounted(() => {
 
 .workspace-main {
   min-width: 0;
-  padding: 18px;
+  min-height: 0;
+  height: 100vh;
+  overflow-y: auto;
+  padding: var(--workspace-padding);
+}
+
+.app-shell.artifact-open {
+  --workspace-padding: 16px;
 }
 
 .app-shell.artifact-focus .workspace-main {
   display: none;
 }
 
+@media (max-width: 1280px) {
+  .app-shell {
+    --artifact-pane-width: clamp(320px, 40vw, 390px);
+  }
+}
+
+@media (max-width: 1160px) {
+  .app-shell {
+    --artifact-pane-width: clamp(300px, 44vw, 360px);
+    --workspace-padding: 14px;
+  }
+}
+
 @media (max-width: 960px) {
   .app-shell {
+    height: auto;
+    overflow: visible;
     grid-template-columns: 1fr;
   }
 
   .workspace-main {
+    height: auto;
+    overflow: visible;
     padding: 14px;
   }
 }

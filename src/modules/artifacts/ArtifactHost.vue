@@ -118,13 +118,14 @@ const statusBody = computed(() => {
 <style scoped>
 .artifact-host {
   min-width: 0;
+  height: 100vh;
   width: 0;
   overflow: hidden;
   transition: width 180ms ease;
 }
 
 .artifact-host.open {
-  width: 360px;
+  width: var(--artifact-pane-width, 360px);
 }
 
 .artifact-host.focus {
@@ -142,8 +143,11 @@ const statusBody = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  width: 360px;
+  width: var(--artifact-pane-width, 360px);
+  min-width: 0;
+  height: 100vh;
   min-height: 100vh;
+  overflow-y: auto;
   padding: 18px;
   border-left: 1px solid var(--color-border);
   background: color-mix(in srgb, var(--color-surface) 94%, white);
@@ -281,17 +285,9 @@ h2 {
 }
 
 @media (max-width: 1320px) {
-  .artifact-host.open {
-    width: 320px;
-  }
-
   .artifact-host.focus {
     width: calc(100vw - var(--side-rail-width, 280px));
     max-width: calc(100vw - var(--side-rail-width, 280px));
-  }
-
-  .artifact-panel {
-    width: 320px;
   }
 
   .artifact-host.focus .artifact-panel {
@@ -306,16 +302,19 @@ h2 {
   .artifact-host.focus {
     position: static;
     inset: auto;
+    height: auto;
     width: 100%;
     max-width: none;
   }
 
   .artifact-panel {
     width: 100%;
+    height: auto;
     min-height: auto;
     border-left: 0;
     border-top: 1px solid var(--color-border);
     max-width: none;
+    overflow: visible;
   }
 
   .artifact-frame {

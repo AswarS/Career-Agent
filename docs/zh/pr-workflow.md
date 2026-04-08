@@ -100,6 +100,24 @@
 - 如果自动 review 没触发，就由 Codex 主动通过 `gh` 请求 Copilot 审查
 - 如无阻塞问题，修完有效评论后由 Codex 直接合并
 
+## Codex 执行约束
+
+为了避免流程在 git 中间节点异常中止，后续默认遵守：
+
+- `git checkout -b`
+- `git add`
+- `git commit`
+- `git push`
+
+这些都视为中间步骤，不应作为单独停点。
+
+默认只有两种情况可以暂停：
+
+- 已经完成 `PR -> Copilot 1 轮审查 -> 修正 -> squash merge`
+- 出现真实阻塞，例如权限、冲突、审查内容矛盾、或无法继续判断的技术问题
+
+如果只是完成了 branch / stage / commit / push 其中某一步，Codex 应继续往下推进，而不是停住等待。
+
 ## 例外情况
 
 以下情况可以直接说明并暂停：

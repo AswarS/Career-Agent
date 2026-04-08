@@ -189,10 +189,26 @@ Examples:
 - roadmap
 - resume outline
 - interview preparation board
+- coding interview simulator
+- role-specific online interview simulation
 - learning schedule
+- visual learning board
+- explorable learning module
 - application tracker
 
 These artifacts must be updateable in real time as backend data arrives.
+
+Internal implementation term:
+
+- `artifact`
+
+User-facing mental model:
+
+- work canvas
+- canvas
+
+Not every artifact is a document.
+Some are interactive task surfaces, simulations, or visual learning views.
 
 ## Information Architecture
 
@@ -373,6 +389,7 @@ Purpose:
 
 - list generated outputs
 - reopen, compare, revise, and export artifacts
+- host interactive work canvases such as simulations and guided learning surfaces
 
 ## Shell Modes
 
@@ -408,6 +425,7 @@ Use when:
 
 - the generated HTML output is the main task surface
 - the user needs to inspect or interact with a live plan or tool
+- the user is inside an interview simulation or visual learning flow
 
 Layout:
 
@@ -439,6 +457,14 @@ The frontend must support a stable host shell around a changing artifact.
 - preserve user scroll position where reasonable
 - show render state: loading, streaming, ready, stale, error
 
+The right-side host must support more than passive reading.
+It may become the primary workspace for:
+
+- planning outputs
+- interview simulations
+- coding test surfaces
+- visual learning experiences
+
 ### Recommended Integration Model
 
 The frontend host should accept artifact payloads like:
@@ -458,12 +484,67 @@ Recommended host communication shape:
 - partial artifact metadata update
 - render-state update
 
+### Interactive Canvas Feedback Loop
+
+Some work canvases are not passive outputs.
+They act as interactive task surfaces whose user actions must feed back into the
+agent loop.
+
+This is especially important for:
+
+- interview simulations
+- coding interview tasks
+- guided learning flows
+- adaptive practice surfaces for job seekers
+
+Required interaction model:
+
+1. the agent opens or updates a work canvas
+2. the user acts inside that canvas
+3. the frontend host captures the action as a structured event
+4. the frontend sends that event back to the upstream agent system
+5. the upstream system returns one or both of:
+   - updated conversation messages
+   - updated artifact revision or canvas state
+6. the frontend reconciles both surfaces without full-shell reset
+
+The frontend should treat this as a typed feedback loop, not as arbitrary DOM
+inspection.
+
+Minimum feedback event shape should support:
+
+- `thread_id`
+- `artifact_id`
+- `artifact_revision`
+- `interaction_type`
+- `action_id`
+- `payload`
+- `created_at`
+
+Example interaction types:
+
+- `answer_submitted`
+- `choice_selected`
+- `hint_requested`
+- `step_completed`
+- `timer_finished`
+- `reflection_logged`
+
+Product intent:
+
+- the canvas should adapt based on what the user actually does
+- the agent should not only react to chat text
+- job-seeker workflows should improve through observed interaction state, not
+  only through explicit user prompts
+
 ### Host Responsibilities
 
 - display artifact lifecycle state
 - isolate shell layout from artifact internals
 - preserve navigation and recovery paths
 - support re-render and version replacement
+- keep the work canvas usable as a primary task surface, not just a preview pane
+- preserve the feedback loop between interactive canvas actions and the agent
 
 ### Safety Constraints
 

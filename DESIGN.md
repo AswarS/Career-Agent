@@ -245,12 +245,13 @@ Do not hard-code hex values inside leaf components.
 - support avatar, goals, current situation, risk signals, preferences
 - allow edit state without visual mode switching chaos
 
-### Artifact Pane
+### Artifact Pane / Work Canvas
 
 - border should be subtle
 - pane header should show title, source, status, expand/collapse controls
 - pane body should support live HTML or previews
 - artifact should feel like a working canvas, not a modal
+- the surface may host planning outputs, simulations, coding tasks, or visual learning flows
 
 ### Input Composer
 
@@ -293,6 +294,7 @@ Design constraints:
   shell must remain stable
 - if the artifact becomes full-screen, the user must still understand how to
   return to the conversation
+- the host must still feel appropriate when the canvas is interactive, not just informational
 
 ## Multimodal Rules
 

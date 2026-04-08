@@ -44,6 +44,7 @@ interface WorkspaceState {
   artifacts: ArtifactRecord[];
   activeThreadId: string | null;
   activeArtifactId: string | null;
+  sideRailCollapsed: boolean;
   artifactPaneOpen: boolean;
   artifactViewMode: ArtifactViewMode;
   threadsStatus: LoadState;
@@ -65,6 +66,7 @@ export const useWorkspaceStore = defineStore('workspace', {
     artifacts: [],
     activeThreadId: null,
     activeArtifactId: null,
+    sideRailCollapsed: false,
     artifactPaneOpen: false,
     artifactViewMode: 'pane',
     threadsStatus: 'idle',
@@ -87,6 +89,12 @@ export const useWorkspaceStore = defineStore('workspace', {
     },
   },
   actions: {
+    setSideRailCollapsed(collapsed: boolean) {
+      this.sideRailCollapsed = collapsed;
+    },
+    toggleSideRailCollapsed() {
+      this.sideRailCollapsed = !this.sideRailCollapsed;
+    },
     upsertArtifactRecord(nextArtifact: ArtifactRecord) {
       const artifactIndex = this.artifacts.findIndex((artifact) => artifact.id === nextArtifact.id);
 

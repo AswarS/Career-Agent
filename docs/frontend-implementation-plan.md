@@ -2,9 +2,11 @@
 
 ## Status
 
-Phase 5 started. The repository now contains the shell, typed mock adapters,
+Phase 5 completed. The repository now contains the shell, typed mock adapters,
 the conversation workspace pass, explicit profile draft editing, artifact host mode work,
 and the first upstream contract hardening pass.
+
+The repository is now in a foundation-stable state.
 
 ## Goal
 
@@ -161,6 +163,58 @@ Exit criteria:
 - frontend shell does not need architectural rewrites
 - runtime and adapter boundaries are covered by focused automated tests
 
+### Phase 6A: Shell Behavior Optimization
+
+Execution window:
+
+- April 8, 2026: finish this phase before starting new workflow work
+
+Scope:
+
+- make the left rail collapsible
+- keep left rail scroll independent from the main workspace
+- let long thread lists scroll inside the rail without moving shell chrome
+- refine responsive behavior between conversation + artifact and artifact focus
+- preserve the current pane + focus model instead of introducing floating windows
+
+Exit criteria:
+
+- left rail can collapse without breaking navigation
+- shell regions scroll independently
+- artifact pane behavior stays readable across common desktop widths
+- no architectural changes are needed before the next workflow phase
+
+### Phase 6B: Conversation-Driven Workflow
+
+Execution window:
+
+- April 9, 2026: start only after Phase 6A is complete
+
+Scope:
+
+- let conversation actions open or update the work canvas
+- let work-canvas interactions send structured feedback back into the agent flow
+- add explicit send / pending / error / recovery states to the composer flow
+- introduce image-preview-first multimodal behavior
+- make the work canvas feel like a result surface driven by conversation, not by debug buttons
+
+Exit criteria:
+
+- at least one conversation path can launch a meaningful canvas state
+- at least one work-canvas path can send interaction feedback upstream and receive a visible update
+- the composer reflects real request lifecycle states
+- image preview works as the first real multimodal path
+- shell behavior changes from Phase 6A remain intact
+
+## Current Working Sequence
+
+The next two implementation steps are intentionally split:
+
+1. April 8, 2026: finish shell behavior optimization only
+2. April 9, 2026: begin conversation-driven workflow
+
+Do not mix these into one PR unless a bug fix directly spans both.
+
 ## Testing Gate
 
 Testing requirements now differ by phase:
@@ -176,6 +230,7 @@ See `docs/frontend-testing-strategy.md` for the detailed policy.
 - starting with too many pages
 - mixing backend logic into frontend modules
 - letting generated HTML dictate shell structure
+- treating the right-side work canvas like a modal or disposable preview
 - building voice before shell and artifact host are stable
 - using demo UI as if it were product truth
 
@@ -196,3 +251,14 @@ These defaults are now adopted for the first implementation pass:
 3. keep `Home` as a lightweight empty or welcome state
 
 These are not considered blockers for starting framework work.
+
+## Deferred UX Decisions
+
+These decisions are intentionally not part of Phase 6A:
+
+- thread folders or project-tree navigation
+- free-floating draggable artifact windows
+- unconstrained pane dragging
+- making voice a primary interaction path
+
+These should be revisited only after the shell and conversation-driven canvas workflow are stable.
