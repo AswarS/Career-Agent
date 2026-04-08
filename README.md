@@ -40,6 +40,7 @@ Primary product and implementation documents:
 - [Design system](./DESIGN.md)
 - [Skill architecture](./docs/skill-architecture.md)
 - [Frontend implementation plan](./docs/frontend-implementation-plan.md)
+- [Frontend testing strategy](./docs/frontend-testing-strategy.md)
 
 ## Current Status
 
@@ -47,14 +48,27 @@ Primary product and implementation documents:
 - design direction is locked as a frontend visual system
 - demo UI has been reset into a non-product placeholder
 - framework skeleton and typed mock integration have started
+- first automated adapter-boundary tests have been introduced
 
 ## Contribution Workflow
 
 - pull requests should be written in Chinese for human review
+- from phase 5 onward, run `npm run test` and `npm run build` before opening a PR
 - use the repository PR template
 - after local validation, switch the PR to `Ready for review`
 - wait for Copilot review before the final merge recommendation
 - if automatic review does not appear, request it with `gh pr edit <pr-number> --add-reviewer @copilot`
+
+## Runtime Configuration
+
+Copy `.env.example` when you need to override the default mock runtime.
+
+Supported env vars:
+
+- `VITE_CAREER_AGENT_CLIENT_MODE`
+- `VITE_CAREER_AGENT_API_BASE_URL`
+- `VITE_CAREER_AGENT_ARTIFACT_TRANSPORT`
+- `VITE_CAREER_AGENT_ENABLE_VOICE_INPUT`
 
 Useful references:
 

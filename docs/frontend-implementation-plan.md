@@ -2,8 +2,9 @@
 
 ## Status
 
-Phase 4 started. The repository now contains the shell, typed mock adapters,
-the conversation workspace pass, explicit profile draft editing, and artifact host mode work.
+Phase 5 started. The repository now contains the shell, typed mock adapters,
+the conversation workspace pass, explicit profile draft editing, artifact host mode work,
+and the first upstream contract hardening pass.
 
 ## Goal
 
@@ -20,6 +21,7 @@ Implementation should follow:
 - `DESIGN.md`
 - `.agents/skills/vue-agent-delivery/SKILL.md`
 - `.agents/skills/career-theme-palette/SKILL.md`
+- `docs/frontend-testing-strategy.md`
 
 ## Boundary Summary
 
@@ -157,6 +159,17 @@ Exit criteria:
 
 - mock and real adapters share the same interface
 - frontend shell does not need architectural rewrites
+- runtime and adapter boundaries are covered by focused automated tests
+
+## Testing Gate
+
+Testing requirements now differ by phase:
+
+- phases 0-1: `npm run build`
+- phases 2-4: `npm run build` plus browser walkthrough
+- phase 5 onward: `npm run test` and `npm run build`
+
+See `docs/frontend-testing-strategy.md` for the detailed policy.
 
 ## Risks To Avoid
 

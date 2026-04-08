@@ -1,5 +1,7 @@
 import { defineStore } from 'pinia';
-import { createMockCareerAgentClient } from '../services/mockCareerAgentClient';
+import { runtimeConfig } from '../config/runtime';
+import { createCareerAgentClient } from '../services/createCareerAgentClient';
+import { shouldSimulateArtifactRefreshLifecycle } from './artifactRefreshPolicy';
 import type {
   ArtifactRecord,
   ArtifactStatus,
@@ -11,7 +13,8 @@ import type {
   ThreadSummary,
 } from '../types/entities';
 
-const client = createMockCareerAgentClient();
+const client = createCareerAgentClient();
+const simulateArtifactRefreshLifecycle = shouldSimulateArtifactRefreshLifecycle(runtimeConfig);
 let initializePromise: Promise<void> | null = null;
 let threadLoadRequestToken = 0;
 let artifactRefreshRequestToken = 0;
@@ -239,18 +242,20 @@ export const useWorkspaceStore = defineStore('workspace', {
       this.errorMessage = null;
       this.setArtifactStatus(targetArtifactId, 'loading');
 
-      await new Promise((resolve) => globalThis.setTimeout(resolve, 180));
+      if (simulateArtifactRefreshLifecycle) {
+        await new Promise((resolve) => globalThis.setTimeout(resolve, 180));
 
-      if (requestToken !== artifactRefreshRequestToken) {
-        return;
-      }
+        if (requestToken !== artifactRefreshRequestToken) {
+          return;
+        }
 
-      this.setArtifactStatus(targetArtifactId, 'streaming');
+        this.setArtifactStatus(targetArtifactId, 'streaming');
 
-      await new Promise((resolve) => globalThis.setTimeout(resolve, 260));
+        await new Promise((resolve) => globalThis.setTimeout(resolve, 260));
 
-      if (requestToken !== artifactRefreshRequestToken) {
-        return;
+        if (requestToken !== artifactRefreshRequestToken) {
+          return;
+        }
       }
 
       try {

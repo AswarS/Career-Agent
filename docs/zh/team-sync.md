@@ -47,6 +47,20 @@
 当前前端默认态度：
 
 - 先按可替换 adapter 设计，不阻塞框架搭建
+- 当前前端保留了 `polling / SSE / WebSocket` 三种 transport 枚举，默认仍是 `polling`
+
+### 2.1 当前前端约定的环境变量
+
+如果上游准备开始联调，需要先对齐这些环境变量：
+
+- `VITE_CAREER_AGENT_CLIENT_MODE`
+- `VITE_CAREER_AGENT_API_BASE_URL`
+- `VITE_CAREER_AGENT_ARTIFACT_TRANSPORT`
+- `VITE_CAREER_AGENT_ENABLE_VOICE_INPUT`
+
+默认示例见：
+
+- `.env.example`
 
 ### 3. HTML 渲染安全边界
 
@@ -60,6 +74,21 @@
 当前前端默认态度：
 
 - 第一版默认 sandboxed iframe
+
+### 3.1 当前前端约定的 API 路径
+
+如果上游团队准备提供真实接口，需要先确认这些路径是否接受：
+
+- `GET /api/career-agent/threads`
+- `GET /api/career-agent/threads/:threadId/messages`
+- `GET /api/career-agent/profile`
+- `PUT /api/career-agent/profile`
+- `GET /api/career-agent/profile/suggestions`
+- `GET /api/career-agent/artifacts`
+- `GET /api/career-agent/artifacts/:artifactId`
+- `POST /api/career-agent/artifacts/:artifactId/refresh`
+
+如果路径或字段命名不同，应该尽早同步给前端，而不是等页面接完再改。
 
 ### 4. Profile 写入权
 
@@ -116,6 +145,17 @@
 - PR 是否已经切换到 `Ready for review`
 - GitHub 本身是否只是审查延迟
 - 是否已经主动请求 `@copilot` reviewer
+
+### 测试基线
+
+从 Phase 5 开始，PR 前需要执行：
+
+- `npm run test`
+- `npm run build`
+
+测试策略详见：
+
+- `docs/frontend-testing-strategy.md`
 
 ## 当你发现团队开始分歧时
 
