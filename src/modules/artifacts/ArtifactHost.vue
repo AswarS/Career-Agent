@@ -4,7 +4,7 @@ import { storeToRefs } from 'pinia';
 import { useWorkspaceStore } from '../../stores/workspace';
 
 const workspaceStore = useWorkspaceStore();
-const { activeArtifact, artifactPaneOpen } = storeToRefs(workspaceStore);
+const { activeArtifact, artifactFocusMode, artifactPaneOpen } = storeToRefs(workspaceStore);
 
 const artifactMarkup = computed(() => {
   if (activeArtifact.value?.renderMode !== 'html') {
@@ -13,19 +13,73 @@ const artifactMarkup = computed(() => {
 
   return activeArtifact.value.payload.html;
 });
+
+const statusTitle = computed(() => {
+  switch (activeArtifact.value?.status) {
+    case 'loading':
+      return 'Preparing artifact shell';
+    case 'streaming':
+      return 'Applying streamed update';
+    case 'stale':
+      return 'Artifact is stale';
+    case 'error':
+      return 'Artifact refresh failed';
+    default:
+      return 'Artifact ready';
+  }
+});
+
+const statusBody = computed(() => {
+  switch (activeArtifact.value?.status) {
+    case 'loading':
+      return 'The host has reserved the surface and is waiting for the next revision payload.';
+    case 'streaming':
+      return 'A mock refresh is in progress. The current revision will be replaced without leaving the shell.';
+    case 'stale':
+      return 'This artifact is older than the latest known context. Refresh it before relying on the output.';
+    case 'error':
+      return 'The last refresh attempt did not complete cleanly. You can retry without losing the current shell state.';
+    default:
+      return 'The current revision is ready inside the isolated host surface.';
+  }
+});
 </script>
 
 <template>
-  <aside class="artifact-host" :class="{ open: artifactPaneOpen }">
+  <aside class="artifact-host" :class="{ open: artifactPaneOpen, focus: artifactFocusMode }">
     <div class="artifact-panel">
       <div class="artifact-header">
         <div>
           <p class="eyebrow">Artifact Host</p>
           <h2>{{ activeArtifact?.title ?? 'No Active Artifact' }}</h2>
         </div>
-        <button v-if="artifactPaneOpen" class="ghost-button" @click="workspaceStore.closeArtifact()">
-          Close
-        </button>
+        <div v-if="artifactPaneOpen" class="artifact-actions">
+          <button
+            v-if="activeArtifact"
+            class="ghost-button"
+            :disabled="activeArtifact.status === 'loading' || activeArtifact.status === 'streaming'"
+            @click="workspaceStore.refreshArtifact()"
+          >
+            Refresh
+          </button>
+          <button
+            v-if="activeArtifact && !artifactFocusMode"
+            class="ghost-button"
+            @click="workspaceStore.promoteArtifactFocus()"
+          >
+            Focus
+          </button>
+          <button
+            v-if="activeArtifact && artifactFocusMode"
+            class="ghost-button"
+            @click="workspaceStore.restoreArtifactPane()"
+          >
+            Back To Pane
+          </button>
+          <button class="ghost-button" @click="workspaceStore.closeArtifact()">
+            Close
+          </button>
+        </div>
       </div>
 
       <template v-if="activeArtifact">
@@ -33,6 +87,11 @@ const artifactMarkup = computed(() => {
           <span>{{ activeArtifact.type }}</span>
           <span>{{ activeArtifact.status }}</span>
           <span>rev {{ activeArtifact.revision }}</span>
+        </div>
+
+        <div class="artifact-state" :class="activeArtifact.status">
+          <strong>{{ statusTitle }}</strong>
+          <p>{{ statusBody }}</p>
         </div>
 
         <iframe
@@ -58,6 +117,7 @@ const artifactMarkup = computed(() => {
 
 <style scoped>
 .artifact-host {
+  min-width: 0;
   width: 0;
   overflow: hidden;
   transition: width 180ms ease;
@@ -65,6 +125,17 @@ const artifactMarkup = computed(() => {
 
 .artifact-host.open {
   width: 360px;
+}
+
+.artifact-host.focus {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: var(--side-rail-width, 280px);
+  width: calc(100vw - var(--side-rail-width, 280px));
+  max-width: calc(100vw - var(--side-rail-width, 280px));
+  z-index: 20;
 }
 
 .artifact-panel {
@@ -76,6 +147,14 @@ const artifactMarkup = computed(() => {
   padding: 18px;
   border-left: 1px solid var(--color-border);
   background: color-mix(in srgb, var(--color-surface) 94%, white);
+}
+
+.artifact-host.focus .artifact-panel {
+  width: calc(100vw - var(--side-rail-width, 280px));
+  max-width: calc(100vw - var(--side-rail-width, 280px));
+  min-width: 0;
+  border-left: 1px solid var(--color-border);
+  box-shadow: -20px 0 40px rgba(35, 49, 59, 0.08);
 }
 
 .artifact-header {
@@ -102,6 +181,13 @@ h2 {
   line-height: 1.1;
 }
 
+.artifact-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .artifact-meta {
   display: flex;
   flex-wrap: wrap;
@@ -117,6 +203,41 @@ h2 {
   font-weight: 700;
 }
 
+.artifact-state {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: 20px;
+  border: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-bg-subtle) 82%, white);
+}
+
+.artifact-state strong {
+  color: var(--color-text);
+}
+
+.artifact-state p {
+  margin: 0;
+  color: var(--color-text-muted);
+  line-height: 1.6;
+}
+
+.artifact-state.loading {
+  background: color-mix(in srgb, var(--color-bg-subtle) 65%, white);
+}
+
+.artifact-state.streaming {
+  background: color-mix(in srgb, var(--color-primary-soft) 55%, white);
+}
+
+.artifact-state.stale {
+  background: color-mix(in srgb, var(--color-warning-soft) 68%, white);
+}
+
+.artifact-state.error {
+  background: color-mix(in srgb, #f4d7d2 74%, white);
+}
+
 .artifact-frame,
 .artifact-empty {
   width: 100%;
@@ -128,6 +249,10 @@ h2 {
 
 .artifact-frame {
   min-height: 540px;
+}
+
+.artifact-host.focus .artifact-frame {
+  min-height: calc(100vh - 210px);
 }
 
 .artifact-empty {
@@ -160,15 +285,29 @@ h2 {
     width: 320px;
   }
 
+  .artifact-host.focus {
+    width: calc(100vw - var(--side-rail-width, 280px));
+    max-width: calc(100vw - var(--side-rail-width, 280px));
+  }
+
   .artifact-panel {
     width: 320px;
+  }
+
+  .artifact-host.focus .artifact-panel {
+    width: calc(100vw - var(--side-rail-width, 280px));
+    max-width: calc(100vw - var(--side-rail-width, 280px));
   }
 }
 
 @media (max-width: 960px) {
   .artifact-host,
-  .artifact-host.open {
+  .artifact-host.open,
+  .artifact-host.focus {
+    position: static;
+    inset: auto;
     width: 100%;
+    max-width: none;
   }
 
   .artifact-panel {
@@ -176,6 +315,7 @@ h2 {
     min-height: auto;
     border-left: 0;
     border-top: 1px solid var(--color-border);
+    max-width: none;
   }
 
   .artifact-frame {

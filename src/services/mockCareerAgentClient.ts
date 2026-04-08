@@ -171,6 +171,68 @@ function buildProfileSummaryArtifact(nextProfile: ProfileRecord, revision: numbe
   };
 }
 
+function buildRefreshedArtifact(currentArtifact: ArtifactRecord): ArtifactRecord {
+  const nextRevision = currentArtifact.revision + 1;
+  const refreshedAt = new Date().toISOString();
+
+  if (currentArtifact.id === 'artifact-profile-summary') {
+    return buildProfileSummaryArtifact(profile, nextRevision);
+  }
+
+  if (currentArtifact.id === 'artifact-weekly-plan') {
+    return {
+      ...currentArtifact,
+      revision: nextRevision,
+      status: 'ready',
+      updatedAt: refreshedAt,
+      summary: 'Weekly plan refreshed through the mock artifact pipeline.',
+      payload: {
+        html: `
+          <html lang="en">
+            <body style="margin:0;font-family:Inter,system-ui,sans-serif;background:#fffaf2;color:#23313b;">
+              <div style="padding:24px;">
+                <div style="padding:18px;border:1px solid rgba(96,114,126,0.16);border-radius:18px;background:#fffcf7;">
+                  <p style="margin:0 0 10px;color:#61707c;font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;">Weekly Plan</p>
+                  <h1 style="margin:0;font-size:26px;line-height:1.1;">Delivery remains first, but the plan has been refreshed.</h1>
+                  <p style="margin:14px 0 0;color:#61707c;line-height:1.7;">Updated at ${refreshedAt} with a mock streaming refresh path.</p>
+                  <ul style="margin:18px 0 0;padding-left:18px;line-height:1.8;color:#61707c;">
+                    <li>Re-check route and pane shell stability</li>
+                    <li>Protect explicit profile save boundaries</li>
+                    <li>Prepare artifact focus mode for the next frontend pass</li>
+                  </ul>
+                </div>
+              </div>
+            </body>
+          </html>`,
+      },
+    };
+  }
+
+  return {
+    ...currentArtifact,
+    revision: nextRevision,
+    status: 'ready',
+    updatedAt: refreshedAt,
+    summary: 'Career roadmap refreshed from a previously stale artifact.',
+    payload: {
+      html: `
+        <html lang="en">
+          <body style="margin:0;font-family:Inter,system-ui,sans-serif;background:#fffaf2;color:#23313b;">
+            <div style="padding:24px;">
+              <h1 style="margin:0 0 14px;font-size:24px;">Career Roadmap</h1>
+              <p style="margin:0 0 12px;color:#61707c;">This artifact was refreshed at ${refreshedAt}.</p>
+              <ol style="margin:0;padding-left:18px;line-height:1.8;color:#61707c;">
+                <li>Stabilize shell and artifact focus mode</li>
+                <li>Connect one upstream refresh path cleanly</li>
+                <li>Promote shipped slices into a stronger portfolio narrative</li>
+              </ol>
+            </div>
+          </body>
+        </html>`,
+    },
+  };
+}
+
 const artifacts: ArtifactRecord[] = [
   {
     id: 'artifact-weekly-plan',
@@ -265,6 +327,16 @@ export function createMockCareerAgentClient(): CareerAgentClient {
       const artifact = artifacts.find((entry) => entry.id === artifactId);
 
       return artifact ? cloneArtifactRecord(artifact) : null;
+    },
+    async refreshArtifact(artifactId: string) {
+      const artifactIndex = artifacts.findIndex((entry) => entry.id === artifactId);
+
+      if (artifactIndex < 0) {
+        return null;
+      }
+
+      artifacts[artifactIndex] = buildRefreshedArtifact(artifacts[artifactIndex]);
+      return cloneArtifactRecord(artifacts[artifactIndex]);
     },
   };
 }

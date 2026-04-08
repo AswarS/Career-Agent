@@ -14,4 +14,5 @@ export interface CareerAgentClient {
   listProfileSuggestions(): Promise<ProfileSuggestion[]>;
   listArtifacts(): Promise<ArtifactRecord[]>;
   getArtifact(artifactId: string): Promise<ArtifactRecord | null>;
+  refreshArtifact(artifactId: string): Promise<ArtifactRecord | null>;
 }

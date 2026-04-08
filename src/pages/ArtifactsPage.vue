@@ -33,9 +33,14 @@ const groupedArtifacts = computed(() => artifacts.value);
         </div>
         <h2>{{ artifact.title }}</h2>
         <p>{{ artifact.summary }}</p>
-        <button class="primary-button" @click="workspaceStore.openArtifact(artifact.id)">
-          Open In Host
-        </button>
+        <div class="action-row">
+          <button class="primary-button" @click="workspaceStore.openArtifact(artifact.id)">
+            Open In Host
+          </button>
+          <button class="secondary-button" @click="workspaceStore.openArtifact(artifact.id).then(() => workspaceStore.refreshArtifact(artifact.id))">
+            Refresh Revision
+          </button>
+        </div>
       </article>
     </div>
   </section>
@@ -88,5 +93,31 @@ h2 {
 
 .primary-button {
   margin-top: 18px;
+}
+
+.action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.primary-button,
+.secondary-button {
+  border-radius: 999px;
+  padding: 0.82rem 1rem;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.primary-button {
+  margin-top: 0;
+}
+
+.secondary-button {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-strong);
+  color: var(--color-text);
 }
 </style>

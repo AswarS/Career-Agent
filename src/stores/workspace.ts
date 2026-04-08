@@ -2,6 +2,8 @@ import { defineStore } from 'pinia';
 import { createMockCareerAgentClient } from '../services/mockCareerAgentClient';
 import type {
   ArtifactRecord,
+  ArtifactStatus,
+  ArtifactViewMode,
   LoadState,
   ProfileRecord,
   ProfileSuggestion,
@@ -12,6 +14,7 @@ import type {
 const client = createMockCareerAgentClient();
 let initializePromise: Promise<void> | null = null;
 let threadLoadRequestToken = 0;
+let artifactRefreshRequestToken = 0;
 
 function createMessageId(prefix: string) {
   const randomValue = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -39,6 +42,7 @@ interface WorkspaceState {
   activeThreadId: string | null;
   activeArtifactId: string | null;
   artifactPaneOpen: boolean;
+  artifactViewMode: ArtifactViewMode;
   threadsStatus: LoadState;
   messagesStatus: LoadState;
   profileStatus: LoadState;
@@ -59,6 +63,7 @@ export const useWorkspaceStore = defineStore('workspace', {
     activeThreadId: null,
     activeArtifactId: null,
     artifactPaneOpen: false,
+    artifactViewMode: 'pane',
     threadsStatus: 'idle',
     messagesStatus: 'idle',
     profileStatus: 'idle',
@@ -74,8 +79,32 @@ export const useWorkspaceStore = defineStore('workspace', {
     activeArtifact(state) {
       return state.artifacts.find((artifact) => artifact.id === state.activeArtifactId) ?? null;
     },
+    artifactFocusMode(state) {
+      return state.artifactPaneOpen && state.artifactViewMode === 'focus';
+    },
   },
   actions: {
+    upsertArtifactRecord(nextArtifact: ArtifactRecord) {
+      const artifactIndex = this.artifacts.findIndex((artifact) => artifact.id === nextArtifact.id);
+
+      if (artifactIndex >= 0) {
+        this.artifacts[artifactIndex] = nextArtifact;
+      } else {
+        this.artifacts.push(nextArtifact);
+      }
+    },
+    setArtifactStatus(artifactId: string, status: ArtifactStatus) {
+      const artifactIndex = this.artifacts.findIndex((artifact) => artifact.id === artifactId);
+
+      if (artifactIndex < 0) {
+        return;
+      }
+
+      this.artifacts[artifactIndex] = {
+        ...this.artifacts[artifactIndex],
+        status,
+      };
+    },
     async initialize() {
       if (this.initialized) {
         return;
@@ -174,16 +203,79 @@ export const useWorkspaceStore = defineStore('workspace', {
         return;
       }
 
-      const artifactIndex = this.artifacts.findIndex((item) => item.id === artifact.id);
-
-      if (artifactIndex >= 0) {
-        this.artifacts[artifactIndex] = artifact;
-      } else {
-        this.artifacts.push(artifact);
-      }
+      this.upsertArtifactRecord(artifact);
 
       this.activeArtifactId = artifact.id;
       this.artifactPaneOpen = true;
+      this.artifactViewMode = 'pane';
+    },
+    promoteArtifactFocus() {
+      if (!this.activeArtifactId) {
+        return;
+      }
+
+      this.artifactPaneOpen = true;
+      this.artifactViewMode = 'focus';
+    },
+    restoreArtifactPane() {
+      if (!this.activeArtifactId) {
+        return;
+      }
+
+      this.artifactPaneOpen = true;
+      this.artifactViewMode = 'pane';
+    },
+    async refreshArtifact(artifactId?: string | null) {
+      await this.initialize();
+
+      const targetArtifactId = artifactId ?? this.activeArtifactId;
+
+      if (!targetArtifactId) {
+        return;
+      }
+
+      const requestToken = ++artifactRefreshRequestToken;
+
+      this.errorMessage = null;
+      this.setArtifactStatus(targetArtifactId, 'loading');
+
+      await new Promise((resolve) => globalThis.setTimeout(resolve, 180));
+
+      if (requestToken !== artifactRefreshRequestToken) {
+        return;
+      }
+
+      this.setArtifactStatus(targetArtifactId, 'streaming');
+
+      await new Promise((resolve) => globalThis.setTimeout(resolve, 260));
+
+      if (requestToken !== artifactRefreshRequestToken) {
+        return;
+      }
+
+      try {
+        const refreshedArtifact = await client.refreshArtifact(targetArtifactId);
+
+        if (requestToken !== artifactRefreshRequestToken) {
+          return;
+        }
+
+        if (!refreshedArtifact) {
+          this.setArtifactStatus(targetArtifactId, 'error');
+          this.errorMessage = 'Artifact refresh returned no revision payload.';
+          return;
+        }
+
+        this.upsertArtifactRecord(refreshedArtifact);
+        this.errorMessage = null;
+      } catch (error) {
+        if (requestToken !== artifactRefreshRequestToken) {
+          return;
+        }
+
+        this.setArtifactStatus(targetArtifactId, 'error');
+        this.errorMessage = error instanceof Error ? error.message : 'Unknown artifact refresh error';
+      }
     },
     async saveProfileDraft(nextProfile: ProfileRecord) {
       await this.initialize();
@@ -197,13 +289,7 @@ export const useWorkspaceStore = defineStore('workspace', {
         this.profile = savedProfile;
 
         if (refreshedProfileSummary) {
-          const artifactIndex = this.artifacts.findIndex((artifact) => artifact.id === refreshedProfileSummary.id);
-
-          if (artifactIndex >= 0) {
-            this.artifacts[artifactIndex] = refreshedProfileSummary;
-          } else {
-            this.artifacts.push(refreshedProfileSummary);
-          }
+          this.upsertArtifactRecord(refreshedProfileSummary);
 
           if (this.activeArtifactId === refreshedProfileSummary.id) {
             this.activeArtifactId = refreshedProfileSummary.id;
@@ -246,6 +332,7 @@ export const useWorkspaceStore = defineStore('workspace', {
     closeArtifact() {
       this.artifactPaneOpen = false;
       this.activeArtifactId = null;
+      this.artifactViewMode = 'pane';
     },
   },
 });
