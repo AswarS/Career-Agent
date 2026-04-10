@@ -4,6 +4,7 @@ import { storeToRefs } from 'pinia';
 import { useRoute } from 'vue-router';
 import ConversationComposer from '../modules/conversation/ConversationComposer.vue';
 import ConversationMessageCard from '../modules/conversation/ConversationMessageCard.vue';
+import { shouldUseMultiAgentPresentation } from '../modules/conversation/messagePresentation';
 import { useWorkspaceStore } from '../stores/workspace';
 
 const route = useRoute();
@@ -11,6 +12,7 @@ const workspaceStore = useWorkspaceStore();
 const { activeThread, errorMessage, messages, messagesStatus } = storeToRefs(workspaceStore);
 
 const threadId = computed(() => String(route.params.threadId ?? 'thread-001'));
+const multiAgentMode = computed(() => shouldUseMultiAgentPresentation(messages.value));
 
 watch(
   threadId,
@@ -60,7 +62,12 @@ function handleSubmit(value: string) {
     </section>
 
     <section v-else class="message-stream">
-      <ConversationMessageCard v-for="message in messages" :key="message.id" :message="message" />
+      <ConversationMessageCard
+        v-for="message in messages"
+        :key="message.id"
+        :message="message"
+        :multi-agent-mode="multiAgentMode"
+      />
     </section>
 
     <ConversationComposer :disabled="messagesStatus === 'loading'" @submit="handleSubmit" />

@@ -8,6 +8,7 @@ export interface RuntimeEnvLike {
   VITE_CAREER_AGENT_ARTIFACT_TRANSPORT?: string;
   VITE_CAREER_AGENT_ENABLE_VOICE_INPUT?: string;
   VITE_CAREER_AGENT_TRUSTED_CANVAS_ORIGINS?: string;
+  VITE_CAREER_AGENT_NODE_CANVAS_FIXTURE_URL?: string;
 }
 
 export interface RuntimeConfig {
@@ -17,6 +18,7 @@ export interface RuntimeConfig {
   artifactTransport: ArtifactTransport;
   voiceInputEnabled: boolean;
   trustedCanvasOrigins: string[];
+  nodeCanvasFixtureUrl: string | null;
   upstreamConfigured: boolean;
 }
 
@@ -84,6 +86,16 @@ function normalizeArtifactTransport(
   return 'polling';
 }
 
+function normalizeOptionalUrl(value: string | undefined): string | null {
+  const nextValue = value?.trim();
+
+  if (!nextValue) {
+    return null;
+  }
+
+  return nextValue;
+}
+
 export function resolveRuntimeConfig(env: RuntimeEnvLike): RuntimeConfig {
   const clientMode = normalizeClientMode(env.VITE_CAREER_AGENT_CLIENT_MODE);
   const apiBaseUrl = normalizeBaseUrl(env.VITE_CAREER_AGENT_API_BASE_URL);
@@ -95,6 +107,7 @@ export function resolveRuntimeConfig(env: RuntimeEnvLike): RuntimeConfig {
     artifactTransport: normalizeArtifactTransport(clientMode, env.VITE_CAREER_AGENT_ARTIFACT_TRANSPORT),
     voiceInputEnabled: normalizeBoolean(env.VITE_CAREER_AGENT_ENABLE_VOICE_INPUT),
     trustedCanvasOrigins: normalizeTrustedCanvasOrigins(env.VITE_CAREER_AGENT_TRUSTED_CANVAS_ORIGINS),
+    nodeCanvasFixtureUrl: normalizeOptionalUrl(env.VITE_CAREER_AGENT_NODE_CANVAS_FIXTURE_URL),
     upstreamConfigured: clientMode === 'upstream' && Boolean(apiBaseUrl),
   };
 }

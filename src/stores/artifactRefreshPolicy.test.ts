@@ -10,6 +10,7 @@ describe('shouldSimulateArtifactRefreshLifecycle', () => {
       artifactTransport: 'mock',
       voiceInputEnabled: false,
       trustedCanvasOrigins: [],
+      nodeCanvasFixtureUrl: null,
       upstreamConfigured: false,
     })).toBe(true);
   });
@@ -22,6 +23,7 @@ describe('shouldSimulateArtifactRefreshLifecycle', () => {
       artifactTransport: 'polling',
       voiceInputEnabled: false,
       trustedCanvasOrigins: [],
+      nodeCanvasFixtureUrl: null,
       upstreamConfigured: true,
     })).toBe(false);
   });

@@ -49,6 +49,7 @@ describe('createCareerAgentClient', () => {
         artifactTransport: 'mock',
         voiceInputEnabled: false,
         trustedCanvasOrigins: [],
+        nodeCanvasFixtureUrl: null,
         upstreamConfigured: false,
       },
       mockFactory,
@@ -72,6 +73,7 @@ describe('createCareerAgentClient', () => {
         artifactTransport: 'polling',
         voiceInputEnabled: false,
         trustedCanvasOrigins: [],
+        nodeCanvasFixtureUrl: null,
         upstreamConfigured: true,
       },
       upstreamFactory,
@@ -93,6 +95,7 @@ describe('createCareerAgentClient', () => {
         artifactTransport: 'polling',
         voiceInputEnabled: false,
         trustedCanvasOrigins: [],
+        nodeCanvasFixtureUrl: null,
         upstreamConfigured: false,
       },
     });

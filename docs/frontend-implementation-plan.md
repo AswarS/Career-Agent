@@ -196,7 +196,9 @@ Scope:
 - let conversation actions open or update the work canvas
 - let work-canvas interactions send structured feedback back into the agent flow
 - support collapsible reasoning blocks for assistant messages
-- support minimal multi-agent presentation through message metadata
+- support minimal multi-agent presentation through message metadata, but only
+  enable differentiated agent names/colors when more than one assistant
+  identity appears in the same thread
 - support `url` render mode for trusted node/web-app work canvases
 - add explicit send / pending / error / recovery states to the composer flow
 - introduce image-preview-first multimodal behavior

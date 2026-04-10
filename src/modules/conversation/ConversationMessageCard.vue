@@ -1,10 +1,15 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import MarkdownContent from '../../components/MarkdownContent.vue';
 import type { ThreadMessage } from '../../types/entities';
+import { getPresentedMessageContent } from './messagePresentation';
 
 const props = defineProps<{
   message: ThreadMessage;
+  multiAgentMode?: boolean;
 }>();
+
+const presentedMessage = computed(() => getPresentedMessageContent(props.message));
 
 function formatRoleLabel(role: ThreadMessage['role']) {
   switch (role) {
@@ -19,40 +24,50 @@ function formatRoleLabel(role: ThreadMessage['role']) {
   }
 }
 
-function formatSpeakerName(message: ThreadMessage) {
+function formatSpeakerName(message: ThreadMessage, multiAgentMode: boolean) {
+  if (!multiAgentMode) {
+    return formatRoleLabel(message.role);
+  }
+
   return message.agentName ?? formatRoleLabel(message.role);
 }
 
-function formatSpeakerMeta(message: ThreadMessage) {
-  if (!message.agentName) {
+function formatSpeakerMeta(message: ThreadMessage, multiAgentMode: boolean) {
+  if (!multiAgentMode || !message.agentName) {
     return null;
   }
 
   return formatRoleLabel(message.role);
 }
 
-function formatAgentAccentClass(message: ThreadMessage) {
-  return message.agentAccent ? `agent-${message.agentAccent}` : null;
+function formatAgentAccentClass(message: ThreadMessage, multiAgentMode: boolean) {
+  if (!multiAgentMode || !message.agentAccent) {
+    return null;
+  }
+
+  return `agent-${message.agentAccent}`;
 }
 </script>
 
 <template>
-  <article class="message-card" :class="[props.message.role, formatAgentAccentClass(props.message)]">
+  <article class="message-card" :class="[props.message.role, formatAgentAccentClass(props.message, Boolean(props.multiAgentMode))]">
     <div class="message-topline">
       <div class="speaker-group">
-        <strong>{{ formatSpeakerName(props.message) }}</strong>
-        <span v-if="formatSpeakerMeta(props.message)" class="speaker-meta">{{ formatSpeakerMeta(props.message) }}</span>
+        <strong>{{ formatSpeakerName(props.message, Boolean(props.multiAgentMode)) }}</strong>
+        <span v-if="formatSpeakerMeta(props.message, Boolean(props.multiAgentMode))" class="speaker-meta">
+          {{ formatSpeakerMeta(props.message, Boolean(props.multiAgentMode)) }}
+        </span>
       </div>
       <span>{{ props.message.createdAt }}</span>
     </div>
 
-    <details v-if="props.message.reasoning" class="reasoning-block">
+    <details v-if="presentedMessage.reasoning" class="reasoning-block">
       <summary>查看思考过程</summary>
-      <MarkdownContent :source="props.message.reasoning" />
+      <MarkdownContent :source="presentedMessage.reasoning" />
     </details>
 
-    <MarkdownContent v-if="props.message.kind === 'markdown'" :source="props.message.content" />
-    <p v-else class="status-copy">{{ props.message.content }}</p>
+    <MarkdownContent v-if="props.message.kind === 'markdown'" :source="presentedMessage.content" />
+    <p v-else class="status-copy">{{ presentedMessage.content }}</p>
   </article>
 </template>
 

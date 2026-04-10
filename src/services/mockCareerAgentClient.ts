@@ -1,3 +1,4 @@
+import { runtimeConfig } from '../config/runtime';
 import type { CareerAgentClient } from './careerAgentClient';
 import type {
   ArtifactRecord,
@@ -6,6 +7,28 @@ import type {
   ThreadMessage,
   ThreadSummary,
 } from '../types/entities';
+
+function buildCanvasFixtureUrl(revision?: number): string {
+  const baseUrl = runtimeConfig.nodeCanvasFixtureUrl ?? '/mock-node-canvas/index.html';
+
+  try {
+    const parsedUrl = baseUrl.startsWith('http://') || baseUrl.startsWith('https://')
+      ? new URL(baseUrl)
+      : new URL(baseUrl, 'http://fixture.local');
+
+    if (revision !== undefined) {
+      parsedUrl.searchParams.set('revision', String(revision));
+    }
+
+    if (baseUrl.startsWith('http://') || baseUrl.startsWith('https://')) {
+      return parsedUrl.toString();
+    }
+
+    return `${parsedUrl.pathname}${parsedUrl.search}${parsedUrl.hash}`;
+  } catch {
+    return baseUrl;
+  }
+}
 
 const threads: ThreadSummary[] = [
   {
@@ -260,7 +283,7 @@ function buildRefreshedArtifact(currentArtifact: ArtifactRecord): ArtifactRecord
     updatedAt: refreshedAt,
     summary: '职业路线图 URL 工作画布已刷新到新版本。',
     payload: {
-      url: `/mock-node-canvas/index.html?revision=${nextRevision}`,
+      url: buildCanvasFixtureUrl(nextRevision),
     },
   };
 }
@@ -306,7 +329,7 @@ const artifacts: ArtifactRecord[] = [
     updatedAt: '2026-04-07T18:21:00Z',
     summary: '用 URL 型工作画布模拟 node/web 应用承载的职业路线图或面试工作台。',
     payload: {
-      url: '/mock-node-canvas/index.html',
+      url: buildCanvasFixtureUrl(),
     },
   },
 ];

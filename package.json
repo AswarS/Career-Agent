@@ -5,10 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:node-canvas-fixture": "node tests/work-canvas/dev-node-canvas-fixture.mjs",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest --run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "canvas:node-fixture": "node tests/work-canvas/node-fixture/server.mjs"
   },
   "dependencies": {
     "markdown-it": "^14.1.1",

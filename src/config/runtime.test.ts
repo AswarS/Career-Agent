@@ -12,6 +12,7 @@ describe('resolveRuntimeConfig', () => {
       artifactTransport: 'mock',
       voiceInputEnabled: false,
       trustedCanvasOrigins: [],
+      nodeCanvasFixtureUrl: null,
       upstreamConfigured: false,
     });
   });
@@ -25,6 +26,7 @@ describe('resolveRuntimeConfig', () => {
       VITE_CAREER_AGENT_ENABLE_VOICE_INPUT: 'true',
       VITE_CAREER_AGENT_TRUSTED_CANVAS_ORIGINS:
         'https://canvas.example.com, invalid, https://canvas.example.com/path, http://localhost:3000',
+      VITE_CAREER_AGENT_NODE_CANVAS_FIXTURE_URL: 'http://127.0.0.1:4318',
     });
 
     expect(config).toEqual({
@@ -34,6 +36,7 @@ describe('resolveRuntimeConfig', () => {
       artifactTransport: 'sse',
       voiceInputEnabled: true,
       trustedCanvasOrigins: ['https://canvas.example.com', 'http://localhost:3000'],
+      nodeCanvasFixtureUrl: 'http://127.0.0.1:4318',
       upstreamConfigured: true,
     });
   });

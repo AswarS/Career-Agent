@@ -176,6 +176,8 @@
 - reasoning 默认折叠，不默认展开
 - 前端可兼容 `<think>...</think>`，但长期应改为显式字段
 - 多 agent 第一版只做名称和颜色区分，不做复杂编排 UI
+- 只有同一会话里出现多个 assistant 身份时，才启用名称 / 颜色差异化
+- 单 assistant 会话继续使用统一的助手呈现，不强行暴露 agent 编排感
 
 ### 3.3 URL 型工作画布合同
 
@@ -192,6 +194,21 @@
 - `url` 模式用于受信任应用，不等同于“打开任意网页”
 - 这类 URL 最好由上游统一控制来源，而不是由前端拼接
 - 前端当前只接受相对路径，或来自 allowlist 的 http/https URL
+
+### 3.4 本地 work canvas 验证资产
+
+仓库里现在应保留一套本地验证资产，帮助前端在没有真实后端联调时验证：
+
+- `html` 型 artifact 的 `srcdoc` 路径
+- same-origin `url` 型 work canvas
+- cross-origin node/web 项目 URL
+
+当前前端默认态度：
+
+- `tests/work-canvas/README.md` 负责说明本地验证流程
+- `public/mock-node-canvas/index.html` 继续作为 same-origin URL 示例
+- `tests/work-canvas/node-fixture/server.mjs` 用于模拟独立 node 项目
+- 前端不负责启动真实 node 项目，只负责消费 URL 并嵌入 iframe
 
 ### 3.1 当前前端约定的 API 路径
 
