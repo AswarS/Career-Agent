@@ -195,6 +195,9 @@ Scope:
 
 - let conversation actions open or update the work canvas
 - let work-canvas interactions send structured feedback back into the agent flow
+- support collapsible reasoning blocks for assistant messages
+- support minimal multi-agent presentation through message metadata
+- support `url` render mode for trusted node/web-app work canvases
 - add explicit send / pending / error / recovery states to the composer flow
 - introduce image-preview-first multimodal behavior
 - make the work canvas feel like a result surface driven by conversation, not by debug buttons
@@ -203,6 +206,9 @@ Exit criteria:
 
 - at least one conversation path can launch a meaningful canvas state
 - at least one work-canvas path can send interaction feedback upstream and receive a visible update
+- assistant messages can render hidden/collapsible reasoning content when present
+- multiple agent identities can be distinguished by name and color without changing orchestration logic
+- the host can render both `html` and trusted `url` work-canvas surfaces
 - the composer reflects real request lifecycle states
 - image preview works as the first real multimodal path
 - shell behavior changes from Phase 6A remain intact

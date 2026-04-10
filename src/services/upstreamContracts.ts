@@ -1,4 +1,5 @@
 import type {
+  AgentAccent,
   ArtifactRecord,
   ArtifactRenderMode,
   ArtifactStatus,
@@ -26,6 +27,14 @@ export interface UpstreamThreadMessage {
   role: ThreadMessage['role'];
   kind?: MessageKind;
   content: string;
+  reasoning?: string | null;
+  think?: string | null;
+  agent_id?: string | null;
+  agentId?: string | null;
+  agent_name?: string | null;
+  agentName?: string | null;
+  agent_accent?: AgentAccent | null;
+  agentAccent?: AgentAccent | null;
   created_at?: string;
   createdAt?: string;
 }
@@ -50,7 +59,12 @@ export interface UpstreamArtifactRecord {
   updated_at?: string;
   updatedAt?: string;
   summary: string;
-  payload: ArtifactRecord['payload'];
+  payload: {
+    html?: string | null;
+    url?: string | null;
+    markdown?: string | null;
+    cards?: unknown[] | null;
+  };
 }
 
 function normalizeArtifactStatus(value: UpstreamArtifactRecord['status']): ArtifactStatus {
@@ -66,11 +80,42 @@ function normalizeArtifactStatus(value: UpstreamArtifactRecord['status']): Artif
 }
 
 function normalizeArtifactRenderMode(value: ArtifactRenderMode | undefined): ArtifactRenderMode {
-  return value === 'cards' || value === 'markdown' ? value : 'html';
+  return value === 'cards' || value === 'markdown' || value === 'url' ? value : 'html';
 }
 
 function normalizeMessageKind(value: MessageKind | undefined): MessageKind {
   return value === 'status' ? 'status' : 'markdown';
+}
+
+function normalizeAgentAccent(value: AgentAccent | undefined | null): AgentAccent | null {
+  if (value === 'amber' || value === 'blue' || value === 'slate' || value === 'teal') {
+    return value;
+  }
+
+  return null;
+}
+
+function extractReasoningBlock(content: string): { content: string; reasoning: string | null } {
+  const matches = [...content.matchAll(/<think>([\s\S]*?)<\/think>/gi)];
+
+  if (matches.length === 0) {
+    return {
+      content,
+      reasoning: null,
+    };
+  }
+
+  const reasoning = matches
+    .map((match) => match[1]?.trim())
+    .filter((segment): segment is string => Boolean(segment))
+    .join('\n\n');
+
+  const nextContent = content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+
+  return {
+    content: nextContent,
+    reasoning: reasoning || null,
+  };
 }
 
 export function sanitizeProfileRecord(input: ProfileRecord): ProfileRecord {
@@ -97,12 +142,21 @@ export function normalizeThreadSummary(input: UpstreamThreadSummary): ThreadSumm
 }
 
 export function normalizeThreadMessage(input: UpstreamThreadMessage, fallbackThreadId: string): ThreadMessage {
+  const shouldExtractInlineReasoning = input.role === 'assistant' && !input.reasoning && !input.think;
+  const extractedReasoning = shouldExtractInlineReasoning
+    ? extractReasoningBlock(input.content)
+    : { content: input.content, reasoning: null };
+
   return {
     id: input.id,
     threadId: input.threadId ?? input.thread_id ?? fallbackThreadId,
     role: input.role,
     kind: normalizeMessageKind(input.kind),
-    content: input.content,
+    content: extractedReasoning.content,
+    reasoning: input.reasoning ?? input.think ?? extractedReasoning.reasoning,
+    agentId: input.agentId ?? input.agent_id ?? null,
+    agentName: input.agentName ?? input.agent_name ?? null,
+    agentAccent: normalizeAgentAccent(input.agentAccent ?? input.agent_accent),
     createdAt: input.createdAt ?? input.created_at ?? new Date(0).toISOString(),
   };
 }
@@ -148,17 +202,52 @@ export function normalizeProfileSuggestion(input: UpstreamProfileSuggestion): Pr
 }
 
 export function normalizeArtifactRecord(input: UpstreamArtifactRecord): ArtifactRecord {
-  return {
+  const renderMode = normalizeArtifactRenderMode(input.renderMode ?? input.render_mode);
+  const baseRecord = {
     id: input.id,
     type: input.type,
     title: input.title,
     status: normalizeArtifactStatus(input.status),
-    renderMode: normalizeArtifactRenderMode(input.renderMode ?? input.render_mode),
     revision: input.revision,
     updatedAt: input.updatedAt ?? input.updated_at ?? new Date(0).toISOString(),
     summary: input.summary,
+  };
+
+  if (renderMode === 'url') {
+    return {
+      ...baseRecord,
+      renderMode,
+      payload: {
+        url: input.payload.url?.trim() ?? '',
+      },
+    };
+  }
+
+  if (renderMode === 'markdown') {
+    return {
+      ...baseRecord,
+      renderMode,
+      payload: {
+        markdown: input.payload.markdown?.trim() ?? '',
+      },
+    };
+  }
+
+  if (renderMode === 'cards') {
+    return {
+      ...baseRecord,
+      renderMode,
+      payload: {
+        cards: Array.isArray(input.payload.cards) ? [...input.payload.cards] : [],
+      },
+    };
+  }
+
+  return {
+    ...baseRecord,
+    renderMode,
     payload: {
-      ...input.payload,
+      html: input.payload.html ?? '',
     },
   };
 }

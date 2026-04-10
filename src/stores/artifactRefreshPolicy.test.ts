@@ -9,6 +9,7 @@ describe('shouldSimulateArtifactRefreshLifecycle', () => {
       apiBaseUrl: null,
       artifactTransport: 'mock',
       voiceInputEnabled: false,
+      trustedCanvasOrigins: [],
       upstreamConfigured: false,
     })).toBe(true);
   });
@@ -20,6 +21,7 @@ describe('shouldSimulateArtifactRefreshLifecycle', () => {
       apiBaseUrl: 'https://agent.example.com',
       artifactTransport: 'polling',
       voiceInputEnabled: false,
+      trustedCanvasOrigins: [],
       upstreamConfigured: true,
     })).toBe(false);
   });

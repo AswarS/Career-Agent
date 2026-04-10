@@ -7,6 +7,7 @@ export interface RuntimeEnvLike {
   VITE_CAREER_AGENT_API_BASE_URL?: string;
   VITE_CAREER_AGENT_ARTIFACT_TRANSPORT?: string;
   VITE_CAREER_AGENT_ENABLE_VOICE_INPUT?: string;
+  VITE_CAREER_AGENT_TRUSTED_CANVAS_ORIGINS?: string;
 }
 
 export interface RuntimeConfig {
@@ -15,6 +16,7 @@ export interface RuntimeConfig {
   apiBaseUrl: string | null;
   artifactTransport: ArtifactTransport;
   voiceInputEnabled: boolean;
+  trustedCanvasOrigins: string[];
   upstreamConfigured: boolean;
 }
 
@@ -39,6 +41,32 @@ function normalizeBoolean(value: string | undefined): boolean {
 
   const normalizedValue = value.trim().toLowerCase();
   return normalizedValue === 'true' || normalizedValue === '1' || normalizedValue === 'yes' || normalizedValue === 'on';
+}
+
+function normalizeTrustedCanvasOrigins(value: string | undefined): string[] {
+  if (!value) {
+    return [];
+  }
+
+  const origins = value
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => {
+      try {
+        const nextUrl = new URL(entry);
+        if (nextUrl.protocol !== 'http:' && nextUrl.protocol !== 'https:') {
+          return null;
+        }
+
+        return nextUrl.origin;
+      } catch {
+        return null;
+      }
+    })
+    .filter((entry): entry is string => Boolean(entry));
+
+  return [...new Set(origins)];
 }
 
 function normalizeArtifactTransport(
@@ -66,6 +94,7 @@ export function resolveRuntimeConfig(env: RuntimeEnvLike): RuntimeConfig {
     apiBaseUrl,
     artifactTransport: normalizeArtifactTransport(clientMode, env.VITE_CAREER_AGENT_ARTIFACT_TRANSPORT),
     voiceInputEnabled: normalizeBoolean(env.VITE_CAREER_AGENT_ENABLE_VOICE_INPUT),
+    trustedCanvasOrigins: normalizeTrustedCanvasOrigins(env.VITE_CAREER_AGENT_TRUSTED_CANVAS_ORIGINS),
     upstreamConfigured: clientMode === 'upstream' && Boolean(apiBaseUrl),
   };
 }

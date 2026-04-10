@@ -152,10 +152,46 @@
 - 哪些内容允许脚本
 - 哪些内容必须 sanitization
 - host 和 artifact 之间是否需要消息通信
+- `url` 型 work canvas 是否只来自受信任的上游 URL
+- node/web 应用的 iframe 嵌入是否已正确配置 CSP / frame headers
 
 当前前端默认态度：
 
 - 第一版默认 sandboxed iframe
+- `html` 型 artifact 继续走高隔离 `srcdoc`
+- `url` 型 work canvas 只用于受信任 node/web 应用，不作为任意外站嵌入能力
+- 第一版 `url` iframe 从最小 sandbox 面开始，只放开 `allow-scripts`
+
+### 3.2 对话消息扩展合同
+
+如果上游准备开始返回更丰富的对话消息，需要尽早对齐这些字段：
+
+- `reasoning` 或兼容性 `think`
+- `agent_id`
+- `agent_name`
+- `agent_accent`
+
+当前前端默认态度：
+
+- reasoning 默认折叠，不默认展开
+- 前端可兼容 `<think>...</think>`，但长期应改为显式字段
+- 多 agent 第一版只做名称和颜色区分，不做复杂编排 UI
+
+### 3.3 URL 型工作画布合同
+
+如果上游准备返回 node/web 应用 URL，需要尽早对齐：
+
+- `render_mode: url`
+- `payload.url`
+- URL 来源是否稳定可嵌入
+- 是否需要 host 与 iframe 的 postMessage 通道
+
+当前前端默认态度：
+
+- `html` 和 `url` 是两种不同信任级别的宿主模式
+- `url` 模式用于受信任应用，不等同于“打开任意网页”
+- 这类 URL 最好由上游统一控制来源，而不是由前端拼接
+- 前端当前只接受相对路径，或来自 allowlist 的 http/https URL
 
 ### 3.1 当前前端约定的 API 路径
 

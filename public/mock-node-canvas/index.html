@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Career Roadmap Lab</title>
+    <style>
+      :root {
+        --bg: #f6f0e4;
+        --surface: #fffaf2;
+        --border: rgba(96, 114, 126, 0.16);
+        --text: #23313b;
+        --muted: #61707c;
+        --teal: #1d736d;
+        --amber: #d88f48;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        font-family: Inter, system-ui, sans-serif;
+        background: linear-gradient(180deg, #f9f5ec 0%, var(--bg) 100%);
+        color: var(--text);
+      }
+
+      main {
+        min-height: 100vh;
+        padding: 24px;
+      }
+
+      .hero,
+      .panel {
+        border: 1px solid var(--border);
+        border-radius: 24px;
+        background: var(--surface);
+        box-shadow: 0 18px 40px rgba(35, 49, 59, 0.06);
+      }
+
+      .hero {
+        display: grid;
+        gap: 16px;
+        padding: 24px;
+      }
+
+      .panel-grid {
+        display: grid;
+        grid-template-columns: 1.1fr 0.9fr;
+        gap: 16px;
+        margin-top: 16px;
+      }
+
+      .panel {
+        padding: 20px;
+      }
+
+      .eyebrow {
+        margin: 0;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2 {
+        margin: 0;
+        font-family: "Iowan Old Style", Georgia, serif;
+      }
+
+      p,
+      li {
+        color: var(--muted);
+        line-height: 1.7;
+      }
+
+      .pill-row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 8px;
+      }
+
+      .pill {
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: rgba(29, 115, 109, 0.1);
+        color: var(--teal);
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .step-list {
+        margin: 16px 0 0;
+        padding-left: 20px;
+      }
+
+      .status {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 16px;
+      }
+
+      .status-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+        background: var(--amber);
+      }
+
+      @media (max-width: 860px) {
+        main { padding: 16px; }
+        .panel-grid { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <p class="eyebrow">URL Work Canvas</p>
+        <h1>Career Roadmap Lab</h1>
+        <p>这是一个通过 iframe `src` 承载的 URL 型工作画布，用来模拟 node/web 项目返回的真实应用入口。</p>
+        <div class="pill-row">
+          <span class="pill">Node/Web App Host</span>
+          <span class="pill">Interview / Roadmap Ready</span>
+          <span class="pill">Trusted URL Only</span>
+        </div>
+      </section>
+
+      <section class="panel-grid">
+        <article class="panel">
+          <p class="eyebrow">Next Actions</p>
+          <h2>进入可交互的路线图或面试工作台</h2>
+          <ol class="step-list">
+            <li>由上游返回具体 URL</li>
+            <li>前端 work canvas 以 iframe 承载</li>
+            <li>后续通过 postMessage 或事件通道回传交互</li>
+          </ol>
+        </article>
+
+        <article class="panel">
+          <p class="eyebrow">Host Status</p>
+          <h2>Trusted App Surface</h2>
+          <div class="status">
+            <span class="status-dot"></span>
+            <p style="margin: 0">当前示例用于验证 URL 型 artifact host，不代表最终业务 UI。</p>
+          </div>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>

@@ -1,17 +1,51 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { storeToRefs } from 'pinia';
+import { runtimeConfig } from '../../config/runtime';
 import { useWorkspaceStore } from '../../stores/workspace';
+import { resolveTrustedCanvasUrl } from './urlCanvasPolicy';
 
 const workspaceStore = useWorkspaceStore();
 const { activeArtifact, artifactFocusMode, artifactImmersiveMode, artifactPaneOpen } = storeToRefs(workspaceStore);
+const trustedUrlFrameSandbox = 'allow-scripts';
 
 const artifactMarkup = computed(() => {
   if (activeArtifact.value?.renderMode !== 'html') {
     return '';
   }
 
-  return activeArtifact.value.payload.html;
+  return activeArtifact.value.payload.html.trim();
+});
+
+const artifactUrl = computed(() => {
+  if (activeArtifact.value?.renderMode !== 'url') {
+    return null;
+  }
+
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  return resolveTrustedCanvasUrl(activeArtifact.value.payload.url, {
+    currentOrigin: window.location.origin,
+    trustedOrigins: runtimeConfig.trustedCanvasOrigins,
+  });
+});
+
+const artifactIssue = computed(() => {
+  if (!activeArtifact.value) {
+    return null;
+  }
+
+  if (activeArtifact.value.renderMode === 'html' && !artifactMarkup.value) {
+    return '当前 HTML 工件缺少可渲染载荷。';
+  }
+
+  if (activeArtifact.value.renderMode === 'url' && !artifactUrl.value) {
+    return '当前 URL 工件未通过宿主安全校验。';
+  }
+
+  return null;
 });
 
 const artifactTypeLabel = computed(() => {
@@ -45,6 +79,10 @@ const artifactStatusLabel = computed(() => {
 });
 
 const statusTitle = computed(() => {
+  if (artifactIssue.value) {
+    return '工件载荷不可用';
+  }
+
   switch (activeArtifact.value?.status) {
     case 'loading':
       return '正在准备工件容器';
@@ -60,6 +98,14 @@ const statusTitle = computed(() => {
 });
 
 const statusBody = computed(() => {
+  if (artifactIssue.value) {
+    if (activeArtifact.value?.renderMode === 'url') {
+      return '当前前端仅允许相对路径，或来自受信任 allowlist 的 http/https URL 工作画布。';
+    }
+
+    return '请检查当前工件载荷是否与声明的渲染模式一致。';
+  }
+
   switch (activeArtifact.value?.status) {
     case 'loading':
       return '宿主面板已预留显示区域，正在等待下一版载荷。';
@@ -73,6 +119,10 @@ const statusBody = computed(() => {
       return '当前版本已经在独立宿主面板中准备完成。';
   }
 });
+
+const artifactStateClass = computed(() => (
+  artifactIssue.value ? 'error' : activeArtifact.value?.status ?? 'idle'
+));
 </script>
 
 <template>
@@ -129,22 +179,35 @@ const statusBody = computed(() => {
       <template v-if="activeArtifact">
         <div class="artifact-meta">
           <span>{{ artifactTypeLabel }}</span>
+          <span>{{ activeArtifact.renderMode }}</span>
           <span>{{ artifactStatusLabel }}</span>
           <span>版本 {{ activeArtifact.revision }}</span>
         </div>
 
-        <div class="artifact-state" :class="activeArtifact.status">
+        <div class="artifact-state" :class="artifactStateClass">
           <strong>{{ statusTitle }}</strong>
           <p>{{ statusBody }}</p>
         </div>
 
         <iframe
-          v-if="activeArtifact.renderMode === 'html'"
+          v-if="activeArtifact.renderMode === 'html' && !artifactIssue"
           class="artifact-frame"
           sandbox=""
           :srcdoc="artifactMarkup"
           title="工件预览"
         ></iframe>
+
+        <iframe
+          v-else-if="activeArtifact.renderMode === 'url' && !artifactIssue"
+          class="artifact-frame"
+          :sandbox="trustedUrlFrameSandbox"
+          :src="artifactUrl ?? ''"
+          title="工件应用"
+        ></iframe>
+
+        <div v-else-if="artifactIssue" class="artifact-empty">
+          <p>{{ artifactIssue }}</p>
+        </div>
 
         <div v-else class="artifact-empty">
           <p>这种工件渲染模式留待后续阶段实现。</p>

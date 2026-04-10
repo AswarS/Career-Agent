@@ -39,14 +39,30 @@ const messagesByThread: Record<string, ThreadMessage[]> = {
       threadId: 'thread-001',
       role: 'assistant',
       kind: 'markdown',
+      agentId: 'agent-planner',
+      agentName: '规划助手',
+      agentAccent: 'teal',
+      reasoning: '先判断用户是在做短周期计划，而不是长期路线图。\n\n再把约束拆成工作交付、学习投入和恢复节奏三类。\n\n最后优先输出一个可执行的周计划工件，而不是继续追问太多背景。',
       content:
         '我可以把这些要求整理成一个周计划工件。\n\n- 优先保障工作台外壳交付\n- 保持画像更新必须显式确认\n- 使用工件宿主面板承载计划展示\n\n当前前端已经托管工件外壳，后续再由上游系统提供实时载荷更新。',
       createdAt: '2026-04-08 09:01',
     },
+    {
+      id: 'message-003',
+      threadId: 'thread-001',
+      role: 'assistant',
+      kind: 'markdown',
+      agentId: 'agent-execution',
+      agentName: '执行助手',
+      agentAccent: 'amber',
+      content:
+        '如果你下一步要进入更接近真实项目的工作面，我也可以把结果切到 **URL 型工作画布**，用来承载 node 应用或交互式面试界面。',
+      createdAt: '2026-04-08 09:02',
+    },
   ],
   'thread-002': [
     {
-      id: 'message-003',
+      id: 'message-004',
       threadId: 'thread-002',
       role: 'user',
       kind: 'markdown',
@@ -54,12 +70,15 @@ const messagesByThread: Record<string, ThreadMessage[]> = {
       createdAt: '2026-04-07 18:20',
     },
     {
-      id: 'message-004',
+      id: 'message-005',
       threadId: 'thread-002',
       role: 'assistant',
       kind: 'markdown',
+      agentId: 'agent-direction',
+      agentName: '方向助手',
+      agentAccent: 'blue',
       content:
-        '路线图工件后续会汇总中期职业方向、能力缺口和推进顺序。\n\n`career-roadmap` 目前是第三种预留工件类型。',
+        '<think>先比较岗位职责中心，再判断哪条路径更贴合当前的前端和 AI 协作背景。</think>\n\n路线图工件后续会汇总中期职业方向、能力缺口和推进顺序。\n\n`career-roadmap` 目前也是 URL 型工作画布的首个 mock 入口。',
       createdAt: '2026-04-07 18:21',
     },
   ],
@@ -137,12 +156,36 @@ function cloneProfileSuggestionPatch(patch: Partial<ProfileRecord>) {
 }
 
 function cloneArtifactRecord(input: ArtifactRecord): ArtifactRecord {
-  return {
-    ...input,
-    payload: {
-      ...input.payload,
-    },
-  };
+  switch (input.renderMode) {
+    case 'html':
+      return {
+        ...input,
+        payload: {
+          html: input.payload.html,
+        },
+      };
+    case 'url':
+      return {
+        ...input,
+        payload: {
+          url: input.payload.url,
+        },
+      };
+    case 'markdown':
+      return {
+        ...input,
+        payload: {
+          markdown: input.payload.markdown,
+        },
+      };
+    case 'cards':
+      return {
+        ...input,
+        payload: {
+          cards: [...input.payload.cards],
+        },
+      };
+  }
 }
 
 function buildProfileSummaryArtifact(nextProfile: ProfileRecord, revision: number): ArtifactRecord {
@@ -182,6 +225,7 @@ function buildRefreshedArtifact(currentArtifact: ArtifactRecord): ArtifactRecord
   if (currentArtifact.id === 'artifact-weekly-plan') {
     return {
       ...currentArtifact,
+      renderMode: 'html',
       revision: nextRevision,
       status: 'ready',
       updatedAt: refreshedAt,
@@ -210,25 +254,13 @@ function buildRefreshedArtifact(currentArtifact: ArtifactRecord): ArtifactRecord
 
   return {
     ...currentArtifact,
+    renderMode: 'url',
     revision: nextRevision,
     status: 'ready',
     updatedAt: refreshedAt,
-    summary: '职业路线图已从旧版本状态刷新完成。',
+    summary: '职业路线图 URL 工作画布已刷新到新版本。',
     payload: {
-      html: `
-        <html lang="zh-CN">
-          <body style="margin:0;font-family:Inter,system-ui,sans-serif;background:#fffaf2;color:#23313b;">
-            <div style="padding:24px;">
-              <h1 style="margin:0 0 14px;font-size:24px;">职业路线图</h1>
-              <p style="margin:0 0 12px;color:#61707c;">这个工件已于 ${refreshedAt} 刷新。</p>
-              <ol style="margin:0;padding-left:18px;line-height:1.8;color:#61707c;">
-                <li>稳定工作台外壳与工件聚焦模式</li>
-                <li>打通一条完整的上游刷新链路</li>
-                <li>把已交付切片沉淀为更有说服力的作品叙事</li>
-              </ol>
-            </div>
-          </body>
-        </html>`,
+      url: `/mock-node-canvas/index.html?revision=${nextRevision}`,
     },
   };
 }
@@ -267,26 +299,14 @@ const artifacts: ArtifactRecord[] = [
   {
     id: 'artifact-career-roadmap',
     type: 'career-roadmap',
-    title: '职业路线图',
+    title: '职业路线图工作台',
     status: 'stale',
-    renderMode: 'html',
+    renderMode: 'url',
     revision: 2,
     updatedAt: '2026-04-07T18:21:00Z',
-    summary: '作为第三种支持类型预留的中期方向工件。',
+    summary: '用 URL 型工作画布模拟 node/web 应用承载的职业路线图或面试工作台。',
     payload: {
-      html: `
-        <html lang="zh-CN">
-          <body style="margin:0;font-family:Inter,system-ui,sans-serif;background:#fffaf2;color:#23313b;">
-            <div style="padding:24px;">
-              <h1 style="margin:0 0 14px;font-size:24px;">职业路线图</h1>
-              <ol style="margin:0;padding-left:18px;line-height:1.8;color:#61707c;">
-                <li>稳定智能体工作台外壳</li>
-                <li>交付一条端到端工件工作流</li>
-                <li>用已上线成果强化作品叙事</li>
-              </ol>
-            </div>
-          </body>
-        </html>`,
+      url: '/mock-node-canvas/index.html',
     },
   },
 ];

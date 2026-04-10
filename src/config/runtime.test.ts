@@ -11,6 +11,7 @@ describe('resolveRuntimeConfig', () => {
       apiBaseUrl: null,
       artifactTransport: 'mock',
       voiceInputEnabled: false,
+      trustedCanvasOrigins: [],
       upstreamConfigured: false,
     });
   });
@@ -22,6 +23,8 @@ describe('resolveRuntimeConfig', () => {
       VITE_CAREER_AGENT_API_BASE_URL: 'https://agent.example.com///',
       VITE_CAREER_AGENT_ARTIFACT_TRANSPORT: 'sse',
       VITE_CAREER_AGENT_ENABLE_VOICE_INPUT: 'true',
+      VITE_CAREER_AGENT_TRUSTED_CANVAS_ORIGINS:
+        'https://canvas.example.com, invalid, https://canvas.example.com/path, http://localhost:3000',
     });
 
     expect(config).toEqual({
@@ -30,6 +33,7 @@ describe('resolveRuntimeConfig', () => {
       apiBaseUrl: 'https://agent.example.com',
       artifactTransport: 'sse',
       voiceInputEnabled: true,
+      trustedCanvasOrigins: ['https://canvas.example.com', 'http://localhost:3000'],
       upstreamConfigured: true,
     });
   });

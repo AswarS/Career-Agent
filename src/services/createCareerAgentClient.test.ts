@@ -48,6 +48,7 @@ describe('createCareerAgentClient', () => {
         apiBaseUrl: null,
         artifactTransport: 'mock',
         voiceInputEnabled: false,
+        trustedCanvasOrigins: [],
         upstreamConfigured: false,
       },
       mockFactory,
@@ -70,6 +71,7 @@ describe('createCareerAgentClient', () => {
         apiBaseUrl: 'https://agent.example.com',
         artifactTransport: 'polling',
         voiceInputEnabled: false,
+        trustedCanvasOrigins: [],
         upstreamConfigured: true,
       },
       upstreamFactory,
@@ -90,6 +92,7 @@ describe('createCareerAgentClient', () => {
         apiBaseUrl: null,
         artifactTransport: 'polling',
         voiceInputEnabled: false,
+        trustedCanvasOrigins: [],
         upstreamConfigured: false,
       },
     });

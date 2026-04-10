@@ -245,7 +245,41 @@ This is the first realistic path the project should verify end-to-end.
 
 - generated HTML opens in the right pane by default
 - default host model: sandboxed iframe
+- trusted URL-hosted applications are supported through iframe `src`
 - full-width artifact mode is supported when needed
+
+Host rule:
+
+- `html` render mode is for generated document-like payloads and should prefer
+  `srcdoc` with strong isolation
+- `url` render mode is for trusted node/web applications returned by the
+  upstream system as a concrete URL
+- `url` mode is an application host mode, not a generic arbitrary website embed
+- `url` mode should accept only relative URLs or http/https URLs from a
+  frontend allowlist of trusted origins
+
+### Message Structure For Phase 6B
+
+Phase 6B message contract should support:
+
+- optional collapsible reasoning content
+- optional agent identity metadata
+- stable role and message-kind fields
+
+Reasoning rule:
+
+- explicit `reasoning` field is preferred
+- frontend may extract `<think>...</think>` blocks for compatibility if upstream
+  still returns them inline
+- reasoning should render collapsed by default
+
+Multi-agent rule:
+
+- a message may include `agent_id`
+- a message may include `agent_name`
+- a message may include `agent_accent`
+- frontend uses those only for presentation and routing context, not for agent
+  orchestration
 
 ### Profile Source Of Truth
 
@@ -478,6 +512,12 @@ It may become the primary workspace for:
 - coding test surfaces
 - visual learning experiences
 
+Supported host render modes for the frontend contract:
+
+- `html`
+- `url`
+- future reserved modes such as `markdown` or `cards`
+
 ### Recommended Integration Model
 
 The frontend host should accept artifact payloads like:
@@ -534,6 +574,11 @@ Minimum feedback event shape should support:
 - `payload`
 - `created_at`
 
+Minimum work-canvas host payload should support:
+
+- `html` via inline payload for generated document-like outputs
+- `url` via trusted upstream URL for node/web-app style interactive surfaces
+
 Example interaction types:
 
 - `answer_submitted`
@@ -575,6 +620,13 @@ Initial recommendation:
 
 - prefer sandboxed iframe or controlled render container for risky content
 - keep host shell and generated artifact styles isolated
+- keep `url` mode restricted to trusted upstream-controlled origins
+- require upstream node/web app URLs to allow iframe embedding through CSP /
+  frame headers
+- treat `html` mode and `url` mode as different trust levels
+- default `url` host policy should start from the minimum sandbox surface,
+  meaning `allow-scripts` only, then open additional capabilities only after
+  review
 
 ## Multimodal Support
 

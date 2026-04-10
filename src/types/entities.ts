@@ -11,6 +11,7 @@ export interface ThreadSummary {
 export type MessageRole = 'user' | 'assistant' | 'system';
 export type MessageKind = 'markdown' | 'status';
 export type LoadState = 'idle' | 'loading' | 'ready' | 'error';
+export type AgentAccent = 'teal' | 'amber' | 'blue' | 'slate';
 
 export interface ThreadMessage {
   id: string;
@@ -18,6 +19,10 @@ export interface ThreadMessage {
   role: MessageRole;
   kind: MessageKind;
   content: string;
+  reasoning?: string | null;
+  agentId?: string | null;
+  agentName?: string | null;
+  agentAccent?: AgentAccent | null;
   createdAt: string;
 }
 
@@ -53,21 +58,51 @@ export interface ProfileSuggestion {
 
 export type ArtifactType = 'weekly-plan' | 'profile-summary' | 'career-roadmap';
 export type ArtifactStatus = 'idle' | 'loading' | 'streaming' | 'ready' | 'stale' | 'error';
-export type ArtifactRenderMode = 'html' | 'markdown' | 'cards';
+export type ArtifactRenderMode = 'html' | 'markdown' | 'cards' | 'url';
 export type ArtifactViewMode = 'pane' | 'focus' | 'immersive';
 
-export interface ArtifactHtmlPayload {
-  html: string;
-}
-
-export interface ArtifactRecord {
+interface ArtifactRecordBase {
   id: string;
   type: ArtifactType;
   title: string;
   status: ArtifactStatus;
-  renderMode: ArtifactRenderMode;
   revision: number;
   updatedAt: string;
   summary: string;
-  payload: ArtifactHtmlPayload;
 }
+
+export interface HtmlArtifactRecord extends ArtifactRecordBase {
+  renderMode: 'html';
+  payload: {
+    html: string;
+  };
+}
+
+export interface UrlArtifactRecord extends ArtifactRecordBase {
+  renderMode: 'url';
+  payload: {
+    url: string;
+  };
+}
+
+export interface MarkdownArtifactRecord extends ArtifactRecordBase {
+  renderMode: 'markdown';
+  payload: {
+    markdown: string;
+  };
+}
+
+export interface CardsArtifactRecord extends ArtifactRecordBase {
+  renderMode: 'cards';
+  payload: {
+    cards: unknown[];
+  };
+}
+
+export type ArtifactRecord =
+  | HtmlArtifactRecord
+  | UrlArtifactRecord
+  | MarkdownArtifactRecord
+  | CardsArtifactRecord;
+
+export type ArtifactPayload = ArtifactRecord['payload'];
