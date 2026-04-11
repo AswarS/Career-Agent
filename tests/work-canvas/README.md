@@ -17,6 +17,8 @@ These already exist in the mock artifact data:
 
 - `artifact-weekly-plan`
 - `artifact-profile-summary`
+- `artifact-mock-interview`
+- `artifact-visual-learning`
 
 They validate the `html` / `srcdoc` path and do not need a separate server.
 
@@ -48,6 +50,12 @@ In that mode, the mock `career-roadmap` artifact automatically points to the
 node fixture URL, so the frontend can load it directly in the right-side work
 canvas.
 
+The same fixture also supports scenario query params for richer examples:
+
+- `scenario=career-roadmap`
+- `scenario=coding-assessment`
+- `scenario=visual-learning`
+
 This wrapper is cross-platform because it injects the environment variables
 through a node script rather than relying on POSIX-only `VAR=value command`
 syntax.
@@ -66,6 +74,8 @@ That is what `node-fixture/server.mjs` is for.
 When testing URL-hosted canvases, check:
 
 - the page loads inside the iframe without opening a second browser tab
+- conversation message actions can open the target artifact without page-level
+  debug buttons
 - the origin is included in `VITE_CAREER_AGENT_TRUSTED_CANVAS_ORIGINS`
 - the iframe sandbox policy still allows the required behavior
 - the app does not send `X-Frame-Options: DENY` or conflicting CSP frame rules

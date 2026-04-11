@@ -208,7 +208,7 @@ export const useWorkspaceStore = defineStore('workspace', {
         this.errorMessage = error instanceof Error ? error.message : 'Unknown message loading error';
       }
     },
-    async openArtifact(artifactId: string) {
+    async openArtifact(artifactId: string, viewMode: ArtifactViewMode = 'pane') {
       await this.initialize();
 
       const artifact = await client.getArtifact(artifactId);
@@ -221,7 +221,7 @@ export const useWorkspaceStore = defineStore('workspace', {
 
       this.activeArtifactId = artifact.id;
       this.artifactPaneOpen = true;
-      this.artifactViewMode = 'pane';
+      this.artifactViewMode = viewMode;
     },
     promoteArtifactFocus() {
       if (!this.activeArtifactId) {

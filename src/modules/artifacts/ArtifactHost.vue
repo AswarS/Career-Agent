@@ -56,6 +56,12 @@ const artifactTypeLabel = computed(() => {
       return '画像摘要';
     case 'career-roadmap':
       return '职业路线图';
+    case 'mock-interview':
+      return '模拟面试';
+    case 'coding-assessment':
+      return '代码题';
+    case 'visual-learning':
+      return '可视化学习';
     default:
       return activeArtifact.value?.type ?? '未分类';
   }
@@ -216,7 +222,7 @@ const artifactStateClass = computed(() => (
 
       <div v-else class="artifact-empty">
         <p>当前没有打开工件。</p>
-        <p class="muted">可以在对话工作台或工件列表中打开 `weekly-plan`、`profile-summary` 或 `career-roadmap`。</p>
+        <p class="muted">可以从对话消息动作或工件中心打开周计划、模拟面试、代码题和可视化学习画布。</p>
       </div>
     </div>
   </aside>

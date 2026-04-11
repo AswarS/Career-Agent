@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import MarkdownContent from '../../components/MarkdownContent.vue';
-import type { ThreadMessage } from '../../types/entities';
+import type { MessageAction, ThreadMessage } from '../../types/entities';
 import { getPresentedMessageContent } from './messagePresentation';
 
 const props = defineProps<{
@@ -9,7 +9,12 @@ const props = defineProps<{
   multiAgentMode?: boolean;
 }>();
 
+const emit = defineEmits<{
+  action: [action: MessageAction];
+}>();
+
 const presentedMessage = computed(() => getPresentedMessageContent(props.message));
+const visibleActions = computed(() => props.message.role === 'assistant' ? props.message.actions ?? [] : []);
 
 function formatRoleLabel(role: ThreadMessage['role']) {
   switch (role) {
@@ -47,6 +52,10 @@ function formatAgentAccentClass(message: ThreadMessage, multiAgentMode: boolean)
 
   return `agent-${message.agentAccent}`;
 }
+
+function handleAction(action: MessageAction) {
+  emit('action', action);
+}
 </script>
 
 <template>
@@ -68,6 +77,18 @@ function formatAgentAccentClass(message: ThreadMessage, multiAgentMode: boolean)
 
     <MarkdownContent v-if="props.message.kind === 'markdown'" :source="presentedMessage.content" />
     <p v-else class="status-copy">{{ presentedMessage.content }}</p>
+
+    <div v-if="visibleActions.length" class="message-actions">
+      <button
+        v-for="action in visibleActions"
+        :key="action.id"
+        type="button"
+        class="message-action"
+        @click="handleAction(action)"
+      >
+        {{ action.label }}
+      </button>
+    </div>
   </article>
 </template>
 
@@ -165,5 +186,29 @@ function formatAgentAccentClass(message: ThreadMessage, multiAgentMode: boolean)
 .status-copy {
   margin: 0;
   line-height: 1.7;
+}
+
+.message-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.message-action {
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 0.72rem 0.95rem;
+  background: var(--color-surface-strong);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.message-action:hover {
+  border-color: color-mix(in srgb, var(--color-primary) 38%, var(--color-border));
+  color: var(--color-primary);
 }
 </style>

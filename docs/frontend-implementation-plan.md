@@ -194,6 +194,10 @@ Execution window:
 Scope:
 
 - let conversation actions open or update the work canvas
+- support message-level `open-artifact` actions as the first conversation-driven
+  work-canvas trigger
+- add meaningful mock threads for simulated interview, coding assessment, and
+  visual learning canvas examples
 - let work-canvas interactions send structured feedback back into the agent flow
 - support collapsible reasoning blocks for assistant messages
 - support minimal multi-agent presentation through message metadata, but only
@@ -207,6 +211,7 @@ Scope:
 Exit criteria:
 
 - at least one conversation path can launch a meaningful canvas state
+- message actions replace page-level debug open buttons for the conversation page
 - at least one work-canvas path can send interaction feedback upstream and receive a visible update
 - assistant messages can render hidden/collapsible reasoning content when present
 - multiple agent identities can be distinguished by name and color without changing orchestration logic

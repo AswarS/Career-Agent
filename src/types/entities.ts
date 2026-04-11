@@ -12,6 +12,18 @@ export type MessageRole = 'user' | 'assistant' | 'system';
 export type MessageKind = 'markdown' | 'status';
 export type LoadState = 'idle' | 'loading' | 'ready' | 'error';
 export type AgentAccent = 'teal' | 'amber' | 'blue' | 'slate';
+export type ArtifactStatus = 'idle' | 'loading' | 'streaming' | 'ready' | 'stale' | 'error';
+export type ArtifactRenderMode = 'html' | 'markdown' | 'cards' | 'url';
+export type ArtifactViewMode = 'pane' | 'focus' | 'immersive';
+export type MessageActionKind = 'open-artifact';
+
+export interface MessageAction {
+  id: string;
+  kind: MessageActionKind;
+  label: string;
+  artifactId: string;
+  viewMode?: ArtifactViewMode;
+}
 
 export interface ThreadMessage {
   id: string;
@@ -23,6 +35,7 @@ export interface ThreadMessage {
   agentId?: string | null;
   agentName?: string | null;
   agentAccent?: AgentAccent | null;
+  actions?: MessageAction[];
   createdAt: string;
 }
 
@@ -56,10 +69,13 @@ export interface ProfileSuggestion {
   patch: Partial<ProfileRecord>;
 }
 
-export type ArtifactType = 'weekly-plan' | 'profile-summary' | 'career-roadmap';
-export type ArtifactStatus = 'idle' | 'loading' | 'streaming' | 'ready' | 'stale' | 'error';
-export type ArtifactRenderMode = 'html' | 'markdown' | 'cards' | 'url';
-export type ArtifactViewMode = 'pane' | 'focus' | 'immersive';
+export type ArtifactType =
+  | 'weekly-plan'
+  | 'profile-summary'
+  | 'career-roadmap'
+  | 'mock-interview'
+  | 'coding-assessment'
+  | 'visual-learning';
 
 interface ArtifactRecordBase {
   id: string;

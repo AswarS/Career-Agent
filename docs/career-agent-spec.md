@@ -264,6 +264,7 @@ Phase 6B message contract should support:
 
 - optional collapsible reasoning content
 - optional agent identity metadata
+- optional message-level actions for work-canvas entry
 - stable role and message-kind fields
 
 Reasoning rule:
@@ -280,6 +281,15 @@ Multi-agent rule:
 - a message may include `agent_accent`
 - frontend uses those only for presentation and routing context, not for agent
   orchestration
+
+Message action rule:
+
+- first supported action kind: `open-artifact`
+- required fields: `id`, `kind`, `label`, `artifact_id` / `artifactId`
+- optional field: `view_mode` / `viewMode`
+- frontend renders actions as explicit buttons and opens the referenced work
+  canvas
+- frontend must not infer work-canvas launches from arbitrary natural language
 
 ### Profile Source Of Truth
 

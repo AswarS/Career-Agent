@@ -3,6 +3,8 @@ import type {
   ArtifactRecord,
   ArtifactRenderMode,
   ArtifactStatus,
+  ArtifactViewMode,
+  MessageAction,
   MessageKind,
   ProfileRecord,
   ProfileSuggestion,
@@ -35,8 +37,19 @@ export interface UpstreamThreadMessage {
   agentName?: string | null;
   agent_accent?: AgentAccent | null;
   agentAccent?: AgentAccent | null;
+  actions?: UpstreamMessageAction[] | null;
   created_at?: string;
   createdAt?: string;
+}
+
+export interface UpstreamMessageAction {
+  id: string;
+  kind: string;
+  label: string;
+  artifact_id?: string;
+  artifactId?: string;
+  view_mode?: string | null;
+  viewMode?: string | null;
 }
 
 export interface UpstreamProfileSuggestion {
@@ -93,6 +106,42 @@ function normalizeAgentAccent(value: AgentAccent | undefined | null): AgentAccen
   }
 
   return null;
+}
+
+function normalizeArtifactViewMode(value: string | null | undefined): ArtifactViewMode | undefined {
+  if (value === 'focus' || value === 'immersive' || value === 'pane') {
+    return value;
+  }
+
+  return undefined;
+}
+
+function normalizeMessageActions(actions: UpstreamMessageAction[] | null | undefined): MessageAction[] | undefined {
+  const nextActions: MessageAction[] = [];
+
+  for (const action of actions ?? []) {
+    const artifactId = action.artifactId ?? action.artifact_id;
+
+    if (!artifactId || (action.kind !== 'open-artifact' && action.kind !== 'open_artifact')) {
+      continue;
+    }
+
+    const nextAction: MessageAction = {
+      id: action.id,
+      kind: 'open-artifact',
+      label: action.label,
+      artifactId,
+    };
+
+    const viewMode = normalizeArtifactViewMode(action.viewMode ?? action.view_mode);
+    if (viewMode) {
+      nextAction.viewMode = viewMode;
+    }
+
+    nextActions.push(nextAction);
+  }
+
+  return nextActions.length ? nextActions : undefined;
 }
 
 function extractReasoningBlock(content: string): { content: string; reasoning: string | null } {
@@ -157,6 +206,7 @@ export function normalizeThreadMessage(input: UpstreamThreadMessage, fallbackThr
     agentId: input.agentId ?? input.agent_id ?? null,
     agentName: input.agentName ?? input.agent_name ?? null,
     agentAccent: normalizeAgentAccent(input.agentAccent ?? input.agent_accent),
+    actions: input.role === 'assistant' ? normalizeMessageActions(input.actions) : undefined,
     createdAt: input.createdAt ?? input.created_at ?? new Date(0).toISOString(),
   };
 }

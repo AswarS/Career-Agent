@@ -210,6 +210,7 @@ Phase 6B 的消息合同应支持：
 
 - 可折叠的 reasoning / think 内容
 - 最小多 agent 展示元数据
+- 消息级工作画布动作
 - 稳定的 role 与 kind 字段
 
 reasoning 规则：
@@ -224,6 +225,14 @@ reasoning 规则：
 - 消息可包含 `agent_name`
 - 消息可包含 `agent_accent`
 - 前端只把它们用于展示和上下文识别，不负责 agent 编排
+
+消息动作规则：
+
+- 第一类支持的动作是 `open-artifact`
+- 必需字段：`id`、`kind`、`label`、`artifact_id` / `artifactId`
+- 可选字段：`view_mode` / `viewMode`
+- 前端把动作渲染成明确按钮，并打开被引用的工作画布
+- 前端不从任意自然语言中自行推断应该打开哪个画布
 
 ### 用户画像的真相来源
 

@@ -94,6 +94,87 @@ describe('normalizeThreadMessage', () => {
     expect(message.agentAccent).toBe('blue');
   });
 
+  it('normalizes assistant message actions into frontend canvas actions', () => {
+    const message = normalizeThreadMessage({
+      id: 'message-003',
+      role: 'assistant',
+      content: '可以打开一个模拟面试画布。',
+      actions: [
+        {
+          id: 'action-open-interview',
+          kind: 'open_artifact',
+          label: '打开模拟面试',
+          artifact_id: 'artifact-mock-interview',
+          view_mode: 'immersive',
+        },
+      ],
+      created_at: '2026-04-10T08:02:00Z',
+    }, 'thread-001');
+
+    expect(message.actions).toEqual([
+      {
+        id: 'action-open-interview',
+        kind: 'open-artifact',
+        label: '打开模拟面试',
+        artifactId: 'artifact-mock-interview',
+        viewMode: 'immersive',
+      },
+    ]);
+  });
+
+  it('drops unsupported assistant message actions from upstream payloads', () => {
+    const message = normalizeThreadMessage({
+      id: 'message-004',
+      role: 'assistant',
+      content: '这里混入了暂不支持的动作。',
+      actions: [
+        {
+          id: 'action-unsupported',
+          kind: 'download_artifact',
+          label: '下载',
+          artifact_id: 'artifact-mock-interview',
+        },
+        {
+          id: 'action-invalid-view-mode',
+          kind: 'open_artifact',
+          label: '打开',
+          artifact_id: 'artifact-mock-interview',
+          view_mode: 'fullscreen',
+        },
+      ],
+      created_at: '2026-04-10T08:03:00Z',
+    }, 'thread-001');
+
+    expect(message.actions).toEqual([
+      {
+        id: 'action-invalid-view-mode',
+        kind: 'open-artifact',
+        label: '打开',
+        artifactId: 'artifact-mock-interview',
+      },
+    ]);
+  });
+
+  it('does not normalize actions from non-assistant messages', () => {
+    const message = normalizeThreadMessage({
+      id: 'message-005',
+      role: 'user',
+      content: '这条用户消息不应该打开画布。',
+      actions: [
+        {
+          id: 'action-open-interview',
+          kind: 'open_artifact',
+          label: '打开模拟面试',
+          artifact_id: 'artifact-mock-interview',
+          view_mode: 'immersive',
+        },
+      ],
+      created_at: '2026-04-10T08:04:00Z',
+    }, 'thread-001');
+
+    expect(message.actions).toBeUndefined();
+  });
+
   it('does not strip literal think tags from non-assistant messages', () => {
     const message = normalizeThreadMessage({
       id: 'message-002',

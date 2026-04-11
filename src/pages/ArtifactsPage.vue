@@ -21,6 +21,12 @@ function formatArtifactType(artifact: ArtifactRecord) {
       return '画像摘要';
     case 'career-roadmap':
       return '职业路线图';
+    case 'mock-interview':
+      return '模拟面试';
+    case 'coding-assessment':
+      return '代码题';
+    case 'visual-learning':
+      return '可视化学习';
     default:
       return artifact.type;
   }

@@ -6,6 +6,7 @@ import ConversationComposer from '../modules/conversation/ConversationComposer.v
 import ConversationMessageCard from '../modules/conversation/ConversationMessageCard.vue';
 import { shouldUseMultiAgentPresentation } from '../modules/conversation/messagePresentation';
 import { useWorkspaceStore } from '../stores/workspace';
+import type { MessageAction } from '../types/entities';
 
 const route = useRoute();
 const workspaceStore = useWorkspaceStore();
@@ -25,6 +26,14 @@ watch(
 function handleSubmit(value: string) {
   workspaceStore.submitDraftMessage(value);
 }
+
+async function handleMessageAction(action: MessageAction) {
+  if (action.kind !== 'open-artifact') {
+    return;
+  }
+
+  await workspaceStore.openArtifact(action.artifactId, action.viewMode ?? 'pane');
+}
 </script>
 
 <template>
@@ -34,14 +43,9 @@ function handleSubmit(value: string) {
         <p class="eyebrow">对话工作台</p>
         <h1>{{ activeThread?.title ?? '正在加载会话...' }}</h1>
       </div>
-      <div class="action-group">
-        <button class="secondary-button" @click="workspaceStore.openArtifact('artifact-profile-summary')">
-          打开画像摘要
-        </button>
-        <button class="primary-button" @click="workspaceStore.openArtifact('artifact-weekly-plan')">
-          打开周计划
-        </button>
-      </div>
+      <p class="support-copy">
+        从助手消息中的动作进入对应工作画布，逐步替代旧的调试型打开按钮。
+      </p>
     </header>
 
     <section v-if="messagesStatus === 'loading'" class="state-card">
@@ -67,6 +71,7 @@ function handleSubmit(value: string) {
         :key="message.id"
         :message="message"
         :multi-agent-mode="multiAgentMode"
+        @action="handleMessageAction"
       />
     </section>
 
@@ -107,36 +112,10 @@ function handleSubmit(value: string) {
   line-height: 1.7;
 }
 
-.action-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.primary-button,
-.secondary-button {
-  border-radius: 999px;
-  padding: 0.85rem 1rem;
-  font: inherit;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.primary-button {
-  border: 0;
-  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-hover));
-  color: var(--color-on-primary);
-}
-
-.secondary-button {
-  border: 1px solid var(--color-border);
-  background: var(--color-surface-strong);
-  color: var(--color-text);
-}
-
-@media (max-width: 860px) {
-  .action-group {
-    width: 100%;
-  }
+.support-copy {
+  max-width: 34rem;
+  margin: 0;
+  color: var(--color-text-muted);
+  line-height: 1.7;
 }
 </style>

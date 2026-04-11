@@ -74,6 +74,13 @@
 - composer 的发送 / 处理中 / 失败回退
 - 图片预览这条真实多模态路径
 
+当前最新推进：
+
+- 对话消息已经可以通过 `open-artifact` action 打开工作画布
+- 会话页顶部旧的调试型“打开画像摘要 / 打开周计划”按钮已移除
+- mock 里新增了模拟面试、代码题演练、可视化学习三条会话
+- 三条会话分别对应 `mock-interview`、`coding-assessment`、`visual-learning` 画布例子
+
 ## 你需要持续关注的沟通项
 
 ### 1. 上游 artifact payload 对齐
@@ -107,6 +114,19 @@
 - 先按可替换 adapter 设计，不阻塞框架搭建
 - 当前前端保留了 `polling / SSE / WebSocket` 三种 transport 枚举，默认仍是 `polling`
 
+### 2.1 当前前端约定的环境变量
+
+如果上游准备开始联调，需要先对齐这些环境变量：
+
+- `VITE_CAREER_AGENT_CLIENT_MODE`
+- `VITE_CAREER_AGENT_API_BASE_URL`
+- `VITE_CAREER_AGENT_ARTIFACT_TRANSPORT`
+- `VITE_CAREER_AGENT_ENABLE_VOICE_INPUT`
+
+默认示例见：
+
+- `.env.example`
+
 ### 2.2 工作画布反馈事件契约
 
 你还需要和后端 / agent 团队确认：
@@ -131,18 +151,21 @@
 - `payload`
 - `created_at`
 
-### 2.1 当前前端约定的环境变量
+### 2.3 对话动作合同
 
-如果上游准备开始联调，需要先对齐这些环境变量：
+当前前端已经支持第一类对话动作：
 
-- `VITE_CAREER_AGENT_CLIENT_MODE`
-- `VITE_CAREER_AGENT_API_BASE_URL`
-- `VITE_CAREER_AGENT_ARTIFACT_TRANSPORT`
-- `VITE_CAREER_AGENT_ENABLE_VOICE_INPUT`
+- `kind: open-artifact`
+- `label`
+- `artifact_id` / `artifactId`
+- `view_mode` / `viewMode`
 
-默认示例见：
+默认含义：
 
-- `.env.example`
+- agent 返回的消息可以携带动作
+- 前端只负责把动作渲染成按钮，并打开对应工作画布
+- 前端不根据自然语言自行推理要打开哪个画布
+- `viewMode` 可用于决定默认进入 `pane`、`focus` 或 `immersive`
 
 ### 3. HTML 渲染安全边界
 
@@ -161,6 +184,21 @@
 - `html` 型 artifact 继续走高隔离 `srcdoc`
 - `url` 型 work canvas 只用于受信任 node/web 应用，不作为任意外站嵌入能力
 - 第一版 `url` iframe 从最小 sandbox 面开始，只放开 `allow-scripts`
+
+### 3.1 当前前端约定的 API 路径
+
+如果上游团队准备提供真实接口，需要先确认这些路径是否接受：
+
+- `GET /api/career-agent/threads`
+- `GET /api/career-agent/threads/:threadId/messages`
+- `GET /api/career-agent/profile`
+- `PUT /api/career-agent/profile`
+- `GET /api/career-agent/profile/suggestions`
+- `GET /api/career-agent/artifacts`
+- `GET /api/career-agent/artifacts/:artifactId`
+- `POST /api/career-agent/artifacts/:artifactId/refresh`
+
+如果路径或字段命名不同，应该尽早同步给前端，而不是等页面接完再改。
 
 ### 3.2 对话消息扩展合同
 
@@ -209,21 +247,6 @@
 - `public/mock-node-canvas/index.html` 继续作为 same-origin URL 示例
 - `tests/work-canvas/node-fixture/server.mjs` 用于模拟独立 node 项目
 - 前端不负责启动真实 node 项目，只负责消费 URL 并嵌入 iframe
-
-### 3.1 当前前端约定的 API 路径
-
-如果上游团队准备提供真实接口，需要先确认这些路径是否接受：
-
-- `GET /api/career-agent/threads`
-- `GET /api/career-agent/threads/:threadId/messages`
-- `GET /api/career-agent/profile`
-- `PUT /api/career-agent/profile`
-- `GET /api/career-agent/profile/suggestions`
-- `GET /api/career-agent/artifacts`
-- `GET /api/career-agent/artifacts/:artifactId`
-- `POST /api/career-agent/artifacts/:artifactId/refresh`
-
-如果路径或字段命名不同，应该尽早同步给前端，而不是等页面接完再改。
 
 ### 4. Profile 写入权
 
