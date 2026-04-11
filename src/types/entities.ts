@@ -91,6 +91,7 @@ export interface HtmlArtifactRecord extends ArtifactRecordBase {
   renderMode: 'html';
   payload: {
     html: string;
+    allowScripts?: boolean;
   };
 }
 

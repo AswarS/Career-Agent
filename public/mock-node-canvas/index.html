@@ -3,152 +3,473 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Career Roadmap Lab</title>
+    <title>Ticket Desk Lab</title>
     <style>
       :root {
-        --bg: #f6f0e4;
-        --surface: #fffaf2;
-        --border: rgba(96, 114, 126, 0.16);
-        --text: #23313b;
-        --muted: #61707c;
-        --teal: #1d736d;
-        --amber: #d88f48;
+        --bg: #030712;
+        --surface: #0b1220;
+        --surface-strong: #111827;
+        --border: #334155;
+        --text: #e5e7eb;
+        --muted: #94a3b8;
+        --green: #22c55e;
+        --blue: #38bdf8;
+        --amber: #facc15;
+        --red: #f87171;
       }
 
-      * { box-sizing: border-box; }
+      * {
+        box-sizing: border-box;
+      }
 
       body {
         margin: 0;
-        font-family: Inter, system-ui, sans-serif;
-        background: linear-gradient(180deg, #f9f5ec 0%, var(--bg) 100%);
+        background:
+          radial-gradient(circle at 15% 0%, rgba(56, 189, 248, 0.22), transparent 30%),
+          radial-gradient(circle at 92% 20%, rgba(250, 204, 21, 0.14), transparent 26%),
+          var(--bg);
         color: var(--text);
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      }
+
+      button,
+      textarea {
+        font: inherit;
+      }
+
+      button {
+        border: 1px solid var(--border);
+        border-radius: 2px;
+        background: var(--surface-strong);
+        color: var(--text);
+        cursor: pointer;
+        font-weight: 750;
+        padding: 10px 12px;
+      }
+
+      button.primary {
+        border-color: var(--green);
+        background: var(--green);
+        color: #ffffff;
       }
 
       main {
         min-height: 100vh;
-        padding: 24px;
+        display: grid;
+        gap: 14px;
+        padding: 18px;
       }
 
       .hero,
+      .problem,
+      .runner,
+      .notes,
       .panel {
         border: 1px solid var(--border);
-        border-radius: 24px;
-        background: var(--surface);
-        box-shadow: 0 18px 40px rgba(35, 49, 59, 0.06);
-      }
-
-      .hero {
-        display: grid;
-        gap: 16px;
-        padding: 24px;
-      }
-
-      .panel-grid {
-        display: grid;
-        grid-template-columns: 1.1fr 0.9fr;
-        gap: 16px;
-        margin-top: 16px;
-      }
-
-      .panel {
-        padding: 20px;
+        border-radius: 2px;
+        background: rgba(11, 18, 32, 0.92);
+        padding: 16px;
       }
 
       .eyebrow {
-        margin: 0;
+        margin: 0 0 8px;
         color: var(--muted);
         font-size: 12px;
-        font-weight: 700;
-        letter-spacing: 0.16em;
+        font-weight: 800;
+        letter-spacing: 0;
         text-transform: uppercase;
       }
 
       h1,
+      h2,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        font-size: clamp(24px, 3vw, 34px);
+        line-height: 1.16;
+        margin-bottom: 10px;
+      }
+
       h2 {
-        margin: 0;
-        font-family: "Iowan Old Style", Georgia, serif;
+        font-size: 20px;
+        line-height: 1.25;
       }
 
       p,
       li {
         color: var(--muted);
-        line-height: 1.7;
+        line-height: 1.65;
       }
 
-      .pill-row {
+      code {
+        border-radius: 2px;
+        background: #111827;
+        color: var(--text);
+        padding: 2px 5px;
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(330px, 0.78fr) minmax(0, 1.22fr);
+        gap: 14px;
+      }
+
+      .stack {
+        display: grid;
+        gap: 14px;
+      }
+
+      .layout > .stack:first-child {
+        order: 2;
+      }
+
+      .layout > aside.stack {
+        order: 1;
+      }
+
+      textarea {
+        width: 100%;
+        min-height: 310px;
+        resize: vertical;
+        border: 1px solid var(--border);
+        border-radius: 2px;
+        background: #101820;
+        color: #e8f1f2;
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        font-size: 14px;
+        line-height: 1.55;
+        padding: 14px;
+        tab-size: 2;
+      }
+
+      .actions,
+      .tag-row {
         display: flex;
-        gap: 8px;
         flex-wrap: wrap;
-        margin-top: 8px;
+        gap: 8px;
       }
 
-      .pill {
-        padding: 8px 12px;
-        border-radius: 999px;
-        background: rgba(29, 115, 109, 0.1);
-        color: var(--teal);
+      .tag {
+        border-radius: 2px;
+        background: rgba(34, 197, 94, 0.16);
+        color: var(--green);
         font-size: 13px;
-        font-weight: 700;
+        font-weight: 800;
+        padding: 7px 9px;
       }
 
-      .step-list {
-        margin: 16px 0 0;
-        padding-left: 20px;
-      }
-
-      .status {
-        display: flex;
-        align-items: center;
+      .test-list {
+        display: grid;
         gap: 10px;
-        margin-top: 16px;
+        margin: 12px 0 0;
+        padding: 0;
+        list-style: none;
       }
 
-      .status-dot {
-        width: 10px;
-        height: 10px;
-        border-radius: 999px;
-        background: var(--amber);
+      .test-list li {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        margin: 0;
+        padding: 10px;
+      }
+
+      .test-list li.pass {
+        border-color: rgba(35, 122, 87, 0.65);
+        color: var(--green);
+      }
+
+      .test-list li.fail {
+        border-color: rgba(169, 75, 69, 0.65);
+        color: var(--red);
+      }
+
+      .result {
+        border-left: 3px solid var(--amber);
+        margin: 12px 0 0;
+        padding-left: 12px;
+      }
+
+      .roadmap-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .sketch {
+        min-height: 360px;
+        border: 1px solid var(--border);
+        border-radius: 2px;
+        background:
+          linear-gradient(90deg, rgba(56, 189, 248, 0.12) 1px, transparent 1px),
+          linear-gradient(0deg, rgba(56, 189, 248, 0.12) 1px, transparent 1px),
+          rgba(15, 23, 42, 0.92);
+        background-size: 28px 28px;
+      }
+
+      .sketch path {
+        fill: none;
+        stroke: var(--amber);
+        stroke-width: 5;
+        stroke-linecap: round;
       }
 
       @media (max-width: 860px) {
-        main { padding: 16px; }
-        .panel-grid { grid-template-columns: 1fr; }
+        main {
+          padding: 14px;
+        }
+
+        .layout,
+        .roadmap-grid {
+          grid-template-columns: 1fr;
+        }
       }
     </style>
   </head>
   <body>
-    <main>
-      <section class="hero">
-        <p class="eyebrow">URL Work Canvas</p>
-        <h1>Career Roadmap Lab</h1>
-        <p>这是一个通过 iframe `src` 承载的 URL 型工作画布，用来模拟 node/web 项目返回的真实应用入口。</p>
-        <div class="pill-row">
-          <span class="pill">Node/Web App Host</span>
-          <span class="pill">Interview / Roadmap Ready</span>
-          <span class="pill">Trusted URL Only</span>
-        </div>
-      </section>
+    <main id="app"></main>
 
-      <section class="panel-grid">
-        <article class="panel">
-          <p class="eyebrow">Next Actions</p>
-          <h2>进入可交互的路线图或面试工作台</h2>
-          <ol class="step-list">
-            <li>由上游返回具体 URL</li>
-            <li>前端 work canvas 以 iframe 承载</li>
-            <li>后续通过 postMessage 或事件通道回传交互</li>
-          </ol>
-        </article>
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      const scenario = params.get('scenario') || 'career-roadmap';
+      const revision = params.get('revision') || 'none';
+      const app = document.getElementById('app');
+      let runningInsideHostFrame = false;
 
-        <article class="panel">
-          <p class="eyebrow">Host Status</p>
-          <h2>Trusted App Surface</h2>
-          <div class="status">
-            <span class="status-dot"></span>
-            <p style="margin: 0">当前示例用于验证 URL 型 artifact host，不代表最终业务 UI。</p>
-          </div>
-        </article>
-      </section>
-    </main>
+      try {
+        runningInsideHostFrame = window.top !== window;
+      } catch {
+        runningInsideHostFrame = true;
+      }
+
+      const starterCode = `function compactRanges(numbers) {
+  // 整理票号，例如 [1, 2, 3, 5, 7, 8] -> "1-3,5,7-8"
+  return "";
+}`;
+
+      const tests = [
+        { input: [1, 2, 3, 5, 7, 8], expected: '1-3,5,7-8' },
+        { input: [-2, -1, 0, 2, 4, 5], expected: '-2-0,2,4-5' },
+        { input: [10], expected: '10' },
+        { input: [], expected: '' }
+      ];
+
+      function escapeHtml(value) {
+        return String(value)
+          .replaceAll('&', '&amp;')
+          .replaceAll('<', '&lt;')
+          .replaceAll('>', '&gt;')
+          .replaceAll('"', '&quot;');
+      }
+
+      function renderCodingAssessment() {
+        app.innerHTML = `
+          <section class="hero">
+            <p class="eyebrow">Terminal Drill</p>
+            <h1>博物馆票号整理器</h1>
+            <p>把连续票号合并成区间，模拟闭馆前整理检票记录的临时工具。</p>
+            <div class="tag-row">
+              <span class="tag">batch ${escapeHtml(revision)}</span>
+              <span class="tag">ticket desk</span>
+              <span class="tag">night shift</span>
+            </div>
+          </section>
+
+          <section class="layout">
+            <div class="stack">
+              <article class="problem">
+                <p class="eyebrow">票务说明</p>
+                <h2>实现 <code>compactRanges(numbers)</code></h2>
+                <p>输入是已经升序排列且不重复的票号。输出用逗号分隔区间；连续票号写成 <code>start-end</code>，单张票直接写数字。</p>
+                <ul>
+                  <li><code>[1,2,3,5,7,8]</code> 输出 <code>1-3,5,7-8</code></li>
+                  <li><code>[10]</code> 输出 <code>10</code></li>
+                  <li><code>[]</code> 输出空字符串</li>
+                </ul>
+              </article>
+
+              <article class="problem">
+                <p class="eyebrow">检票脚本</p>
+                <textarea id="codeEditor" spellcheck="false">${escapeHtml(starterCode)}</textarea>
+                <div class="actions" style="margin-top: 12px">
+                  <button id="runTests" class="primary" type="button">运行样例测试</button>
+                  <button id="resetCode" type="button">重置代码</button>
+                  <button id="showHint" type="button">提示</button>
+                </div>
+              </article>
+            </div>
+
+            <aside class="stack">
+              <article class="runner">
+                <p class="eyebrow">测试结果</p>
+                <h2 id="summary">尚未运行</h2>
+                <ul id="testList" class="test-list"></ul>
+                <p id="runnerNote" class="result">运行后会在这里显示每个样例的实际输出。</p>
+              </article>
+
+              <article class="notes">
+                <p class="eyebrow">值班提示</p>
+                <p>推荐思路：用一个 start 指针记录当前连续票段的起点，遇到断号就结算上一段。</p>
+                <p id="hintText" class="result">点“提示”可以看更具体的票段处理建议。</p>
+              </article>
+            </aside>
+          </section>
+        `;
+
+        const editor = document.getElementById('codeEditor');
+        const testList = document.getElementById('testList');
+        const summary = document.getElementById('summary');
+        const runnerNote = document.getElementById('runnerNote');
+        const hintText = document.getElementById('hintText');
+        const runTestsButton = document.getElementById('runTests');
+
+        function renderInitialTests() {
+          testList.innerHTML = tests.map((test) => `<li><code>${JSON.stringify(test.input)}</code> 期望 <code>${test.expected}</code></li>`).join('');
+        }
+
+        function runTests() {
+          if (!runningInsideHostFrame) {
+            summary.textContent = '需要通过工作画布打开';
+            runnerNote.textContent = '这个开发评测器只允许在宿主 sandboxed iframe 内运行，避免同源页面被直接打开后执行编辑器内容。';
+            renderInitialTests();
+            return;
+          }
+
+          testList.innerHTML = '';
+          let compactRanges;
+
+          try {
+            compactRanges = new Function(editor.value + '; return compactRanges;')();
+            if (typeof compactRanges !== 'function') {
+              throw new Error('没有找到 compactRanges 函数。');
+            }
+          } catch (error) {
+            summary.textContent = '代码无法执行';
+            runnerNote.textContent = error.message || String(error);
+            renderInitialTests();
+            return;
+          }
+
+          let passed = 0;
+
+          tests.forEach((test) => {
+            const item = document.createElement('li');
+            try {
+              const actual = compactRanges([...test.input]);
+              const ok = actual === test.expected;
+              if (ok) passed += 1;
+              item.className = ok ? 'pass' : 'fail';
+              item.innerHTML = '<code>' + JSON.stringify(test.input) + '</code> -> <code>' + escapeHtml(actual) + '</code>，期望 <code>' + test.expected + '</code>';
+            } catch (error) {
+              item.className = 'fail';
+              item.textContent = JSON.stringify(test.input) + ' 抛出错误：' + (error.message || String(error));
+            }
+            testList.appendChild(item);
+          });
+
+          summary.textContent = '通过 ' + passed + ' / ' + tests.length;
+          runnerNote.textContent = passed === tests.length
+            ? '样例全部通过。可以继续补充自己的边界用例。'
+            : '还有样例未通过。先检查空数组、单元素和区间收尾。';
+        }
+
+        if (!runningInsideHostFrame) {
+          runTestsButton.disabled = true;
+          summary.textContent = '需要通过工作画布打开';
+          runnerNote.textContent = '这个开发评测器只允许在宿主 sandboxed iframe 内运行。';
+        }
+
+        runTestsButton.addEventListener('click', runTests);
+        document.getElementById('resetCode').addEventListener('click', () => {
+          editor.value = starterCode;
+          summary.textContent = '尚未运行';
+          runnerNote.textContent = '代码已重置。';
+          renderInitialTests();
+        });
+        document.getElementById('showHint').addEventListener('click', () => {
+          hintText.textContent = '每次发现票号断开，就把 start 到上一张票写入结果；闭馆前别忘了写入最后一段票号。';
+        });
+
+        renderInitialTests();
+      }
+
+      function renderRoadmapLike(title, body, tags) {
+        app.innerHTML = `
+          <section class="hero">
+            <p class="eyebrow">Career Route</p>
+            <h1>${escapeHtml(title)}</h1>
+            <p>${escapeHtml(body)}</p>
+            <div class="tag-row">
+              <span class="tag">version ${escapeHtml(revision)}</span>
+              ${tags.map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join('')}
+            </div>
+          </section>
+          <section class="roadmap-grid">
+            <article class="panel">
+              <p class="eyebrow">Step 1</p>
+              <h2>稳定服务</h2>
+              <p>把点单、出品、清洁和交接做稳定，先形成可靠的基本盘。</p>
+            </article>
+            <article class="panel">
+              <p class="eyebrow">Step 2</p>
+              <h2>带班协作</h2>
+              <p>学习高峰期分工、临时补位和新人带教，能让班次顺利收尾。</p>
+            </article>
+            <article class="panel">
+              <p class="eyebrow">Step 3</p>
+              <h2>门店运营</h2>
+              <p>逐步接触库存、排班、客诉处理和周复盘，准备承担店长职责。</p>
+            </article>
+          </section>
+        `;
+      }
+
+      function renderQuadraticLearning() {
+        app.innerHTML = `
+          <section class="hero">
+            <p class="eyebrow">Parabola Sketch</p>
+            <h1>二次函数图像速览</h1>
+            <p>这个备用页面只验证可视化学习的外部页面形态：抛物线、顶点和交点必须能被一眼看见。</p>
+            <div class="tag-row">
+              <span class="tag">visual ${escapeHtml(revision)}</span>
+              <span class="tag">math</span>
+              <span class="tag">parabola</span>
+            </div>
+          </section>
+          <section class="layout">
+            <div class="stack">
+              <article class="panel">
+                <p class="eyebrow">观察</p>
+                <h2>y = 0.5x² - 2</h2>
+                <p>开口向上，顶点在 y 轴下方。曲线穿过 x 轴时，就是方程等于 0 的位置。</p>
+              </article>
+              <article class="panel">
+                <p class="eyebrow">结论</p>
+                <p>如果 a 变大，曲线会更窄；如果 c 变大，整条曲线会上移。</p>
+              </article>
+            </div>
+            <aside class="panel">
+              <svg class="sketch" viewBox="0 0 560 360" role="img" aria-label="二次函数抛物线示意图">
+                <line x1="40" y1="180" x2="520" y2="180" stroke="#94a3b8"></line>
+                <line x1="280" y1="32" x2="280" y2="330" stroke="#94a3b8"></line>
+                <path d="M72 42 C170 326 390 326 488 42"></path>
+                <circle cx="280" cy="292" r="9" fill="#38bdf8"></circle>
+                <circle cx="160" cy="180" r="8" fill="#facc15"></circle>
+                <circle cx="400" cy="180" r="8" fill="#facc15"></circle>
+              </svg>
+            </aside>
+          </section>
+        `;
+      }
+
+      if (scenario === 'coding-assessment') {
+        renderCodingAssessment();
+      } else if (scenario === 'visual-learning') {
+        renderQuadraticLearning();
+      } else {
+        renderRoadmapLike('门店运营职业路线图', '从咖啡师到值班主管，再到门店店长，按可观察能力拆成三个阶段。', ['service', 'shift lead', 'store ops']);
+      }
+    </script>
   </body>
 </html>

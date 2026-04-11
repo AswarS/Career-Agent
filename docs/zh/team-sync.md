@@ -248,6 +248,40 @@
 - `tests/work-canvas/node-fixture/server.mjs` 用于模拟独立 node 项目
 - 前端不负责启动真实 node 项目，只负责消费 URL 并嵌入 iframe
 
+### 3.5 开发例子和真实生成产物的分离规则
+
+当前仓库里的三类开发例子只用于前端验证，不是后续真实 artifact 生成链路：
+
+- `src/services/mockCareerAgentClient.ts`：前端 mock 数据，直接构造 `ArtifactRecord`
+- `public/mock-node-canvas/index.html`：同源静态 URL 示例，用来验证 `render_mode: url`
+- `tests/work-canvas/node-fixture/server.mjs`：本地 node fixture，用来模拟独立 node/web 应用 URL
+
+后续接入真实上游时，前端应只消费统一 artifact contract，而不是依赖这些开发例子：
+
+- 纯 HTML 小页面：优先返回 `render_mode: html` 和 `payload.html`，由前端通过 sandboxed iframe `srcdoc` 渲染
+- 大型 HTML 或带静态资源的页面：由上游服务托管成受信任 HTTP URL，再返回 `render_mode: url` 和 `payload.url`
+- node 项目或交互式 web 应用：由上游负责启动、托管和生命周期管理，再返回可嵌入的 `payload.url`
+
+不建议的方式：
+
+- 不建议让前端直接接收 `/Users/.../xxx.html` 这类本机绝对路径
+- 不建议让前端直接接收 `file://...` URL
+- 不建议让前端自己启动或管理 node 项目
+
+原因：
+
+- 浏览器直接访问本地文件会遇到安全、权限、跨机器路径不可用等问题
+- 前端运行环境不一定和后端 / agent 生成文件的机器是同一台
+- node 项目需要端口、进程生命周期、CSP / frame headers，这些都属于上游运行时责任
+
+当前推荐决策：
+
+- 如果 agent 生成的是一份简单单 HTML，后端读取文件内容并作为 `payload.html` 返回
+- 如果 agent 生成的是多文件页面或 node/web 项目，后端把它转成受信任 URL，并把 URL 返回给前端
+- 前端继续保留 `html` 与 `url` 两条宿主路径，后续只替换数据来源，不重写画布宿主
+- `html` 模式默认不放开脚本；当前只有显式标记为 `allowScripts` 的前端 mock 交互示例会启用脚本
+- 真实上游如果需要可执行 HTML，应先重新审查安全边界；默认建议仍是转为受信任 `url` 模式
+
 ### 4. Profile 写入权
 
 你需要和团队确认：

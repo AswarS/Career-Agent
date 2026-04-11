@@ -9,6 +9,14 @@ const workspaceStore = useWorkspaceStore();
 const { activeArtifact, artifactFocusMode, artifactImmersiveMode, artifactPaneOpen } = storeToRefs(workspaceStore);
 const trustedUrlFrameSandbox = 'allow-scripts';
 
+const htmlFrameSandbox = computed(() => {
+  if (activeArtifact.value?.renderMode === 'html' && activeArtifact.value.payload.allowScripts) {
+    return 'allow-scripts';
+  }
+
+  return '';
+});
+
 const artifactMarkup = computed(() => {
   if (activeArtifact.value?.renderMode !== 'html') {
     return '';
@@ -134,9 +142,18 @@ const artifactStateClass = computed(() => (
 <template>
   <aside class="artifact-host" :class="{ open: artifactPaneOpen, focus: artifactFocusMode, immersive: artifactImmersiveMode }">
     <div class="artifact-panel">
-      <div class="artifact-header">
+      <div v-if="artifactImmersiveMode && activeArtifact" class="immersive-actions" aria-label="沉浸画布操作">
+        <button class="ghost-button" @click="workspaceStore.restoreArtifactFocus()">
+          返回聚焦
+        </button>
+        <button class="ghost-button" @click="workspaceStore.closeArtifact()">
+          关闭
+        </button>
+      </div>
+
+      <div v-if="!artifactImmersiveMode" class="artifact-header">
         <div>
-          <p class="eyebrow">{{ artifactImmersiveMode ? '沉浸画布' : '工件宿主' }}</p>
+          <p class="eyebrow">工件宿主</p>
           <h2>{{ activeArtifact?.title ?? '当前没有打开的工件' }}</h2>
         </div>
         <div v-if="artifactPaneOpen" class="artifact-actions">
@@ -183,14 +200,14 @@ const artifactStateClass = computed(() => (
       </div>
 
       <template v-if="activeArtifact">
-        <div class="artifact-meta">
+        <div v-if="!artifactImmersiveMode" class="artifact-meta">
           <span>{{ artifactTypeLabel }}</span>
           <span>{{ activeArtifact.renderMode }}</span>
           <span>{{ artifactStatusLabel }}</span>
           <span>版本 {{ activeArtifact.revision }}</span>
         </div>
 
-        <div class="artifact-state" :class="artifactStateClass">
+        <div v-if="!artifactImmersiveMode" class="artifact-state" :class="artifactStateClass">
           <strong>{{ statusTitle }}</strong>
           <p>{{ statusBody }}</p>
         </div>
@@ -198,7 +215,7 @@ const artifactStateClass = computed(() => (
         <iframe
           v-if="activeArtifact.renderMode === 'html' && !artifactIssue"
           class="artifact-frame"
-          sandbox=""
+          :sandbox="htmlFrameSandbox"
           :srcdoc="artifactMarkup"
           title="工件预览"
         ></iframe>
@@ -285,9 +302,19 @@ const artifactStateClass = computed(() => (
 .artifact-host.immersive .artifact-panel {
   width: 100vw;
   max-width: 100vw;
-  padding: 20px 24px;
+  padding: 0;
   border-left: 0;
+  background: #0e1717;
   box-shadow: none;
+}
+
+.immersive-actions {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 2;
+  display: flex;
+  gap: 8px;
 }
 
 .artifact-header {
@@ -389,7 +416,15 @@ h2 {
 }
 
 .artifact-host.immersive .artifact-frame {
-  min-height: calc(100vh - 206px);
+  min-height: 100vh;
+  border: 0;
+  border-radius: 0;
+}
+
+.artifact-host.immersive .immersive-empty {
+  min-height: 100vh;
+  border: 0;
+  border-radius: 0;
 }
 
 .artifact-empty {

@@ -176,9 +176,14 @@ export const useWorkspaceStore = defineStore('workspace', {
         return;
       }
 
+      const isThreadSwitch = this.activeThreadId !== threadId;
       const requestToken = ++threadLoadRequestToken;
 
       this.activeThreadId = threadId;
+      if (isThreadSwitch) {
+        this.closeArtifact();
+      }
+
       this.messagesStatus = 'loading';
       this.errorMessage = null;
       this.messages = [];

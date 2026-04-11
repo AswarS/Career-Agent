@@ -45,28 +45,28 @@ const threads: ThreadSummary[] = [
   {
     id: 'thread-002',
     title: '职业方向',
-    preview: '回看目标岗位、风险项和下一阶段里程碑。',
+    preview: '回看门店运营路线、风险项和下一阶段里程碑。',
     updatedAt: '2026-04-07T18:20:00Z',
     status: 'active',
   },
   {
     id: 'thread-003',
     title: '模拟面试',
-    preview: '进入沉浸式面试画布，验证问答、计时和反馈状态。',
+    preview: '进入咖啡店店长面试练习室，体验倒计时和提示。',
     updatedAt: '2026-04-10T13:10:00Z',
     status: 'active',
   },
   {
     id: 'thread-004',
-    title: '代码题演练',
-    preview: '打开 URL 型代码题工作台，模拟后端 node 项目嵌入。',
+    title: '排队题演练',
+    preview: '打开终端风格的博物馆排队评测器。',
     updatedAt: '2026-04-10T13:18:00Z',
     status: 'active',
   },
   {
     id: 'thread-005',
-    title: '可视化学习',
-    preview: '用学习画布验证步骤推进、反馈事件和解释节奏。',
+    title: '二次函数可视化',
+    preview: '拖动参数，观察抛物线形状和交点变化。',
     updatedAt: '2026-04-10T13:26:00Z',
     status: 'active',
   },
@@ -123,7 +123,7 @@ const messagesByThread: Record<string, ThreadMessage[]> = {
       threadId: 'thread-002',
       role: 'user',
       kind: 'markdown',
-      content: '请比较**前端平台型岗位**和**面向 AI 产品的一线前端岗位**。',
+      content: '请帮我梳理从**咖啡师**到**门店店长**的成长路线。',
       createdAt: '2026-04-07 18:20',
     },
     {
@@ -134,8 +134,10 @@ const messagesByThread: Record<string, ThreadMessage[]> = {
       agentId: 'agent-direction',
       agentName: '方向助手',
       agentAccent: 'blue',
+      reasoning:
+        '先把路线拆成服务能力、班次管理、库存与客诉处理三个阶段，再判断每一阶段适合观察哪些证据。',
       content:
-        '<think>先比较岗位职责中心，再判断哪条路径更贴合当前的前端和 AI 协作背景。</think>\n\n路线图工件后续会汇总中期职业方向、能力缺口和推进顺序。\n\n`career-roadmap` 目前也是 URL 型工作画布的首个 mock 入口。',
+        '路线图会先汇总中期职业方向、能力缺口和推进顺序。\n\n第一版先用餐饮门店场景做验证：从稳定服务、带班协作，到库存、排班和客诉处理。',
       actions: [
         {
           id: 'action-open-career-roadmap',
@@ -154,7 +156,7 @@ const messagesByThread: Record<string, ThreadMessage[]> = {
       threadId: 'thread-003',
       role: 'user',
       kind: 'markdown',
-      content: '我想模拟一次 **AI 产品前端工程师** 面试，最好能进入更沉浸的界面。',
+      content: '我想模拟一次 **咖啡店店长** 面试，最好能进入更沉浸的界面。',
       createdAt: '2026-04-10 13:10',
     },
     {
@@ -163,9 +165,9 @@ const messagesByThread: Record<string, ThreadMessage[]> = {
       role: 'assistant',
       kind: 'markdown',
       reasoning:
-        '模拟面试属于高沉浸任务，不适合继续保留左侧导航和普通对话密度。应优先打开 immersive canvas，并让后续回答、提示、评分都作为结构化事件回传给上游。',
+        '模拟面试需要连续回答和计时压力，不适合被旁边信息打断。这里优先打开独立练习室，让问题、提示和记录都围绕同一个面试场景。',
       content:
-        '可以。这个场景适合使用 **沉浸式工作画布**：左侧导航隐藏，对话区让位给面试室，后续再把你的回答、请求提示、跳题等行为回传给 agent。\n\n第一版先验证画布承载和入口流程，不在前端实现真正评分。',
+        '可以。这个场景适合进入 **沉浸式面试练习室**：计时、问题切换、提示和要点检查都集中在同一块界面里。\n\n第一版先用咖啡店店长面试做审美和交互验证。',
       actions: [
         {
           id: 'action-open-mock-interview',
@@ -184,7 +186,7 @@ const messagesByThread: Record<string, ThreadMessage[]> = {
       threadId: 'thread-004',
       role: 'user',
       kind: 'markdown',
-      content: '我想练一道接近线上面试的前端代码题，最好能像真实测评系统一样打开。',
+      content: '我想练一道偏逻辑的排队题，题目最好和普通生活场景有关。',
       createdAt: '2026-04-10 13:18',
     },
     {
@@ -193,12 +195,12 @@ const messagesByThread: Record<string, ThreadMessage[]> = {
       role: 'assistant',
       kind: 'markdown',
       content:
-        '这类场景更接近 **node/web 项目型工作画布**。前端只负责接收上游返回的 URL，并在右侧 work canvas 里嵌入；题目运行、判题、保存草稿仍应由上游项目或 agent runtime 负责。',
+        '可以用一个 **终端风格评测器** 来做：题目是博物馆售票窗口的排队整理，界面只保留说明、编辑区、样例结果和提示。',
       actions: [
         {
           id: 'action-open-coding-assessment',
           kind: 'open-artifact',
-          label: '打开代码题工作台',
+          label: '打开排队评测器',
           artifactId: 'artifact-coding-assessment',
           viewMode: 'focus',
         },
@@ -212,7 +214,7 @@ const messagesByThread: Record<string, ThreadMessage[]> = {
       threadId: 'thread-005',
       role: 'user',
       kind: 'markdown',
-      content: '我想把“从 Vue 前端到 AI 产品协作”做成更有趣的可视化学习流程。',
+      content: '我想用更直观的方式理解二次函数图像，不要只是公式解释。',
       createdAt: '2026-04-10 13:26',
     },
     {
@@ -221,12 +223,12 @@ const messagesByThread: Record<string, ThreadMessage[]> = {
       role: 'assistant',
       kind: 'markdown',
       content:
-        '可以先用一个 **可视化学习画布** 验证节奏：步骤推进、卡点记录、请求解释、完成反馈都应该变成结构化事件，而不是只停留在聊天文本里。',
+        '可以先用一个 **函数图像实验台**：拖动 a、b、c，直接观察开口方向、顶点、对称轴和 x 轴交点。',
       actions: [
         {
           id: 'action-open-visual-learning',
           kind: 'open-artifact',
-          label: '打开学习画布',
+          label: '打开函数实验台',
           artifactId: 'artifact-visual-learning',
           viewMode: 'pane',
         },
@@ -314,6 +316,7 @@ function cloneArtifactRecord(input: ArtifactRecord): ArtifactRecord {
         ...input,
         payload: {
           html: input.payload.html,
+          allowScripts: input.payload.allowScripts,
         },
       };
     case 'url':
@@ -370,45 +373,457 @@ function buildMockInterviewArtifact(revision: number, updatedAt = '2026-04-10T13
   return {
     id: 'artifact-mock-interview',
     type: 'mock-interview',
-    title: '模拟面试室',
+    title: '咖啡店店长面试间',
     status: 'ready',
     renderMode: 'html',
     revision,
     updatedAt,
-    summary: '用于验证沉浸式面试、计时、题目和反馈区的 HTML 工作画布。',
+    summary: '可直接演练 3 道咖啡店店长面试题，支持计时、提示和本地回答检查。',
     payload: {
       html: `
+        <!doctype html>
         <html lang="zh-CN">
-          <body style="margin:0;font-family:Inter,system-ui,sans-serif;background:#f6f0e4;color:#23313b;">
-            <main style="min-height:100vh;padding:28px;display:grid;gap:18px;grid-template-rows:auto 1fr;">
-              <section style="padding:22px;border:1px solid rgba(96,114,126,.16);border-radius:26px;background:#fffaf2;">
-                <p style="margin:0 0 10px;color:#61707c;font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;">Mock Interview</p>
-                <h1 style="margin:0;font-family:Georgia,serif;font-size:34px;">AI 产品前端工程师模拟面试</h1>
-                <p style="margin:12px 0 0;color:#61707c;line-height:1.7;">当前画布只验证前端宿主能力。真实评分、追问和难度调整应由上游 agent 根据结构化事件返回。</p>
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <style>
+              :root {
+                --bg: #07111f;
+                --surface: #101d32;
+                --surface-strong: #16243f;
+                --border: rgba(148, 163, 184, 0.35);
+                --text: #f8fafc;
+                --muted: #94a3b8;
+                --teal: #ff6b35;
+                --amber: #ffd166;
+                --red: #ef476f;
+              }
+
+              * { box-sizing: border-box; }
+
+              body {
+                margin: 0;
+                font-family: "Avenir Next Condensed", "Arial Narrow", Arial, sans-serif;
+                background:
+                  radial-gradient(circle at 80% 0%, rgba(255, 107, 53, 0.22), transparent 34%),
+                  linear-gradient(135deg, #04070f 0%, var(--bg) 48%, #111827 100%);
+                color: var(--text);
+              }
+
+              button,
+              textarea {
+                font: inherit;
+              }
+
+              button {
+                border: 1px solid var(--border);
+                border-radius: 2px;
+                background: var(--surface-strong);
+                color: var(--text);
+                cursor: pointer;
+                font-weight: 700;
+                padding: 10px 12px;
+              }
+
+              button.primary {
+                border-color: var(--teal);
+                background: var(--teal);
+                color: #050816;
+              }
+
+              main {
+                min-height: 100vh;
+                display: grid;
+                grid-template-rows: auto 1fr;
+                gap: 18px;
+                padding: 24px;
+              }
+
+              .topbar,
+              .question,
+              .side,
+              .answer-box,
+              .log {
+                border: 1px solid var(--border);
+                border-radius: 2px;
+                background: linear-gradient(160deg, rgba(16, 29, 50, 0.98), rgba(7, 17, 31, 0.92));
+              }
+
+              .topbar {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) auto;
+                gap: 16px;
+                padding: 22px;
+                border-left: 8px solid var(--teal);
+              }
+
+              .eyebrow {
+                margin: 0 0 8px;
+                color: var(--muted);
+                font-size: 12px;
+                font-weight: 800;
+                letter-spacing: 0.18em;
+                text-transform: uppercase;
+              }
+
+              h1,
+              h2 {
+                margin: 0;
+                line-height: 1.2;
+                text-transform: uppercase;
+              }
+
+              h1 {
+                font-size: clamp(24px, 3vw, 36px);
+              }
+
+              h2 {
+                font-size: 22px;
+              }
+
+              p,
+              li {
+                color: var(--muted);
+                line-height: 1.65;
+              }
+
+              .timer {
+                min-width: 150px;
+                text-align: right;
+              }
+
+              .timer strong {
+                display: block;
+                color: var(--amber);
+                font-family: "SFMono-Regular", Consolas, monospace;
+                font-size: 38px;
+              }
+
+              .layout {
+                display: grid;
+                grid-template-columns: minmax(300px, 0.75fr) minmax(0, 1.25fr);
+                gap: 18px;
+              }
+
+              .main-stack,
+              .side {
+                display: grid;
+                gap: 14px;
+              }
+
+              .side {
+                order: -1;
+              }
+
+              .question,
+              .side,
+              .answer-box,
+              .log {
+                padding: 18px;
+              }
+
+              .question-nav {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+                margin-top: 14px;
+              }
+
+              .question-nav button.active {
+                border-color: var(--teal);
+                box-shadow: inset 0 0 0 2px rgba(22, 117, 111, 0.18);
+              }
+
+              textarea {
+                width: 100%;
+                min-height: 170px;
+                resize: vertical;
+                border: 1px solid var(--border);
+                border-radius: 2px;
+                color: var(--text);
+                background: #050816;
+                padding: 14px;
+              }
+
+              .actions,
+              .status-row {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+                margin-top: 12px;
+              }
+
+              .badge {
+                border-radius: 8px;
+                background: rgba(255, 209, 102, 0.16);
+                color: var(--amber);
+                display: inline-flex;
+                font-size: 13px;
+                font-weight: 800;
+                padding: 7px 10px;
+              }
+
+              .score {
+                color: var(--amber);
+                font-size: 28px;
+                font-weight: 800;
+              }
+
+              .rubric {
+                display: grid;
+                gap: 10px;
+                margin: 12px 0 0;
+                padding: 0;
+                list-style: none;
+              }
+
+              .rubric li {
+                border-left: 3px solid rgba(148, 163, 184, 0.36);
+                margin: 0;
+                padding-left: 10px;
+              }
+
+              .rubric li.done {
+                border-color: var(--teal);
+                color: var(--text);
+              }
+
+              .hint {
+                border-left: 3px solid var(--amber);
+                margin: 12px 0 0;
+                padding-left: 12px;
+              }
+
+              .log-list {
+                margin: 10px 0 0;
+                padding-left: 18px;
+              }
+
+              @media (max-width: 820px) {
+                main { padding: 14px; }
+                .topbar,
+                .layout { grid-template-columns: 1fr; }
+                .topbar { display: grid; }
+                .timer { text-align: left; }
+              }
+            </style>
+          </head>
+          <body>
+            <main>
+              <section class="topbar">
+                <div>
+                  <p class="eyebrow">Service Interview</p>
+                  <h1>咖啡店店长模拟面试</h1>
+                  <p>请在倒计时内完成回答；可以请求提示、切换问题，并查看回答要点检查。</p>
+                </div>
+                <div class="timer">
+                  <p class="eyebrow">倒计时</p>
+                  <strong id="timerText">18:00</strong>
+                  <button id="timerToggle" class="primary" type="button">开始</button>
+                  <button id="timerReset" type="button">重置</button>
+                </div>
               </section>
-              <section style="display:grid;grid-template-columns:1.15fr .85fr;gap:18px;">
-                <article style="padding:22px;border:1px solid rgba(96,114,126,.16);border-radius:26px;background:#fffaf2;">
-                  <p style="margin:0 0 8px;color:#61707c;font-weight:700;">当前问题</p>
-                  <h2 style="margin:0;font-size:24px;">如何设计一个能承载 agent 生成页面的前端 work canvas？</h2>
-                  <ul style="margin:18px 0 0;padding-left:20px;color:#61707c;line-height:1.9;">
-                    <li>说明 iframe / URL / HTML 三种边界</li>
-                    <li>说明如何把交互事件反馈给 agent</li>
-                    <li>说明沉浸模式什么时候优于并排模式</li>
-                  </ul>
-                </article>
-                <aside style="padding:22px;border:1px solid rgba(96,114,126,.16);border-radius:26px;background:#fffaf2;">
-                  <p style="margin:0 0 8px;color:#61707c;font-weight:700;">面试状态</p>
-                  <div style="display:grid;gap:12px;color:#61707c;">
-                    <span>计时：18:00</span>
-                    <span>阶段：系统设计追问</span>
-                    <span>版本：${revision}</span>
-                    <span>后续事件：answer_submitted / hint_requested</span>
-                  </div>
+
+              <section class="layout">
+                <div class="main-stack">
+                  <article class="question">
+                    <p class="eyebrow">当前问题</p>
+                    <h2 id="questionTitle"></h2>
+                    <p id="questionPrompt"></p>
+                    <div id="questionTags" class="status-row"></div>
+                    <div class="question-nav">
+                      <button class="active" type="button" data-question="0">问题 1</button>
+                      <button type="button" data-question="1">问题 2</button>
+                      <button type="button" data-question="2">问题 3</button>
+                    </div>
+                  </article>
+
+                  <article class="answer-box">
+                    <p class="eyebrow">回答草稿</p>
+                    <textarea id="answerInput" placeholder="用 3-6 句话回答。可以先写框架，再补充取舍。"></textarea>
+                    <div class="actions">
+                      <button id="checkAnswer" class="primary" type="button">检查回答</button>
+                      <button id="hintButton" type="button">给我一个提示</button>
+                      <button id="nextQuestion" type="button">下一题</button>
+                    </div>
+                  </article>
+                </div>
+
+                <aside class="side">
+                  <section>
+                    <p class="eyebrow">本地反馈</p>
+                    <div class="score" id="scoreText">0 / 3</div>
+                    <ul id="rubricList" class="rubric"></ul>
+                    <p id="hintText" class="hint">先选择一个问题，写下你的回答，再点检查回答。</p>
+                  </section>
+
+                  <section class="log">
+                    <p class="eyebrow">练习记录</p>
+                    <span class="badge">第 ${revision} 场练习</span>
+                    <ol id="logList" class="log-list">
+                      <li>面试已准备好。</li>
+                    </ol>
+                  </section>
                 </aside>
               </section>
             </main>
+
+            <script>
+              const questions = [
+                {
+                  title: '周末早高峰突然排长队，你怎么安排人手？',
+                  prompt: '请从收银、出杯、备料和现场沟通回答。',
+                  tags: ['shift', 'queue', 'service'],
+                  checks: ['提到岗位分工', '提到等待沟通', '提到备料或出杯节奏'],
+                  keywords: [['分工', '收银', '出杯'], ['等待', '沟通', '解释'], ['备料', '节奏', '补货']]
+                },
+                {
+                  title: '熟客投诉拿错饮品，你会怎么处理？',
+                  prompt: '请说明安抚、核对、补救和复盘。',
+                  tags: ['complaint', 'recover', 'review'],
+                  checks: ['提到先安抚顾客', '提到核对订单', '提到补救和复盘'],
+                  keywords: [['安抚', '道歉', '情绪'], ['核对', '订单', '小票'], ['补救', '复盘', '记录']]
+                },
+                {
+                  title: '新品试卖一周后销量低，你会看哪些信号？',
+                  prompt: '请从试饮反馈、陈列、定价和员工话术回答。',
+                  tags: ['launch', 'feedback', 'sales'],
+                  checks: ['提到顾客反馈', '提到陈列或动线', '提到定价或话术'],
+                  keywords: [['反馈', '试饮', '顾客'], ['陈列', '动线', '海报'], ['定价', '话术', '推荐']]
+                }
+              ];
+
+              let activeQuestion = 0;
+              let secondsLeft = 18 * 60;
+              let timerId = null;
+
+              const timerText = document.getElementById('timerText');
+              const timerToggle = document.getElementById('timerToggle');
+              const timerReset = document.getElementById('timerReset');
+              const questionTitle = document.getElementById('questionTitle');
+              const questionPrompt = document.getElementById('questionPrompt');
+              const questionTags = document.getElementById('questionTags');
+              const answerInput = document.getElementById('answerInput');
+              const scoreText = document.getElementById('scoreText');
+              const rubricList = document.getElementById('rubricList');
+              const hintText = document.getElementById('hintText');
+              const logList = document.getElementById('logList');
+
+              function renderTimer() {
+                const minutes = String(Math.floor(secondsLeft / 60)).padStart(2, '0');
+                const seconds = String(secondsLeft % 60).padStart(2, '0');
+                timerText.textContent = minutes + ':' + seconds;
+              }
+
+              function addLog(text) {
+                const item = document.createElement('li');
+                item.textContent = text;
+                logList.prepend(item);
+              }
+
+              function renderQuestion() {
+                const question = questions[activeQuestion];
+                questionTitle.textContent = question.title;
+                questionPrompt.textContent = question.prompt;
+                questionTags.innerHTML = '';
+                question.tags.forEach((tag) => {
+                  const badge = document.createElement('span');
+                  badge.className = 'badge';
+                  badge.textContent = tag;
+                  questionTags.appendChild(badge);
+                });
+
+                rubricList.innerHTML = '';
+                question.checks.forEach((check) => {
+                  const item = document.createElement('li');
+                  item.textContent = check;
+                  rubricList.appendChild(item);
+                });
+
+                document.querySelectorAll('[data-question]').forEach((button) => {
+                  button.classList.toggle('active', Number(button.dataset.question) === activeQuestion);
+                });
+
+                scoreText.textContent = '0 / ' + question.checks.length;
+                hintText.textContent = '提示会根据当前问题给出。';
+                answerInput.value = '';
+              }
+
+              function checkAnswer() {
+                const value = answerInput.value.trim().toLowerCase();
+                const question = questions[activeQuestion];
+                let score = 0;
+
+                Array.from(rubricList.children).forEach((item, index) => {
+                  const matched = question.keywords[index].some((keyword) => value.includes(keyword.toLowerCase()));
+                  item.classList.toggle('done', matched);
+                  if (matched) score += 1;
+                });
+
+                scoreText.textContent = score + ' / ' + question.checks.length;
+                hintText.textContent = score === question.checks.length
+                  ? '回答覆盖了核心点。下一步可以补一个具体取舍。'
+                  : '还可以补充：' + question.checks.filter((_, index) => !rubricList.children[index].classList.contains('done')).join('、');
+                addLog('已检查问题 ' + (activeQuestion + 1) + '，命中 ' + score + ' 个要点。');
+              }
+
+              timerToggle.addEventListener('click', () => {
+                if (timerId) {
+                  clearInterval(timerId);
+                  timerId = null;
+                  timerToggle.textContent = '继续';
+                  addLog('计时已暂停。');
+                  return;
+                }
+
+                timerToggle.textContent = '暂停';
+                addLog('计时已开始。');
+                timerId = window.setInterval(() => {
+                  secondsLeft = Math.max(0, secondsLeft - 1);
+                  renderTimer();
+                  if (secondsLeft === 0 && timerId) {
+                    clearInterval(timerId);
+                    timerId = null;
+                    timerToggle.textContent = '结束';
+                    addLog('面试时间到。');
+                  }
+                }, 1000);
+              });
+
+              timerReset.addEventListener('click', () => {
+                if (timerId) clearInterval(timerId);
+                timerId = null;
+                secondsLeft = 18 * 60;
+                timerToggle.textContent = '开始';
+                renderTimer();
+                addLog('计时已重置。');
+              });
+
+              document.getElementById('checkAnswer').addEventListener('click', checkAnswer);
+              document.getElementById('hintButton').addEventListener('click', () => {
+                const question = questions[activeQuestion];
+                hintText.textContent = '先回答这个点：' + question.checks[0];
+                addLog('已请求问题 ' + (activeQuestion + 1) + ' 的提示。');
+              });
+              document.getElementById('nextQuestion').addEventListener('click', () => {
+                activeQuestion = (activeQuestion + 1) % questions.length;
+                renderQuestion();
+                addLog('已切到问题 ' + (activeQuestion + 1) + '。');
+              });
+              document.querySelectorAll('[data-question]').forEach((button) => {
+                button.addEventListener('click', () => {
+                  activeQuestion = Number(button.dataset.question);
+                  renderQuestion();
+                  addLog('已切到问题 ' + (activeQuestion + 1) + '。');
+                });
+              });
+
+              renderTimer();
+              renderQuestion();
+            </script>
           </body>
         </html>`,
+      allowScripts: true,
     },
   };
 }
@@ -417,34 +832,402 @@ function buildVisualLearningArtifact(revision: number, updatedAt = '2026-04-10T1
   return {
     id: 'artifact-visual-learning',
     type: 'visual-learning',
-    title: '可视化学习路径',
+    title: '二次函数图像实验台',
     status: 'ready',
     renderMode: 'html',
     revision,
     updatedAt,
-    summary: '用于验证可视化学习、步骤推进和解释请求的 HTML 工作画布。',
+    summary: '拖动 a、b、c 三个参数，实时观察抛物线、顶点、对称轴和交点变化。',
     payload: {
       html: `
+        <!doctype html>
         <html lang="zh-CN">
-          <body style="margin:0;font-family:Inter,system-ui,sans-serif;background:#fbf6ed;color:#23313b;">
-            <main style="min-height:100vh;padding:28px;">
-              <section style="padding:24px;border:1px solid rgba(96,114,126,.16);border-radius:28px;background:#fffaf2;">
-                <p style="margin:0 0 10px;color:#61707c;font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;">Visual Learning</p>
-                <h1 style="margin:0;font-family:Georgia,serif;font-size:34px;">从 Vue 前端到 AI 产品协作</h1>
-                <p style="margin:12px 0 0;color:#61707c;line-height:1.7;">这个画布用于模拟可交互学习路径。真实阶段完成、反思记录和请求讲解后续应作为结构化事件回传。</p>
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <style>
+              :root {
+                --bg: #151022;
+                --surface: #fff4bf;
+                --ink: #1b1028;
+                --muted: #654c7d;
+                --grid: rgba(27, 16, 40, 0.13);
+                --pink: #ff4f9a;
+                --cyan: #00c2ff;
+                --lime: #a8ff3e;
+                --orange: #ff9f1c;
+              }
+
+              * { box-sizing: border-box; }
+
+              body {
+                margin: 0;
+                font-family: "Avenir Next", "Trebuchet MS", Arial, sans-serif;
+                background:
+                  radial-gradient(circle at 16% 12%, rgba(255, 79, 154, 0.33), transparent 26%),
+                  radial-gradient(circle at 92% 18%, rgba(0, 194, 255, 0.28), transparent 24%),
+                  linear-gradient(135deg, #25153a, #0f132f 62%, #07251f),
+                  var(--bg);
+                color: var(--ink);
+              }
+
+              button,
+              input {
+                font: inherit;
+              }
+
+              button {
+                border: 2px solid var(--ink);
+                border-radius: 999px;
+                background: var(--lime);
+                color: var(--ink);
+                cursor: pointer;
+                font-weight: 850;
+                padding: 10px 14px;
+                box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.28);
+              }
+
+              main {
+                min-height: 100vh;
+                display: grid;
+                grid-template-columns: minmax(360px, 0.9fr) minmax(0, 1.35fr);
+                gap: 18px;
+                padding: 20px;
+              }
+
+              .hero,
+              .graph-card,
+              .control-card,
+              .fact-card {
+                border: 2px solid var(--ink);
+                border-radius: 28px;
+                background: var(--surface);
+                box-shadow: 10px 10px 0 rgba(0, 0, 0, 0.24);
+              }
+
+              .side {
+                display: grid;
+                gap: 14px;
+              }
+
+              .hero {
+                padding: 24px;
+              }
+
+              .graph-card {
+                min-height: calc(100vh - 40px);
+                padding: 18px;
+                display: grid;
+                grid-template-rows: auto 1fr auto;
+                gap: 12px;
+              }
+
+              .control-card,
+              .fact-card {
+                padding: 18px;
+              }
+
+              .eyebrow {
+                margin: 0 0 8px;
+                color: var(--muted);
+                font-size: 12px;
+                font-weight: 900;
+                letter-spacing: 0.16em;
+                text-transform: uppercase;
+              }
+
+              h1,
+              h2,
+              p {
+                margin-top: 0;
+              }
+
+              h1 {
+                font-family: "Arial Black", "Trebuchet MS", Arial, sans-serif;
+                font-size: clamp(34px, 5vw, 64px);
+                line-height: 0.95;
+                margin-bottom: 14px;
+                text-transform: uppercase;
+              }
+
+              h2 {
+                font-size: 22px;
+                line-height: 1.2;
+              }
+
+              p,
+              li {
+                color: var(--muted);
+                line-height: 1.68;
+              }
+
+              .formula {
+                display: inline-flex;
+                margin: 8px 0 0;
+                border: 2px solid var(--ink);
+                border-radius: 18px;
+                background: #ffffff;
+                padding: 10px 14px;
+                color: var(--pink);
+                font-family: "SFMono-Regular", Consolas, monospace;
+                font-size: 18px;
+                font-weight: 900;
+              }
+
+              .slider {
+                display: grid;
+                gap: 8px;
+                margin: 14px 0;
+              }
+
+              .slider label {
+                display: flex;
+                justify-content: space-between;
+                gap: 12px;
+                color: var(--ink);
+                font-weight: 850;
+              }
+
+              input[type='range'] {
+                width: 100%;
+                accent-color: var(--pink);
+              }
+
+              .facts {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 10px;
+              }
+
+              .metric {
+                border: 2px dashed rgba(27, 16, 40, 0.35);
+                border-radius: 18px;
+                background: #fff9dc;
+                padding: 12px;
+              }
+
+              .metric strong {
+                display: block;
+                color: var(--pink);
+                font-size: 18px;
+                margin-top: 4px;
+              }
+
+              svg {
+                width: 100%;
+                height: 100%;
+                min-height: 430px;
+                border: 2px solid var(--ink);
+                border-radius: 24px;
+                background:
+                  linear-gradient(90deg, var(--grid) 1px, transparent 1px),
+                  linear-gradient(0deg, var(--grid) 1px, transparent 1px),
+                  #fffdf0;
+                background-size: 28px 28px;
+              }
+
+              .axis {
+                stroke: var(--ink);
+                stroke-width: 2;
+              }
+
+              #curveLine {
+                stroke: var(--pink);
+                stroke-width: 5;
+                stroke-linecap: round;
+                stroke-linejoin: round;
+                filter: drop-shadow(0 5px 0 rgba(0, 0, 0, 0.18));
+              }
+
+              #vertexDot {
+                fill: var(--cyan);
+                stroke: var(--ink);
+                stroke-width: 3;
+              }
+
+              .root-dot {
+                fill: var(--orange);
+                stroke: var(--ink);
+                stroke-width: 3;
+              }
+
+              .caption {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 10px;
+              }
+
+              .chip {
+                border: 2px solid var(--ink);
+                border-radius: 999px;
+                background: #ffffff;
+                color: var(--ink);
+                font-weight: 850;
+                padding: 8px 11px;
+              }
+
+              @media (max-width: 900px) {
+                main {
+                  grid-template-columns: 1fr;
+                }
+
+                .graph-card {
+                  min-height: 560px;
+                }
+              }
+            </style>
+          </head>
+          <body>
+            <main>
+              <section class="side">
+                <article class="hero">
+                  <p class="eyebrow">Parabola Lab</p>
+                  <h1>二次函数图像实验台</h1>
+                  <p>拖动三个参数，观察抛物线如何翻转、变窄、平移，并同步查看顶点和交点。</p>
+                  <span class="formula" id="formulaText">y = ax² + bx + c</span>
+                </article>
+
+                <article class="control-card">
+                  <p class="eyebrow">参数控制</p>
+                  <div class="slider">
+                    <label for="aInput">a：开口与宽窄 <span id="aValue"></span></label>
+                    <input id="aInput" type="range" min="-2" max="2" step="0.1" value="0.6" />
+                  </div>
+                  <div class="slider">
+                    <label for="bInput">b：左右倾斜 <span id="bValue"></span></label>
+                    <input id="bInput" type="range" min="-5" max="5" step="0.1" value="-1.2" />
+                  </div>
+                  <div class="slider">
+                    <label for="cInput">c：上下平移 <span id="cValue"></span></label>
+                    <input id="cInput" type="range" min="-6" max="6" step="0.1" value="-2" />
+                  </div>
+                  <button id="resetButton" type="button">重置成标准例子</button>
+                </article>
+
+                <article class="fact-card">
+                  <p class="eyebrow">观察结果</p>
+                  <div class="facts">
+                    <div class="metric">顶点 <strong id="vertexMetric"></strong></div>
+                    <div class="metric">对称轴 <strong id="axisMetric"></strong></div>
+                    <div class="metric">开口方向 <strong id="openMetric"></strong></div>
+                    <div class="metric">x 轴交点 <strong id="rootMetric"></strong></div>
+                  </div>
+                </article>
               </section>
-              <section style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:18px;">
-                ${['理解职责边界', '设计 work canvas', '回传交互事件'].map((title, index) => `
-                  <article style="padding:20px;border:1px solid rgba(96,114,126,.16);border-radius:24px;background:#fffaf2;">
-                    <p style="margin:0 0 10px;color:#1d736d;font-weight:800;">Step ${index + 1}</p>
-                    <h2 style="margin:0;font-size:22px;">${title}</h2>
-                    <p style="margin:12px 0 0;color:#61707c;line-height:1.7;">事件示例：step_completed / explanation_requested</p>
-                  </article>
-                `).join('')}
+
+              <section class="graph-card">
+                <div>
+                  <p class="eyebrow">实时图像</p>
+                  <h2>看图比背公式更快</h2>
+                </div>
+                <svg id="graph" viewBox="0 0 720 520" role="img" aria-label="二次函数图像">
+                  <line class="axis" x1="40" y1="260" x2="680" y2="260"></line>
+                  <line class="axis" x1="360" y1="30" x2="360" y2="490"></line>
+                  <polyline id="curveLine" fill="none" points=""></polyline>
+                  <g id="rootsLayer"></g>
+                  <circle id="vertexDot" r="8" cx="360" cy="260"></circle>
+                </svg>
+                <div class="caption">
+                  <span class="chip">粉色曲线：y = ax² + bx + c</span>
+                  <span class="chip">蓝点：顶点</span>
+                  <span class="chip">橙点：x 轴交点</span>
+                </div>
               </section>
             </main>
+
+            <script>
+              const width = 720;
+              const height = 520;
+              const paddingX = 40;
+              const paddingY = 30;
+              const xMin = -6;
+              const xMax = 6;
+              const yMin = -8;
+              const yMax = 8;
+              const aInput = document.getElementById('aInput');
+              const bInput = document.getElementById('bInput');
+              const cInput = document.getElementById('cInput');
+              const curveLine = document.getElementById('curveLine');
+              const vertexDot = document.getElementById('vertexDot');
+              const rootsLayer = document.getElementById('rootsLayer');
+
+              function mapX(x) {
+                return paddingX + ((x - xMin) / (xMax - xMin)) * (width - paddingX * 2);
+              }
+
+              function mapY(y) {
+                return height - paddingY - ((y - yMin) / (yMax - yMin)) * (height - paddingY * 2);
+              }
+
+              function formatNumber(value) {
+                return Number(value).toFixed(2).replace(/\\.00$/, '').replace(/0$/, '');
+              }
+
+              function renderGraph() {
+                let a = Number(aInput.value);
+                const b = Number(bInput.value);
+                const c = Number(cInput.value);
+                if (Math.abs(a) < 0.05) {
+                  a = a < 0 ? -0.05 : 0.05;
+                  aInput.value = String(a);
+                }
+
+                const points = [];
+                for (let i = 0; i <= 180; i += 1) {
+                  const x = xMin + (i / 180) * (xMax - xMin);
+                  const y = a * x * x + b * x + c;
+                  points.push(mapX(x).toFixed(1) + ',' + mapY(y).toFixed(1));
+                }
+                curveLine.setAttribute('points', points.join(' '));
+
+                const vertexX = -b / (2 * a);
+                const vertexY = a * vertexX * vertexX + b * vertexX + c;
+                vertexDot.setAttribute('cx', String(mapX(vertexX)));
+                vertexDot.setAttribute('cy', String(mapY(vertexY)));
+
+                const discriminant = b * b - 4 * a * c;
+                rootsLayer.innerHTML = '';
+                let rootText = '无实数交点';
+                if (discriminant >= 0) {
+                  const sqrt = Math.sqrt(discriminant);
+                  const roots = [(-b - sqrt) / (2 * a), (-b + sqrt) / (2 * a)];
+                  rootText = roots.map(formatNumber).join('，');
+                  roots.forEach((root) => {
+                    if (root >= xMin && root <= xMax) {
+                      const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                      dot.setAttribute('class', 'root-dot');
+                      dot.setAttribute('r', '7');
+                      dot.setAttribute('cx', String(mapX(root)));
+                      dot.setAttribute('cy', String(mapY(0)));
+                      rootsLayer.appendChild(dot);
+                    }
+                  });
+                }
+
+                document.getElementById('aValue').textContent = formatNumber(a);
+                document.getElementById('bValue').textContent = formatNumber(b);
+                document.getElementById('cValue').textContent = formatNumber(c);
+                document.getElementById('formulaText').textContent =
+                  'y = ' + formatNumber(a) + 'x² ' + (b >= 0 ? '+ ' : '- ') + formatNumber(Math.abs(b)) + 'x ' + (c >= 0 ? '+ ' : '- ') + formatNumber(Math.abs(c));
+                document.getElementById('vertexMetric').textContent =
+                  '(' + formatNumber(vertexX) + ', ' + formatNumber(vertexY) + ')';
+                document.getElementById('axisMetric').textContent = 'x = ' + formatNumber(vertexX);
+                document.getElementById('openMetric').textContent = a > 0 ? '向上' : '向下';
+                document.getElementById('rootMetric').textContent = rootText;
+              }
+
+              [aInput, bInput, cInput].forEach((input) => input.addEventListener('input', renderGraph));
+              document.getElementById('resetButton').addEventListener('click', () => {
+                aInput.value = '0.6';
+                bInput.value = '-1.2';
+                cInput.value = '-2';
+                renderGraph();
+              });
+              renderGraph();
+            </script>
           </body>
         </html>`,
+      allowScripts: true,
     },
   };
 }
@@ -453,12 +1236,12 @@ function buildCodingAssessmentArtifact(revision: number, updatedAt = '2026-04-10
   return {
     id: 'artifact-coding-assessment',
     type: 'coding-assessment',
-    title: '代码题工作台',
+    title: '博物馆排队评测器',
     status: 'ready',
     renderMode: 'url',
     revision,
     updatedAt,
-    summary: '用于验证后端 node/web 项目以 URL 形式嵌入右侧工作画布。',
+    summary: '用博物馆排队题验证终端风格评测界面。',
     payload: {
       url: buildCanvasFixtureUrl({ revision, scenario: 'coding-assessment' }),
     },
@@ -469,12 +1252,12 @@ function buildCareerRoadmapArtifact(revision: number, updatedAt = '2026-04-07T18
   return {
     id: 'artifact-career-roadmap',
     type: 'career-roadmap',
-    title: '职业路线图工作台',
+    title: '门店运营职业路线图',
     status: 'stale',
     renderMode: 'url',
     revision,
     updatedAt,
-    summary: '用 URL 型工作画布模拟 node/web 应用承载的职业路线图或面试工作台。',
+    summary: '用独立页面呈现从咖啡师到门店店长的阶段路线。',
     payload: {
       url: buildCanvasFixtureUrl({ revision, scenario: 'career-roadmap' }),
     },
@@ -508,7 +1291,7 @@ function buildRefreshedArtifact(currentArtifact: ArtifactRecord): ArtifactRecord
       revision: nextRevision,
       status: 'ready',
       updatedAt: refreshedAt,
-      summary: '职业路线图 URL 工作画布已刷新到新版本。',
+      summary: '门店运营职业路线图已刷新到新版本。',
       payload: {
         url: buildCanvasFixtureUrl({ revision: nextRevision, scenario: 'career-roadmap' }),
       },

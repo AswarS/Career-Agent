@@ -35,6 +35,12 @@ The three examples cover different canvas modes:
 This gives the team concrete examples to judge before building the real
 feedback-event path.
 
+The examples are intentionally development fixtures, not the future artifact
+generation pipeline. The long-term separation rule is documented in
+`docs/zh/team-sync.md`: inline HTML should arrive as `payload.html` when small,
+larger pages and node/web projects should arrive as trusted `payload.url`
+values, and the frontend should not receive raw local file paths.
+
 ## Verified
 
 Run:
