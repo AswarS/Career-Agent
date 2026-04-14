@@ -84,6 +84,13 @@ const threads: ThreadSummary[] = [
     updatedAt: '2026-04-14T11:22:00Z',
     status: 'active',
   },
+  {
+    id: 'thread-008',
+    title: '第二视频回放',
+    preview: '展示第二个本地测试视频的播放入口。',
+    updatedAt: '2026-04-14T11:48:00Z',
+    status: 'active',
+  },
 ];
 
 const messagesByThread: Record<string, ThreadMessage[]> = {
@@ -314,6 +321,39 @@ const messagesByThread: Record<string, ThreadMessage[]> = {
         },
       ],
       createdAt: '2026-04-14 11:23',
+    },
+  ],
+  'thread-008': [
+    {
+      id: 'message-016',
+      threadId: 'thread-008',
+      role: 'user',
+      kind: 'markdown',
+      content: '这是第二个视频多模态回传测试：请用同一套对话媒体展示能力播放另一个测试视频。',
+      createdAt: '2026-04-14 11:48',
+    },
+    {
+      id: 'message-017',
+      threadId: 'thread-008',
+      role: 'assistant',
+      kind: 'markdown',
+      agentId: 'agent-media',
+      agentName: '多模态助手',
+      agentAccent: 'teal',
+      content:
+        '我已收到第二个视频资源位置，并复用同一套对话媒体播放器展示。\n\n这里验证的是：多个视频 fixture 可以按消息附件方式独立挂载；如果后续视频要成为结果页的一部分，则应放进 artifact HTML/URL 页面里。',
+      media: [
+        {
+          id: 'media-test-video-2',
+          kind: 'video',
+          url: '/mock-media/test_video2.mp4',
+          title: '第二个本地测试视频',
+          caption: '开发 fixture：从 `public/mock-media/test_video2.mp4` 加载，用来验证第二个对话内视频播放。',
+          alt: '第二个本地测试视频播放器',
+          mimeType: 'video/mp4',
+        },
+      ],
+      createdAt: '2026-04-14 11:49',
     },
   ],
 };

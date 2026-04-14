@@ -12,6 +12,7 @@ messages.
 - Added two mock threads:
   - `thread-006`: image display
   - `thread-007`: local video playback
+  - `thread-008`: second local video playback
 - Moved local test assets into `public/mock-media/` so Vite can serve them as
   browser-accessible URLs
 - Added conversation message rendering for image cards and video controls
@@ -50,3 +51,13 @@ Browser checks:
 
 - `/threads/thread-006`: image loads from `/mock-media/test_image.png`
 - `/threads/thread-007`: video loads from `/mock-media/test_video.mp4`
+- `/threads/thread-008`: video loads from `/mock-media/test_video2.mp4`
+
+## Artifact Note
+
+Images and videos can appear inside artifacts when they are part of a result
+page. In that case, keep using the existing artifact `html` / `url` host path
+and reference media as page resources.
+
+Do not add a separate artifact type just because a result page contains media.
+Message-level media is for conversation attachments and context references.
