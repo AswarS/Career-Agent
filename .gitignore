@@ -3,3 +3,6 @@ dist/
 .playwright-cli/
 output/playwright/
 .DS_Store
+
+# Local helper scripts for one-off demos or machine-specific workflows.
+scripts/local/

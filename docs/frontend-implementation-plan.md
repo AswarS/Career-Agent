@@ -2,11 +2,13 @@
 
 ## Status
 
-Phase 5 completed. The repository now contains the shell, typed mock adapters,
-the conversation workspace pass, explicit profile draft editing, artifact host mode work,
-and the first upstream contract hardening pass.
+Phase 6B is partially complete and stable enough for the next focused slice.
+The repository now contains the shell, typed mock adapters, conversation-driven
+artifact actions, explicit profile draft editing, artifact host mode work,
+reasoning / multi-agent message presentation, message media fixtures, and URL
+artifact validation paths.
 
-The repository is now in a foundation-stable state.
+The repository is in a workflow-stable state for frontend iteration.
 
 ## Goal
 
@@ -165,9 +167,9 @@ Exit criteria:
 
 ### Phase 6A: Shell Behavior Optimization
 
-Execution window:
+Status:
 
-- April 8, 2026: finish this phase before starting new workflow work
+- completed for the current desktop shell baseline
 
 Scope:
 
@@ -187,9 +189,14 @@ Exit criteria:
 
 ### Phase 6B: Conversation-Driven Workflow
 
-Execution window:
+Status:
 
-- April 9, 2026: start only after Phase 6A is complete
+- partially complete and active
+- conversation-triggered work-canvas launch, reasoning display, minimal
+  multi-agent message presentation, media fixtures, and URL artifact examples
+  are implemented
+- composer lifecycle, work-canvas feedback events, upload flow, and persistent
+  session behavior remain future focused slices
 
 Scope:
 
@@ -222,12 +229,19 @@ Exit criteria:
 
 ## Current Working Sequence
 
-The next two implementation steps are intentionally split:
+The current stable baseline supports:
 
-1. April 8, 2026: finish shell behavior optimization only
-2. April 9, 2026: begin conversation-driven workflow
+1. default mock conversation workflow through `thread-001` to `thread-008`
+2. message-level `open-artifact` actions for work-canvas launch
+3. HTML and trusted URL artifact host paths
+4. optional external app-example URL validation through `dev:app-examples`
+5. message-level image and video display fixtures
 
-Do not mix these into one PR unless a bug fix directly spans both.
+The next slice should start from one focused contract or UX gap, not from a
+wide rewrite.
+
+Do not mix unrelated backend, agent, upload, session persistence, and work-canvas
+event work into one PR.
 
 ## Testing Gate
 
