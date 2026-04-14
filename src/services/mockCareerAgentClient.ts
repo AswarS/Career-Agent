@@ -70,6 +70,20 @@ const threads: ThreadSummary[] = [
     updatedAt: '2026-04-10T13:26:00Z',
     status: 'active',
   },
+  {
+    id: 'thread-006',
+    title: '图片观察',
+    preview: '展示 AI 已拿到图片位置后的对话内预览。',
+    updatedAt: '2026-04-14T11:18:00Z',
+    status: 'active',
+  },
+  {
+    id: 'thread-007',
+    title: '视频回放',
+    preview: '展示 AI 已拿到视频位置后的本地播放入口。',
+    updatedAt: '2026-04-14T11:22:00Z',
+    status: 'active',
+  },
 ];
 
 const messagesByThread: Record<string, ThreadMessage[]> = {
@@ -234,6 +248,72 @@ const messagesByThread: Record<string, ThreadMessage[]> = {
         },
       ],
       createdAt: '2026-04-10 13:27',
+    },
+  ],
+  'thread-006': [
+    {
+      id: 'message-012',
+      threadId: 'thread-006',
+      role: 'user',
+      kind: 'markdown',
+      content: '这是一次图片多模态回传测试：后端已经把测试图片保存到了可访问位置，请在对话中展示。',
+      createdAt: '2026-04-14 11:18',
+    },
+    {
+      id: 'message-013',
+      threadId: 'thread-006',
+      role: 'assistant',
+      kind: 'markdown',
+      agentId: 'agent-media',
+      agentName: '多模态助手',
+      agentAccent: 'teal',
+      content:
+        '我已收到图片资源位置，并在当前消息里以附件形式展示。\n\n当前实现只验证“AI / 后端返回媒体 URL 后，前端负责渲染”的路径；上传、存储和安全扫描需要后续与后端契约一起做。',
+      media: [
+        {
+          id: 'media-test-image',
+          kind: 'image',
+          url: '/mock-media/test_image.png',
+          title: '本地测试图片',
+          caption: '开发 fixture：从 `public/mock-media/test_image.png` 加载，用来验证对话内图片显示。',
+          alt: '本地测试图片预览',
+          mimeType: 'image/png',
+        },
+      ],
+      createdAt: '2026-04-14 11:19',
+    },
+  ],
+  'thread-007': [
+    {
+      id: 'message-014',
+      threadId: 'thread-007',
+      role: 'user',
+      kind: 'markdown',
+      content: '这是一次视频多模态回传测试：后端已经把测试视频保存到了可访问位置，请在对话中直接播放。',
+      createdAt: '2026-04-14 11:22',
+    },
+    {
+      id: 'message-015',
+      threadId: 'thread-007',
+      role: 'assistant',
+      kind: 'markdown',
+      agentId: 'agent-media',
+      agentName: '多模态助手',
+      agentAccent: 'teal',
+      content:
+        '我已收到视频资源位置，并在当前消息里提供本地播放控件。\n\n这一步先解决“展示与播放”，不处理用户上传入口；上传文件建议等消息发送状态、后端对象存储和文件限制规则稳定后再做。',
+      media: [
+        {
+          id: 'media-test-video',
+          kind: 'video',
+          url: '/mock-media/test_video.mp4',
+          title: '本地测试视频',
+          caption: '开发 fixture：从 `public/mock-media/test_video.mp4` 加载，用来验证对话内视频播放。',
+          alt: '本地测试视频播放器',
+          mimeType: 'video/mp4',
+        },
+      ],
+      createdAt: '2026-04-14 11:23',
     },
   ],
 };

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import MarkdownContent from '../../components/MarkdownContent.vue';
-import type { MessageAction, ThreadMessage } from '../../types/entities';
+import type { MessageAction, MessageMedia, ThreadMessage } from '../../types/entities';
 import { getPresentedMessageContent } from './messagePresentation';
 
 const props = defineProps<{
@@ -15,6 +15,7 @@ const emit = defineEmits<{
 
 const presentedMessage = computed(() => getPresentedMessageContent(props.message));
 const visibleActions = computed(() => props.message.role === 'assistant' ? props.message.actions ?? [] : []);
+const visibleMedia = computed(() => props.message.media ?? []);
 
 function formatRoleLabel(role: ThreadMessage['role']) {
   switch (role) {
@@ -56,6 +57,18 @@ function formatAgentAccentClass(message: ThreadMessage, multiAgentMode: boolean)
 function handleAction(action: MessageAction) {
   emit('action', action);
 }
+
+function formatMediaTitle(media: MessageMedia) {
+  if (media.title) {
+    return media.title;
+  }
+
+  return media.kind === 'image' ? '图片附件' : '视频附件';
+}
+
+function formatMediaAlt(media: MessageMedia) {
+  return media.alt ?? media.title ?? (media.kind === 'image' ? '对话图片' : '对话视频');
+}
 </script>
 
 <template>
@@ -77,6 +90,45 @@ function handleAction(action: MessageAction) {
 
     <MarkdownContent v-if="props.message.kind === 'markdown'" :source="presentedMessage.content" />
     <p v-else class="status-copy">{{ presentedMessage.content }}</p>
+
+    <div v-if="visibleMedia.length" class="message-media-list" aria-label="多模态内容">
+      <figure
+        v-for="media in visibleMedia"
+        :key="media.id"
+        class="message-media-card"
+        :class="media.kind"
+      >
+        <div class="media-heading">
+          <strong>{{ formatMediaTitle(media) }}</strong>
+          <span>{{ media.kind === 'image' ? '图片' : '视频' }}</span>
+        </div>
+
+        <img
+          v-if="media.kind === 'image'"
+          class="message-image"
+          :src="media.url"
+          :alt="formatMediaAlt(media)"
+          loading="lazy"
+        />
+
+        <video
+          v-else
+          class="message-video"
+          :src="media.url"
+          :poster="media.posterUrl"
+          :aria-label="formatMediaAlt(media)"
+          controls
+          playsinline
+          preload="metadata"
+        >
+          当前浏览器不支持视频播放。
+        </video>
+
+        <figcaption v-if="media.caption">
+          {{ media.caption }}
+        </figcaption>
+      </figure>
+    </div>
 
     <div v-if="visibleActions.length" class="message-actions">
       <button
@@ -186,6 +238,67 @@ function handleAction(action: MessageAction) {
 .status-copy {
   margin: 0;
   line-height: 1.7;
+}
+
+.message-media-list {
+  display: grid;
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.message-media-card {
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--color-border) 86%, var(--color-primary));
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--color-surface-strong) 88%, white);
+}
+
+.media-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+}
+
+.media-heading strong {
+  min-width: 0;
+  color: var(--color-text);
+  font-size: 0.9rem;
+}
+
+.media-heading span {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-primary-soft) 72%, white);
+  color: var(--color-text-muted);
+  font-size: 0.74rem;
+  font-weight: 800;
+  padding: 0.28rem 0.52rem;
+}
+
+.message-image,
+.message-video {
+  display: block;
+  width: 100%;
+  max-height: min(520px, 64vh);
+  background: #0e1717;
+}
+
+.message-image {
+  object-fit: contain;
+}
+
+.message-video {
+  aspect-ratio: 16 / 9;
+}
+
+.message-media-card figcaption {
+  padding: 12px 14px 14px;
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+  line-height: 1.6;
 }
 
 .message-actions {

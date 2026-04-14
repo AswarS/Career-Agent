@@ -5,6 +5,7 @@ import type {
   ArtifactStatus,
   ArtifactViewMode,
   MessageAction,
+  MessageMedia,
   MessageKind,
   ProfileRecord,
   ProfileSuggestion,
@@ -38,6 +39,8 @@ export interface UpstreamThreadMessage {
   agent_accent?: AgentAccent | null;
   agentAccent?: AgentAccent | null;
   actions?: UpstreamMessageAction[] | null;
+  media?: UpstreamMessageMedia[] | null;
+  attachments?: UpstreamMessageMedia[] | null;
   created_at?: string;
   createdAt?: string;
 }
@@ -50,6 +53,21 @@ export interface UpstreamMessageAction {
   artifactId?: string;
   view_mode?: string | null;
   viewMode?: string | null;
+}
+
+export interface UpstreamMessageMedia {
+  id?: string;
+  kind?: string;
+  type?: string;
+  url?: string | null;
+  src?: string | null;
+  title?: string | null;
+  caption?: string | null;
+  alt?: string | null;
+  mime_type?: string | null;
+  mimeType?: string | null;
+  poster_url?: string | null;
+  posterUrl?: string | null;
 }
 
 export interface UpstreamProfileSuggestion {
@@ -144,6 +162,67 @@ function normalizeMessageActions(actions: UpstreamMessageAction[] | null | undef
   return nextActions.length ? nextActions : undefined;
 }
 
+const URL_SCHEME_PATTERN = /^[a-zA-Z][a-zA-Z\d+.-]*:/;
+
+function normalizeMediaUrl(value: string | null | undefined): string | null {
+  const nextValue = value?.trim();
+
+  if (!nextValue || nextValue.startsWith('//')) {
+    return null;
+  }
+
+  if (!URL_SCHEME_PATTERN.test(nextValue)) {
+    return nextValue;
+  }
+
+  try {
+    const protocol = new URL(nextValue).protocol.toLowerCase();
+
+    if (protocol === 'http:' || protocol === 'https:') {
+      return nextValue;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+function normalizeOptionalText(value: string | null | undefined): string | undefined {
+  const nextValue = value?.trim();
+  return nextValue || undefined;
+}
+
+function normalizeMessageMedia(media: UpstreamMessageMedia[] | null | undefined): MessageMedia[] | undefined {
+  const nextMedia: MessageMedia[] = [];
+
+  for (const item of media ?? []) {
+    const kind = item.kind ?? item.type;
+    const url = normalizeMediaUrl(item.url ?? item.src);
+
+    if ((kind !== 'image' && kind !== 'video') || !url) {
+      continue;
+    }
+
+    nextMedia.push({
+      id: item.id?.trim() || `media-${nextMedia.length + 1}`,
+      kind,
+      url,
+      title: normalizeOptionalText(item.title),
+      caption: normalizeOptionalText(item.caption),
+      alt: normalizeOptionalText(item.alt),
+      mimeType: normalizeOptionalText(item.mimeType ?? item.mime_type),
+      posterUrl: normalizeMediaUrl(item.posterUrl ?? item.poster_url) ?? undefined,
+    });
+  }
+
+  return nextMedia.length ? nextMedia : undefined;
+}
+
+function mergeMessageMediaSources(input: UpstreamThreadMessage): UpstreamMessageMedia[] {
+  return [...input.media ?? [], ...input.attachments ?? []];
+}
+
 function extractReasoningBlock(content: string): { content: string; reasoning: string | null } {
   const matches = [...content.matchAll(/<think>([\s\S]*?)<\/think>/gi)];
 
@@ -207,6 +286,7 @@ export function normalizeThreadMessage(input: UpstreamThreadMessage, fallbackThr
     agentName: input.agentName ?? input.agent_name ?? null,
     agentAccent: normalizeAgentAccent(input.agentAccent ?? input.agent_accent),
     actions: input.role === 'assistant' ? normalizeMessageActions(input.actions) : undefined,
+    media: normalizeMessageMedia(mergeMessageMediaSources(input)),
     createdAt: input.createdAt ?? input.created_at ?? new Date(0).toISOString(),
   };
 }

@@ -16,6 +16,7 @@ export type ArtifactStatus = 'idle' | 'loading' | 'streaming' | 'ready' | 'stale
 export type ArtifactRenderMode = 'html' | 'markdown' | 'cards' | 'url';
 export type ArtifactViewMode = 'pane' | 'focus' | 'immersive';
 export type MessageActionKind = 'open-artifact';
+export type MessageMediaKind = 'image' | 'video';
 
 export interface MessageAction {
   id: string;
@@ -23,6 +24,17 @@ export interface MessageAction {
   label: string;
   artifactId: string;
   viewMode?: ArtifactViewMode;
+}
+
+export interface MessageMedia {
+  id: string;
+  kind: MessageMediaKind;
+  url: string;
+  title?: string;
+  caption?: string;
+  alt?: string;
+  mimeType?: string;
+  posterUrl?: string;
 }
 
 export interface ThreadMessage {
@@ -36,6 +48,7 @@ export interface ThreadMessage {
   agentName?: string | null;
   agentAccent?: AgentAccent | null;
   actions?: MessageAction[];
+  media?: MessageMedia[];
   createdAt: string;
 }
 

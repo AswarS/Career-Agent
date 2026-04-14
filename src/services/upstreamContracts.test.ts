@@ -186,6 +186,104 @@ describe('normalizeThreadMessage', () => {
     expect(message.content).toBe('请保留这段字面量：<think>debug</think>');
     expect(message.reasoning).toBeNull();
   });
+
+  it('normalizes supported image and video media while dropping unsafe media URLs', () => {
+    const message = normalizeThreadMessage({
+      id: 'message-006',
+      role: 'assistant',
+      content: '这里带有多模态附件。',
+      media: [
+        {
+          id: 'image-001',
+          kind: 'image',
+          url: '/mock-media/test_image.png',
+          title: '测试图片',
+          caption: '用于验证图片显示。',
+          mime_type: 'image/png',
+        },
+        {
+          id: 'video-001',
+          type: 'video',
+          src: 'FILE:///Users/fancy/code/frontend/test_video.mp4',
+          title: '不应展示的本地视频',
+        },
+        {
+          id: 'image-unsafe-script',
+          type: 'image',
+          src: 'javascript:alert(1)',
+        },
+        {
+          id: 'image-unsafe-data',
+          type: 'image',
+          src: 'data:image/svg+xml,<svg></svg>',
+        },
+        {
+          id: 'image-unsafe-protocol-relative',
+          type: 'image',
+          src: '//example.com/image.png',
+        },
+        {
+          id: 'video-002',
+          type: 'video',
+          src: '/mock-media/test_video.mp4',
+          poster_url: '/mock-media/test_image.png',
+          mimeType: 'video/mp4',
+        },
+      ],
+      created_at: '2026-04-14T03:20:00Z',
+    }, 'thread-006');
+
+    expect(message.media).toEqual([
+      {
+        id: 'image-001',
+        kind: 'image',
+        url: '/mock-media/test_image.png',
+        title: '测试图片',
+        caption: '用于验证图片显示。',
+        alt: undefined,
+        mimeType: 'image/png',
+        posterUrl: undefined,
+      },
+      {
+        id: 'video-002',
+        kind: 'video',
+        url: '/mock-media/test_video.mp4',
+        title: undefined,
+        caption: undefined,
+        alt: undefined,
+        mimeType: 'video/mp4',
+        posterUrl: '/mock-media/test_image.png',
+      },
+    ]);
+  });
+
+  it('merges media and attachments sources for multimodal messages', () => {
+    const message = normalizeThreadMessage({
+      id: 'message-007',
+      role: 'assistant',
+      content: '这里同时带有 media 和 attachments。',
+      media: [
+        {
+          id: 'image-from-media',
+          kind: 'image',
+          url: '/mock-media/test_image.png',
+        },
+      ],
+      attachments: [
+        {
+          id: 'video-from-attachments',
+          kind: 'video',
+          url: 'https://example.com/test_video.mp4',
+        },
+      ],
+      created_at: '2026-04-14T03:30:00Z',
+    }, 'thread-007');
+
+    expect(message.media?.map((media) => media.id)).toEqual([
+      'image-from-media',
+      'video-from-attachments',
+    ]);
+  });
 });
 
 describe('normalizeProfileSuggestion', () => {
