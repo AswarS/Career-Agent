@@ -70,6 +70,8 @@ const artifactTypeLabel = computed(() => {
       return '代码题';
     case 'visual-learning':
       return '可视化学习';
+    case 'app-example':
+      return '应用示例';
     default:
       return activeArtifact.value?.type ?? '未分类';
   }

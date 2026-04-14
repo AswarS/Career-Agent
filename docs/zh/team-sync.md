@@ -80,6 +80,7 @@
 - 会话页顶部旧的调试型“打开画像摘要 / 打开周计划”按钮已移除
 - mock 里新增了模拟面试、代码题演练、可视化学习三条会话
 - 三条会话分别对应 `mock-interview`、`coding-assessment`、`visual-learning` 画布例子
+- `dev:app-examples` 配置下会注册两个外部应用示例会话：`thread-009` 静态 HTML 应用 URL、`thread-010` Node 应用 URL
 
 ## 你需要持续关注的沟通项
 
@@ -122,6 +123,10 @@
 - `VITE_CAREER_AGENT_API_BASE_URL`
 - `VITE_CAREER_AGENT_ARTIFACT_TRANSPORT`
 - `VITE_CAREER_AGENT_ENABLE_VOICE_INPUT`
+- `VITE_CAREER_AGENT_TRUSTED_CANVAS_ORIGINS`
+- `VITE_CAREER_AGENT_NODE_CANVAS_FIXTURE_URL`
+- `VITE_CAREER_AGENT_HTML_APP_EXAMPLE_URL`
+- `VITE_CAREER_AGENT_NODE_APP_EXAMPLE_URL`
 
 默认示例见：
 
@@ -246,15 +251,26 @@
 - `tests/work-canvas/README.md` 负责说明本地验证流程
 - `public/mock-node-canvas/index.html` 继续作为 same-origin URL 示例
 - `tests/work-canvas/node-fixture/server.mjs` 用于模拟独立 node 项目
+- `../app_examples/bounce-game` 用于验证外部静态 HTML 应用 URL
+- `../app_examples/derivative-game` 用于验证外部 Node / Web 应用 URL
 - 前端不负责启动真实 node 项目，只负责消费 URL 并嵌入 iframe
+
+当前边界补充：
+
+- `public/mock-node-canvas/index.html` 和 `tests/work-canvas/node-fixture/server.mjs` 是旧的宿主能力 fixture，用来验证 iframe、allowlist 和 URL 模式
+- `../app_examples` 是更接近后续真实生成产物的本地外部示例来源；如果本机路径不同，用环境变量覆盖本地运行命令
+- 静态 HTML 示例也不建议通过 `file://` 或 `/Users/.../index.html` 直接返回给前端，应由后端或本地静态服务转成 HTTP URL
+- Node 示例需要由外部进程启动；前端不启动、不守护、不重启该进程
 
 ### 3.5 开发例子和真实生成产物的分离规则
 
-当前仓库里的三类开发例子只用于前端验证，不是后续真实 artifact 生成链路：
+当前这些开发例子只用于前端验证，不是后续真实 artifact 生成链路：
 
 - `src/services/mockCareerAgentClient.ts`：前端 mock 数据，直接构造 `ArtifactRecord`
 - `public/mock-node-canvas/index.html`：同源静态 URL 示例，用来验证 `render_mode: url`
 - `tests/work-canvas/node-fixture/server.mjs`：本地 node fixture，用来模拟独立 node/web 应用 URL
+- `../app_examples/bounce-game`：前端仓库外的静态 HTML 应用示例，测试时通过 HTTP URL 嵌入
+- `../app_examples/derivative-game`：前端仓库外的 Node 应用示例，测试时由示例项目自己启动服务，再把 URL 交给前端
 
 后续接入真实上游时，前端应只消费统一 artifact contract，而不是依赖这些开发例子：
 

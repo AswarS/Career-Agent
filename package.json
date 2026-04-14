@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "dev:node-canvas-fixture": "node tests/work-canvas/dev-node-canvas-fixture.mjs",
+    "dev:app-examples": "node tests/work-canvas/dev-app-examples.mjs",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest --run",

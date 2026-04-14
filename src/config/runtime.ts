@@ -9,6 +9,8 @@ export interface RuntimeEnvLike {
   VITE_CAREER_AGENT_ENABLE_VOICE_INPUT?: string;
   VITE_CAREER_AGENT_TRUSTED_CANVAS_ORIGINS?: string;
   VITE_CAREER_AGENT_NODE_CANVAS_FIXTURE_URL?: string;
+  VITE_CAREER_AGENT_HTML_APP_EXAMPLE_URL?: string;
+  VITE_CAREER_AGENT_NODE_APP_EXAMPLE_URL?: string;
 }
 
 export interface RuntimeConfig {
@@ -19,6 +21,8 @@ export interface RuntimeConfig {
   voiceInputEnabled: boolean;
   trustedCanvasOrigins: string[];
   nodeCanvasFixtureUrl: string | null;
+  htmlAppExampleUrl: string | null;
+  nodeAppExampleUrl: string | null;
   upstreamConfigured: boolean;
 }
 
@@ -108,6 +112,8 @@ export function resolveRuntimeConfig(env: RuntimeEnvLike): RuntimeConfig {
     voiceInputEnabled: normalizeBoolean(env.VITE_CAREER_AGENT_ENABLE_VOICE_INPUT),
     trustedCanvasOrigins: normalizeTrustedCanvasOrigins(env.VITE_CAREER_AGENT_TRUSTED_CANVAS_ORIGINS),
     nodeCanvasFixtureUrl: normalizeOptionalUrl(env.VITE_CAREER_AGENT_NODE_CANVAS_FIXTURE_URL),
+    htmlAppExampleUrl: normalizeOptionalUrl(env.VITE_CAREER_AGENT_HTML_APP_EXAMPLE_URL),
+    nodeAppExampleUrl: normalizeOptionalUrl(env.VITE_CAREER_AGENT_NODE_APP_EXAMPLE_URL),
     upstreamConfigured: clientMode === 'upstream' && Boolean(apiBaseUrl),
   };
 }

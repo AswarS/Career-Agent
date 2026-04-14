@@ -88,7 +88,8 @@ export type ArtifactType =
   | 'career-roadmap'
   | 'mock-interview'
   | 'coding-assessment'
-  | 'visual-learning';
+  | 'visual-learning'
+  | 'app-example';
 
 interface ArtifactRecordBase {
   id: string;

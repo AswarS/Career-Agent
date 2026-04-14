@@ -8,6 +8,7 @@ The goal is to prove that the frontend host can safely render:
 - inline `html` artifacts via `srcdoc`
 - same-origin `url` artifacts
 - trusted cross-origin node/web app URLs
+- external app-example URLs from the sibling `../app_examples` folder
 
 ## Current Example Coverage
 
@@ -22,15 +23,16 @@ These already exist in the mock artifact data:
 
 They validate the `html` / `srcdoc` path and do not need a separate server.
 
-### 2. Same-origin URL example
+### 2. Same-origin URL fixture
 
 This already exists in:
 
 - `public/mock-node-canvas/index.html`
 
 It validates the `url` host path without introducing a second origin.
+It is a legacy host fixture, not the source of truth for external app examples.
 
-### 3. Cross-origin node fixture example
+### 3. Cross-origin node fixture
 
 Run:
 
@@ -68,6 +70,48 @@ It does not own or boot the real node project used by the upstream team.
 For local validation, we still need one small running app to represent a real
 node/web canvas surface.
 That is what `node-fixture/server.mjs` is for.
+
+### 4. External app examples
+
+These examples live outside this frontend repository:
+
+- `../app_examples/bounce-game`
+- `../app_examples/derivative-game`
+
+The frontend only receives and embeds their URLs.
+It does not copy their source code and does not manage their runtime.
+
+For the static HTML example, serve the folder over HTTP:
+
+```bash
+APP_EXAMPLES_DIR="../app_examples"
+python3 -m http.server 4320 --directory "$APP_EXAMPLES_DIR/bounce-game"
+```
+
+For the Node example, run the app from its own folder:
+
+```bash
+APP_EXAMPLES_DIR="../app_examples"
+cd "$APP_EXAMPLES_DIR/derivative-game"
+npm start
+```
+
+Then start the frontend with the app-example URLs and iframe allowlist:
+
+```bash
+npm run dev:app-examples -- --host 127.0.0.1 --port 4173
+```
+
+Open these mock threads:
+
+- `/threads/thread-009`: static HTML app URL
+- `/threads/thread-010`: Node app URL
+
+If both examples need to be visible at the same time, run three terminals:
+
+- one for the static HTML server
+- one for the Node app server
+- one for the frontend dev server
 
 ## What To Verify
 

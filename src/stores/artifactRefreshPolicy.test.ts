@@ -11,6 +11,8 @@ describe('shouldSimulateArtifactRefreshLifecycle', () => {
       voiceInputEnabled: false,
       trustedCanvasOrigins: [],
       nodeCanvasFixtureUrl: null,
+      htmlAppExampleUrl: null,
+      nodeAppExampleUrl: null,
       upstreamConfigured: false,
     })).toBe(true);
   });
@@ -24,6 +26,8 @@ describe('shouldSimulateArtifactRefreshLifecycle', () => {
       voiceInputEnabled: false,
       trustedCanvasOrigins: [],
       nodeCanvasFixtureUrl: null,
+      htmlAppExampleUrl: null,
+      nodeAppExampleUrl: null,
       upstreamConfigured: true,
     })).toBe(false);
   });

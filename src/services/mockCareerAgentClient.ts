@@ -34,6 +34,33 @@ function buildCanvasFixtureUrl(options: { revision?: number; scenario?: string }
   }
 }
 
+const htmlAppExampleUrl = runtimeConfig.htmlAppExampleUrl?.trim() || null;
+const nodeAppExampleUrl = runtimeConfig.nodeAppExampleUrl?.trim() || null;
+
+const htmlAppExampleThreads: ThreadSummary[] = htmlAppExampleUrl
+  ? [
+      {
+        id: 'thread-009',
+        title: 'HTML 应用示例',
+        preview: '从外部静态 HTML 示例 URL 打开弹跳小球页面。',
+        updatedAt: '2026-04-14T13:10:00Z',
+        status: 'active',
+      },
+    ]
+  : [];
+
+const nodeAppExampleThreads: ThreadSummary[] = nodeAppExampleUrl
+  ? [
+      {
+        id: 'thread-010',
+        title: 'Node 应用示例',
+        preview: '从外部 Node 示例 URL 打开求导挑战页面。',
+        updatedAt: '2026-04-14T13:16:00Z',
+        status: 'active',
+      },
+    ]
+  : [];
+
 const threads: ThreadSummary[] = [
   {
     id: 'thread-001',
@@ -91,7 +118,77 @@ const threads: ThreadSummary[] = [
     updatedAt: '2026-04-14T11:48:00Z',
     status: 'active',
   },
+  ...htmlAppExampleThreads,
+  ...nodeAppExampleThreads,
 ];
+
+const htmlAppExampleMessages: ThreadMessage[] = htmlAppExampleUrl
+  ? [
+      {
+        id: 'message-018',
+        threadId: 'thread-009',
+        role: 'user',
+        kind: 'markdown',
+        content: '请打开外部静态 HTML 示例，验证前端只接收 URL 后能嵌入工作画布。',
+        createdAt: '2026-04-14 13:10',
+      },
+      {
+        id: 'message-019',
+        threadId: 'thread-009',
+        role: 'assistant',
+        kind: 'markdown',
+        agentId: 'agent-canvas',
+        agentName: '画布助手',
+        agentAccent: 'amber',
+        content:
+          '这个线程验证的是 **静态 HTML 应用 URL** 路径。\n\n示例应用来自前端同级目录 `../app_examples/bounce-game`。前端不会读取本机文件路径，也不会复制示例源码；本地测试时需要先把这个目录通过 HTTP 服务托管，然后只把 URL 交给工作画布。',
+        actions: [
+          {
+            id: 'action-open-html-app-example',
+            kind: 'open-artifact',
+            label: '打开 HTML 示例',
+            artifactId: 'artifact-html-app-example',
+            viewMode: 'focus',
+          },
+        ],
+        createdAt: '2026-04-14 13:11',
+      },
+    ]
+  : [];
+
+const nodeAppExampleMessages: ThreadMessage[] = nodeAppExampleUrl
+  ? [
+      {
+        id: 'message-020',
+        threadId: 'thread-010',
+        role: 'user',
+        kind: 'markdown',
+        content: '请打开外部 Node 项目示例，验证前端只接收后端返回的应用 URL。',
+        createdAt: '2026-04-14 13:16',
+      },
+      {
+        id: 'message-021',
+        threadId: 'thread-010',
+        role: 'assistant',
+        kind: 'markdown',
+        agentId: 'agent-canvas',
+        agentName: '画布助手',
+        agentAccent: 'blue',
+        content:
+          '这个线程验证的是 **Node / Web 应用 URL** 路径。\n\n示例应用来自 `../app_examples/derivative-game`。前端职责只到“收到受信任 URL 并嵌入 iframe”；Node 服务的启动、端口、依赖和生命周期都应由后端或外部运行流程负责。',
+        actions: [
+          {
+            id: 'action-open-node-app-example',
+            kind: 'open-artifact',
+            label: '打开 Node 示例',
+            artifactId: 'artifact-node-app-example',
+            viewMode: 'focus',
+          },
+        ],
+        createdAt: '2026-04-14 13:17',
+      },
+    ]
+  : [];
 
 const messagesByThread: Record<string, ThreadMessage[]> = {
   'thread-001': [
@@ -356,6 +453,8 @@ const messagesByThread: Record<string, ThreadMessage[]> = {
       createdAt: '2026-04-14 11:49',
     },
   ],
+  ...(htmlAppExampleMessages.length ? { 'thread-009': htmlAppExampleMessages } : {}),
+  ...(nodeAppExampleMessages.length ? { 'thread-010': nodeAppExampleMessages } : {}),
 };
 
 let profile: ProfileRecord = {
@@ -1384,6 +1483,46 @@ function buildCareerRoadmapArtifact(revision: number, updatedAt = '2026-04-07T18
   };
 }
 
+function buildHtmlAppExampleArtifact(revision: number, updatedAt = '2026-04-14T13:11:00Z'): ArtifactRecord {
+  const url = htmlAppExampleUrl ?? '';
+
+  return {
+    id: 'artifact-html-app-example',
+    type: 'app-example',
+    title: '弹跳小球 HTML 示例',
+    status: url ? 'ready' : 'error',
+    renderMode: 'url',
+    revision,
+    updatedAt,
+    summary: url
+      ? '从外部静态 HTML 示例服务加载，验证前端只消费 URL 的工作画布路径。'
+      : '需要配置 VITE_CAREER_AGENT_HTML_APP_EXAMPLE_URL 后才能加载静态 HTML 示例。',
+    payload: {
+      url,
+    },
+  };
+}
+
+function buildNodeAppExampleArtifact(revision: number, updatedAt = '2026-04-14T13:17:00Z'): ArtifactRecord {
+  const url = nodeAppExampleUrl ?? '';
+
+  return {
+    id: 'artifact-node-app-example',
+    type: 'app-example',
+    title: '求导挑战 Node 示例',
+    status: url ? 'ready' : 'error',
+    renderMode: 'url',
+    revision,
+    updatedAt,
+    summary: url
+      ? '从外部 Node 项目服务加载，验证前端嵌入后端返回 URL 的工作画布路径。'
+      : '需要配置 VITE_CAREER_AGENT_NODE_APP_EXAMPLE_URL 后才能加载 Node 示例。',
+    payload: {
+      url,
+    },
+  };
+}
+
 function buildRefreshedArtifact(currentArtifact: ArtifactRecord): ArtifactRecord {
   const nextRevision = currentArtifact.revision + 1;
   const refreshedAt = new Date().toISOString();
@@ -1416,6 +1555,14 @@ function buildRefreshedArtifact(currentArtifact: ArtifactRecord): ArtifactRecord
         url: buildCanvasFixtureUrl({ revision: nextRevision, scenario: 'career-roadmap' }),
       },
     };
+  }
+
+  if (currentArtifact.id === 'artifact-html-app-example') {
+    return buildHtmlAppExampleArtifact(nextRevision, refreshedAt);
+  }
+
+  if (currentArtifact.id === 'artifact-node-app-example') {
+    return buildNodeAppExampleArtifact(nextRevision, refreshedAt);
   }
 
   if (currentArtifact.id === 'artifact-weekly-plan') {
@@ -1492,6 +1639,8 @@ const artifacts: ArtifactRecord[] = [
   buildMockInterviewArtifact(1),
   buildCodingAssessmentArtifact(1),
   buildVisualLearningArtifact(1),
+  ...(htmlAppExampleUrl ? [buildHtmlAppExampleArtifact(1)] : []),
+  ...(nodeAppExampleUrl ? [buildNodeAppExampleArtifact(1)] : []),
 ];
 
 export function createMockCareerAgentClient(): CareerAgentClient {

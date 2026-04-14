@@ -204,7 +204,7 @@ describe('normalizeThreadMessage', () => {
         {
           id: 'video-001',
           type: 'video',
-          src: 'FILE:///Users/fancy/code/frontend/test_video.mp4',
+          src: 'FILE:///tmp/test_video.mp4',
           title: '不应展示的本地视频',
         },
         {

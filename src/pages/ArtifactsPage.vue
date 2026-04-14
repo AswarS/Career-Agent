@@ -27,6 +27,8 @@ function formatArtifactType(artifact: ArtifactRecord) {
       return '代码题';
     case 'visual-learning':
       return '可视化学习';
+    case 'app-example':
+      return '应用示例';
     default:
       return artifact.type;
   }

@@ -1,5 +1,7 @@
 import { createServer } from 'node:http';
 
+// Legacy cross-origin host fixture. External app examples live outside this
+// repo, usually in a sibling ../app_examples folder.
 const host = process.env.HOST || '127.0.0.1';
 const parsedPort = Number(process.env.PORT);
 const port = Number.isFinite(parsedPort) && parsedPort > 0 ? parsedPort : 4318;
