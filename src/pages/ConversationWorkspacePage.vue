@@ -37,7 +37,7 @@ async function handleMessageAction(action: MessageAction) {
 </script>
 
 <template>
-  <section class="page-section">
+  <section class="page-section conversation-page">
     <header class="page-header">
       <div>
         <p class="eyebrow">对话工作台</p>
@@ -48,43 +48,79 @@ async function handleMessageAction(action: MessageAction) {
       </p>
     </header>
 
-    <section v-if="messagesStatus === 'loading'" class="state-card">
-      <p class="eyebrow">加载中</p>
-      <h2>正在加载会话消息...</h2>
+    <section class="conversation-scroll-region" aria-label="会话消息">
+      <section v-if="messagesStatus === 'loading'" class="state-card">
+        <p class="eyebrow">加载中</p>
+        <h2>正在加载会话消息...</h2>
+      </section>
+
+      <section v-else-if="messagesStatus === 'error'" class="state-card error">
+        <p class="eyebrow">错误</p>
+        <h2>消息加载失败。</h2>
+        <p>{{ errorMessage ?? '发生未知会话错误。' }}</p>
+      </section>
+
+      <section v-else-if="messages.length === 0" class="state-card">
+        <p class="eyebrow">空状态</p>
+        <h2>这个会话还没有消息。</h2>
+        <p>可以使用底部浮动输入区创建第一条本地草稿消息。</p>
+      </section>
+
+      <section v-else class="message-stream">
+        <ConversationMessageCard
+          v-for="message in messages"
+          :key="message.id"
+          :message="message"
+          :multi-agent-mode="multiAgentMode"
+          @action="handleMessageAction"
+        />
+      </section>
     </section>
 
-    <section v-else-if="messagesStatus === 'error'" class="state-card error">
-      <p class="eyebrow">错误</p>
-      <h2>消息加载失败。</h2>
-      <p>{{ errorMessage ?? '发生未知会话错误。' }}</p>
+    <section class="composer-dock" aria-label="浮动输入区">
+      <ConversationComposer :disabled="messagesStatus === 'loading'" @submit="handleSubmit" />
     </section>
-
-    <section v-else-if="messages.length === 0" class="state-card">
-      <p class="eyebrow">空状态</p>
-      <h2>这个会话还没有消息。</h2>
-      <p>可以使用下方输入区创建第一条本地草稿消息。</p>
-    </section>
-
-    <section v-else class="message-stream">
-      <ConversationMessageCard
-        v-for="message in messages"
-        :key="message.id"
-        :message="message"
-        :multi-agent-mode="multiAgentMode"
-        @action="handleMessageAction"
-      />
-    </section>
-
-    <ConversationComposer :disabled="messagesStatus === 'loading'" @submit="handleSubmit" />
   </section>
 </template>
 
 <style scoped>
 @import './shared-page.css';
 
+.conversation-page {
+  height: calc(100vh - (var(--workspace-padding, 18px) * 2));
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+
+.conversation-scroll-region {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 2px 6px 4px 0;
+  scroll-padding-bottom: 24px;
+}
+
 .message-stream {
   display: grid;
   gap: 14px;
+  align-content: start;
+}
+
+.composer-dock {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  padding-top: 14px;
+  background:
+    linear-gradient(180deg, rgba(243, 239, 231, 0), var(--color-bg) 42%),
+    radial-gradient(circle at 18% 70%, rgba(217, 240, 235, 0.72), transparent 44%);
+}
+
+.composer-dock :deep(.composer-card) {
+  border-color: color-mix(in srgb, var(--color-border-strong) 72%, transparent);
+  background: color-mix(in srgb, var(--color-surface) 92%, white);
+  box-shadow: 0 24px 70px rgba(35, 49, 59, 0.16);
+  backdrop-filter: blur(18px);
 }
 
 .state-card {
@@ -118,4 +154,5 @@ async function handleMessageAction(action: MessageAction) {
   color: var(--color-text-muted);
   line-height: 1.7;
 }
+
 </style>

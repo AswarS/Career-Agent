@@ -24,12 +24,9 @@ function handleSubmit() {
 </script>
 
 <template>
-  <section class="composer-card">
+  <div class="composer-card">
     <div class="composer-head">
-      <div>
-        <p class="eyebrow">输入区</p>
-        <h2>以文本输入为主，多模态入口暂时预留。</h2>
-      </div>
+      <p class="eyebrow">输入区</p>
       <div class="composer-tools">
         <button type="button" class="tool-button" disabled>图片</button>
         <button type="button" class="tool-button" disabled>语音</button>
@@ -46,20 +43,20 @@ function handleSubmit() {
 
     <div class="composer-footer">
       <p class="support-copy">
-        当前行为由 mock 数据驱动。发送后会追加本地草稿消息，并保留前端契约边界。
+        文本输入已启用，图片和语音入口暂时预留；发送后会追加本地草稿消息。
       </p>
       <button type="button" class="primary-button" :disabled="!canSubmit" @click="handleSubmit">
         发送
       </button>
     </div>
-  </section>
+  </div>
 </template>
 
 <style scoped>
 .composer-card {
   display: grid;
-  gap: 14px;
-  padding: 22px;
+  gap: 10px;
+  padding: 14px;
   border-radius: 24px;
   border: 1px solid var(--color-border);
   background: var(--color-surface);
@@ -69,26 +66,18 @@ function handleSubmit() {
 .composer-head,
 .composer-footer {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
 
 .eyebrow {
-  margin: 0 0 8px;
+  margin: 0;
   color: var(--color-text-muted);
   font-size: 0.78rem;
   font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-}
-
-h2 {
-  margin: 0;
-  color: var(--color-text);
-  font-family: var(--font-display);
-  font-size: 1.2rem;
-  line-height: 1.15;
 }
 
 .composer-tools {
@@ -99,7 +88,7 @@ h2 {
 .tool-button,
 .primary-button {
   border-radius: 999px;
-  padding: 0.72rem 0.95rem;
+  padding: 0.58rem 0.86rem;
   font: inherit;
   font-weight: 700;
 }
@@ -111,20 +100,23 @@ h2 {
 }
 
 .composer-input {
-  min-height: 132px;
+  min-height: 76px;
+  max-height: 180px;
   resize: vertical;
   border: 1px solid var(--color-border);
   border-radius: 18px;
-  padding: 14px 16px;
+  padding: 12px 14px;
   background: var(--color-surface-strong);
   color: var(--color-text);
+  line-height: 1.55;
 }
 
 .support-copy {
   max-width: 52ch;
   margin: 0;
   color: var(--color-text-muted);
-  line-height: 1.6;
+  font-size: 0.84rem;
+  line-height: 1.45;
 }
 
 .primary-button {
