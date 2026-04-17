@@ -399,7 +399,7 @@ User-Separate 分支 (career-agent/User-Separate)
 
 | 子项 | 状态 | 说明 |
 |------|------|------|
-| 3a. `backend/src/server/SessionManager.ts` | ⬜ 未开始 | |
+| 3a. `backend/src/server/SessionManager.ts` | ✅ 已完成 | 16 tests, 35 assertions |
 | 3b. `backend/src/services/api/client.ts` 服务模式 | ⬜ 未开始 | |
 | 3c. `backend/src/server/permissions.ts` | ✅ 已完成 | checkToolPermission，4 种模式 |
 
