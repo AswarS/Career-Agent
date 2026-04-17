@@ -314,3 +314,149 @@ describe('CLI compatibility', () => {
     expect(isServerMode()).toBe(false)
   })
 })
+
+// ---------------------------------------------------------------------------
+// 6. Full ALS accessor isolation (Task 1e comprehensive)
+// ---------------------------------------------------------------------------
+describe('ALS accessor isolation (1e comprehensive)', () => {
+  // Import additional accessors for testing
+  const stateModule = require('../src/bootstrap/state.js')
+
+  test('getCwdState / setCwdState are ALS-routed', () => {
+    const ctxA = makeSessionContext('cwd-A', { cwd: '/path/a' })
+    const ctxB = makeSessionContext('cwd-B', { cwd: '/path/b' })
+
+    let cwdA: string | undefined
+    let cwdB: string | undefined
+
+    runWithSessionContext(ctxA, () => {
+      cwdA = stateModule.getCwdState()
+    })
+    runWithSessionContext(ctxB, () => {
+      cwdB = stateModule.getCwdState()
+    })
+
+    expect(cwdA).toBe('/path/a')
+    expect(cwdB).toBe('/path/b')
+  })
+
+  test('setCwdState in one session does not affect another', () => {
+    const ctxA = makeSessionContext('cwd-A', { cwd: '/original' })
+    const ctxB = makeSessionContext('cwd-B', { cwd: '/original' })
+
+    runWithSessionContext(ctxA, () => {
+      stateModule.setCwdState('/changed-by-A')
+    })
+
+    let cwdB: string | undefined
+    runWithSessionContext(ctxB, () => {
+      cwdB = stateModule.getCwdState()
+    })
+
+    expect(cwdB).toBe('/original')
+  })
+
+  test('getTotalCostUSD / addToTotalCostState are ALS-routed', () => {
+    const ctxA = makeSessionContext('cost-A', { totalCostUSD: 0 })
+    const ctxB = makeSessionContext('cost-B', { totalCostUSD: 0 })
+
+    runWithSessionContext(ctxA, () => {
+      stateModule.addToTotalCostState(10, { inputTokens: 100, outputTokens: 50 } as any, 'model-a')
+    })
+
+    let costA: number | undefined
+    let costB: number | undefined
+
+    runWithSessionContext(ctxA, () => {
+      costA = stateModule.getTotalCostUSD()
+    })
+    runWithSessionContext(ctxB, () => {
+      costB = stateModule.getTotalCostUSD()
+    })
+
+    expect(costA).toBe(10)
+    expect(costB).toBe(0)
+  })
+
+  test('getIsInteractive / setIsInteractive are ALS-routed', () => {
+    const ctxA = makeSessionContext('inter-A', { isInteractive: false })
+    const ctxB = makeSessionContext('inter-B', { isInteractive: false })
+
+    runWithSessionContext(ctxA, () => {
+      stateModule.setIsInteractive(true)
+    })
+
+    let interA: boolean | undefined
+    let interB: boolean | undefined
+
+    runWithSessionContext(ctxA, () => {
+      interA = stateModule.getIsInteractive()
+    })
+    runWithSessionContext(ctxB, () => {
+      interB = stateModule.getIsInteractive()
+    })
+
+    expect(interA).toBe(true)
+    expect(interB).toBe(false)
+  })
+
+  test('getOriginalCwd / setOriginalCwd are ALS-routed', () => {
+    const ctxA = makeSessionContext('ocwd-A', { originalCwd: '/original' })
+
+    runWithSessionContext(ctxA, () => {
+      stateModule.setOriginalCwd('/new-cwd')
+    })
+
+    let result: string | undefined
+    runWithSessionContext(ctxA, () => {
+      result = stateModule.getOriginalCwd()
+    })
+
+    expect(result).toBe('/new-cwd')
+  })
+
+  test('multiple mutations in one session are isolated', () => {
+    const ctxA = makeSessionContext('multi-A', {
+      totalCostUSD: 0,
+      isInteractive: false,
+      cwd: '/start',
+    })
+    const ctxB = makeSessionContext('multi-B', {
+      totalCostUSD: 0,
+      isInteractive: false,
+      cwd: '/start',
+    })
+
+    // Mutate A in many ways
+    runWithSessionContext(ctxA, () => {
+      stateModule.addToTotalCostState(5, { inputTokens: 50 } as any, 'm1')
+      stateModule.setIsInteractive(true)
+      stateModule.setCwdState('/changed')
+    })
+
+    // Verify B is unaffected
+    let costB: number | undefined
+    let interB: boolean | undefined
+    let cwdB: string | undefined
+
+    runWithSessionContext(ctxB, () => {
+      costB = stateModule.getTotalCostUSD()
+      interB = stateModule.getIsInteractive()
+      cwdB = stateModule.getCwdState()
+    })
+
+    expect(costB).toBe(0)
+    expect(interB).toBe(false)
+    expect(cwdB).toBe('/start')
+  })
+
+  test('accessors return global STATE when outside ALS context', () => {
+    resetStateForTests()
+
+    // These should not throw and should return valid defaults
+    expect(typeof stateModule.getCwdState()).toBe('string')
+    expect(stateModule.getTotalCostUSD()).toBe(0)
+    expect(stateModule.getIsInteractive()).toBe(false)
+    expect(typeof stateModule.getSessionId()).toBe('string')
+  })
+})
