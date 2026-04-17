@@ -22,6 +22,7 @@ import type { SettingSource } from 'src/utils/settings/constants.js'
 import { resetSettingsCache } from 'src/utils/settings/settingsCache.js'
 import type { PluginHookMatcher } from 'src/utils/settings/types.js'
 import { createSignal } from 'src/utils/signal.js'
+import { getSessionContext } from '../server/SessionContext.js'
 
 // Union type for registered hooks - can be SDK callbacks or native plugin hooks
 type RegisteredHookMatcher = HookCallbackMatcher | PluginHookMatcher
@@ -428,7 +429,14 @@ function getInitialState(): State {
 // AND ESPECIALLY HERE
 const STATE: State = getInitialState()
 
+export function createIsolatedState(overrides: Partial<State> = {}): State {
+  const state = getInitialState()
+  return { ...state, ...overrides }
+}
+
 export function getSessionId(): SessionId {
+  const ctx = getSessionContext()
+  if (ctx) return ctx.state.sessionId
   return STATE.sessionId
 }
 
@@ -469,15 +477,23 @@ export function switchSession(
   sessionId: SessionId,
   projectDir: string | null = null,
 ): void {
-  // Drop the outgoing session's plan-slug entry so the Map stays bounded
-  // across repeated /resume. Only the current session's slug is ever read
-  // (plans.ts getPlanSlug defaults to getSessionId()).
-  STATE.planSlugCache.delete(STATE.sessionId)
-  STATE.sessionId = sessionId
-  STATE.sessionProjectDir = projectDir
-  sessionSwitched.emit(sessionId)
+  const ctx = getSessionContext()
+  if (ctx) {
+    // Server mode: route to per-session state and signal
+    ctx.state.planSlugCache.delete(ctx.state.sessionId)
+    ctx.state.sessionId = sessionId
+    ctx.state.sessionProjectDir = projectDir
+    ctx.sessionSwitched.emit(sessionId)
+  } else {
+    // CLI mode: use global STATE and signal
+    STATE.planSlugCache.delete(STATE.sessionId)
+    STATE.sessionId = sessionId
+    STATE.sessionProjectDir = projectDir
+    sessionSwitched.emit(sessionId)
+  }
 }
 
+// Module-level signal for CLI mode (single user)
 const sessionSwitched = createSignal<[id: SessionId]>()
 
 /**
@@ -485,8 +501,19 @@ const sessionSwitched = createSignal<[id: SessionId]>()
  * sessionId. bootstrap can't import listeners directly (DAG leaf), so
  * callers register themselves. concurrentSessions.ts uses this to keep the
  * PID file's sessionId in sync with --resume.
+ *
+ * In server mode, this subscribes to the per-session signal in the current
+ * ALS context. In CLI mode, it subscribes to the global signal.
  */
-export const onSessionSwitch = sessionSwitched.subscribe
+export function onSessionSwitch(
+  listener: (id: SessionId) => void,
+): () => void {
+  const ctx = getSessionContext()
+  if (ctx) {
+    return ctx.sessionSwitched.subscribe(listener)
+  }
+  return sessionSwitched.subscribe(listener)
+}
 
 /**
  * Project directory the current session's transcript lives in, or `null` if
