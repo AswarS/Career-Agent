@@ -21,6 +21,7 @@ import {
   getIsNonInteractiveSession,
   getSessionId,
 } from '../../bootstrap/state.js'
+import { getSessionContext } from '../../server/SessionContext.js'
 import { getOauthConfig } from '../../constants/oauth.js'
 import { isDebugToStdErr, logForDebugging } from '../../utils/debug.js'
 import {
@@ -98,6 +99,25 @@ export async function getAnthropicClient({
   fetchOverride?: ClientOptions['fetch']
   source?: string
 }): Promise<Anthropic> {
+  // Server mode fast path: use session's apiKey/baseUrl directly
+  const sessionCtx = getSessionContext()
+  if (sessionCtx) {
+    if (sessionCtx.anthropicClient) return sessionCtx.anthropicClient
+    const client = new Anthropic({
+      apiKey: sessionCtx.config.apiKey ?? apiKey,
+      baseURL: sessionCtx.config.baseUrl,
+      maxRetries,
+      defaultHeaders: {
+        'x-app': 'cli',
+        'User-Agent': getUserAgent(),
+        'X-Claude-Code-Session-Id': getSessionId(),
+      },
+      ...(fetchOverride ? { fetch: fetchOverride } : {}),
+    })
+    sessionCtx.anthropicClient = client
+    return client
+  }
+
   const containerId = process.env.CLAUDE_CODE_CONTAINER_ID
   const remoteSessionId = process.env.CLAUDE_CODE_REMOTE_SESSION_ID
   const clientApp = process.env.CLAUDE_AGENT_SDK_CLIENT_APP

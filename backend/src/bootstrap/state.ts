@@ -1124,6 +1124,15 @@ export function setIsInteractive(value: boolean): void {
   getState().isInteractive = value
 }
 
+/**
+ * Check if running in headless mode (no Ink UI rendering).
+ * In server mode (when ALS context exists), SessionContext.isHeadless is always true.
+ * In CLI mode, headless when non-interactive (print/-p mode).
+ */
+export function getIsHeadless(): boolean {
+  return !STATE.isInteractive
+}
+
 export function getClientType(): string {
   return getState().clientType
 }
