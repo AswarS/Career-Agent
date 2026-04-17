@@ -255,6 +255,12 @@ type State = {
   // logAPISuccess to tag the first post-compaction API call so we can
   // distinguish compaction-induced cache misses from TTL expiry.
   pendingPostCompaction: boolean
+  // --- Per-session turn budget tracking (moved from module-level lets) ---
+  outputTokensAtTurnStart: number
+  currentTurnTokenBudget: number | null
+  budgetContinuationCount: number
+  // Per-session interaction time dirty flag
+  interactionTimeDirty: boolean
 }
 
 // ALSO HERE - THINK THRICE BEFORE MODIFYING
@@ -421,6 +427,12 @@ function getInitialState(): State {
     lastMainRequestId: undefined,
     lastApiCompletionTimestamp: null,
     pendingPostCompaction: false,
+    // Per-session turn budget tracking
+    outputTokensAtTurnStart: 0,
+    currentTurnTokenBudget: null,
+    budgetContinuationCount: 0,
+    // Per-session interaction time dirty flag
+    interactionTimeDirty: false,
   }
 
   return state
@@ -710,13 +722,11 @@ export function setStatsStore(
  * Without it the timestamp stays stale until the next render, which may never
  * come if the user is idle (e.g. permission dialog waiting for input).
  */
-let interactionTimeDirty = false
-
 export function updateLastInteractionTime(immediate?: boolean): void {
   if (immediate) {
     flushInteractionTime_inner()
   } else {
-    interactionTimeDirty = true
+    getState().interactionTimeDirty = true
   }
 }
 
@@ -726,14 +736,15 @@ export function updateLastInteractionTime(immediate?: boolean): void {
  * a single Date.now() call.
  */
 export function flushInteractionTime(): void {
-  if (interactionTimeDirty) {
+  if (getState().interactionTimeDirty) {
     flushInteractionTime_inner()
   }
 }
 
 function flushInteractionTime_inner(): void {
-  getState().lastInteractionTime = Date.now()
-  interactionTimeDirty = false
+  const s = getState()
+  s.lastInteractionTime = Date.now()
+  s.interactionTimeDirty = false
 }
 
 export function addToTotalLinesChanged(added: number, removed: number): void {
@@ -770,25 +781,23 @@ export function getTotalWebSearchRequests(): number {
   return sumBy(Object.values(getState().modelUsage), 'webSearchRequests')
 }
 
-let outputTokensAtTurnStart = 0
-let currentTurnTokenBudget: number | null = null
 export function getTurnOutputTokens(): number {
-  return getTotalOutputTokens() - outputTokensAtTurnStart
+  return getTotalOutputTokens() - getState().outputTokensAtTurnStart
 }
 export function getCurrentTurnTokenBudget(): number | null {
-  return currentTurnTokenBudget
+  return getState().currentTurnTokenBudget
 }
-let budgetContinuationCount = 0
 export function snapshotOutputTokensForTurn(budget: number | null): void {
-  outputTokensAtTurnStart = getTotalOutputTokens()
-  currentTurnTokenBudget = budget
-  budgetContinuationCount = 0
+  const s = getState()
+  s.outputTokensAtTurnStart = getTotalOutputTokens()
+  s.currentTurnTokenBudget = budget
+  s.budgetContinuationCount = 0
 }
 export function getBudgetContinuationCount(): number {
-  return budgetContinuationCount
+  return getState().budgetContinuationCount
 }
 export function incrementBudgetContinuationCount(): void {
-  budgetContinuationCount++
+  getState().budgetContinuationCount++
 }
 
 export function setHasUnknownModelCost(): void {
@@ -975,9 +984,6 @@ export function resetStateForTests(): void {
   Object.entries(getInitialState()).forEach(([key, value]) => {
     STATE[key as keyof State] = value as never
   })
-  outputTokensAtTurnStart = 0
-  currentTurnTokenBudget = null
-  budgetContinuationCount = 0
   sessionSwitched.clear()
 }
 
