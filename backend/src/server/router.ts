@@ -3,8 +3,9 @@
  *
  * Endpoints:
  *   GET  /v1/health            — Health check
- *   GET  /v1/sessions          — List all sessions
- *   POST /v1/sessions          — Create new session
+ *   GET  /v1/sessions          — List all active sessions
+ *   POST /v1/sessions          — Create new session (supports resumeFrom)
+ *   GET  /v1/sessions/history  — List past session files (JSONL transcripts)
  *   GET  /v1/sessions/:id      — Get session info
  *   DELETE /v1/sessions/:id    — Destroy session
  *   POST /v1/sessions/:id/message — Send message (SSE streaming)
@@ -13,6 +14,8 @@
 import type { SessionManager } from './SessionManager.js'
 import type { ServerConfig } from './types.js'
 import { runWithSessionContext } from './SessionContext.js'
+import { createResumedQueryEngine, listSessionHistory } from './sessionResume.js'
+import { getProjectDir } from '../utils/sessionStoragePortable.js'
 
 type RouteMethod = 'GET' | 'POST' | 'DELETE' | 'PUT' | 'PATCH'
 
@@ -122,12 +125,30 @@ function createSessionRoute(): Route {
           permissions: body.permissions as any | undefined,
         })
 
+        // If resumeFrom is specified, load the previous session's history
+        // into the new session's QueryEngine
+        const resumeFrom = body.resumeFrom as string | undefined
+        let resumedMessageCount: number | undefined
+
+        if (resumeFrom) {
+          const result = await createResumedQueryEngine(context, resumeFrom)
+          if (!result.success) {
+            // Resume failed — destroy the new session and return error
+            await manager.destroySession(sessionId)
+            return errorResponse(result.error, 404)
+          }
+          resumedMessageCount = result.messageCount
+        }
+
         return json(
           {
             id: sessionId,
             createdAt: context.createdAt,
             cwd: context.config.cwd,
             ...(context.config.model ? { model: context.config.model } : {}),
+            ...(resumedMessageCount !== undefined
+              ? { resumedFrom: resumeFrom, resumedMessageCount }
+              : {}),
           },
           201,
         )
@@ -159,6 +180,26 @@ function getSessionRoute(): Route {
         wsConnections: session.context.wsConnections.size,
         ...(session.context.config.model ? { model: session.context.config.model } : {}),
       })
+    },
+  }
+}
+
+function sessionHistoryRoute(): Route {
+  return {
+    method: 'GET',
+    pattern: /^\/v1\/sessions\/history$/,
+    handler: async (_params, req, _config, manager?: SessionManager) => {
+      // Parse optional cwd query param to determine project directory
+      const url = new URL(req.url)
+      const cwd = url.searchParams.get('cwd') ?? process.cwd()
+      const projectDir = getProjectDir(cwd)
+
+      try {
+        const entries = await listSessionHistory(projectDir)
+        return json({ sessions: entries })
+      } catch (err: any) {
+        return errorResponse(`Failed to list session history: ${err.message}`, 500)
+      }
     },
   }
 }
@@ -261,6 +302,7 @@ export function createRouter(manager: SessionManager, config: ServerConfig) {
     healthRoute(manager),
     listSessionsRoute(),
     createSessionRoute(),
+    sessionHistoryRoute(),
     getSessionRoute(),
     deleteSessionRoute(),
     messageRoute(),
