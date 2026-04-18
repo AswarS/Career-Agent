@@ -116,13 +116,14 @@ function createSessionRoute(): Route {
       }
 
       try {
-        const { sessionId, context } = manager.createSession({
+        const { sessionId, context } = await manager.createSession({
           apiKey: body.apiKey as string | undefined,
           baseUrl: body.baseUrl as string | undefined,
           provider: body.provider as string | undefined,
           model: body.model as string | undefined,
           cwd: body.cwd as string | undefined,
           permissions: body.permissions as any | undefined,
+          mcpServers: body.mcpServers as any | undefined,
         })
 
         // If resumeFrom is specified, load the previous session's history

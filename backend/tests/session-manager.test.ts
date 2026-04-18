@@ -27,8 +27,8 @@ describe('SessionManager', () => {
     manager.stopIdleSweeper()
   })
 
-  test('createSession returns valid session with unique ID', () => {
-    const { sessionId, context } = manager.createSession()
+  test('createSession returns valid session with unique ID', async () => {
+    const { sessionId, context } = await manager.createSession()
     expect(typeof sessionId).toBe('string')
     expect(sessionId.length).toBeGreaterThan(0)
     expect(context.sessionId).toBe(sessionId)
@@ -38,15 +38,15 @@ describe('SessionManager', () => {
     expect(context.wsConnections.size).toBe(0)
   })
 
-  test('each session gets a unique ID', () => {
-    const a = manager.createSession()
-    const b = manager.createSession()
+  test('each session gets a unique ID', async () => {
+    const a = await manager.createSession()
+    const b = await manager.createSession()
     expect(a.sessionId).not.toBe(b.sessionId)
   })
 
-  test('each session gets independent STATE', () => {
-    const a = manager.createSession({ cwd: '/workspace/a' })
-    const b = manager.createSession({ cwd: '/workspace/b' })
+  test('each session gets independent STATE', async () => {
+    const a = await manager.createSession({ cwd: '/workspace/a' })
+    const b = await manager.createSession({ cwd: '/workspace/b' })
 
     expect(a.context.state.cwd).not.toBe(b.context.state.cwd)
     expect(a.context.state.totalCostUSD).toBe(0)
@@ -54,8 +54,8 @@ describe('SessionManager', () => {
     expect(b.context.state.totalCostUSD).toBe(0)
   })
 
-  test('getSession retrieves created session', () => {
-    const { sessionId } = manager.createSession()
+  test('getSession retrieves created session', async () => {
+    const { sessionId } = await manager.createSession()
     const session = manager.getSession(sessionId)
     expect(session).toBeDefined()
     expect(session!.context.sessionId).toBe(sessionId)
@@ -65,15 +65,15 @@ describe('SessionManager', () => {
     expect(manager.getSession('nonexistent')).toBeUndefined()
   })
 
-  test('getAllSessions returns all sessions', () => {
-    manager.createSession()
-    manager.createSession()
-    manager.createSession()
+  test('getAllSessions returns all sessions', async () => {
+    await manager.createSession()
+    await manager.createSession()
+    await manager.createSession()
     expect(manager.getAllSessions().size).toBe(3)
   })
 
   test('destroySession removes the session', async () => {
-    const { sessionId } = manager.createSession()
+    const { sessionId } = await manager.createSession()
     expect(manager.getSession(sessionId)).toBeDefined()
 
     const result = await manager.destroySession(sessionId)
@@ -87,24 +87,24 @@ describe('SessionManager', () => {
   })
 
   test('destroyAllSessions removes all sessions', async () => {
-    manager.createSession()
-    manager.createSession()
-    manager.createSession()
+    await manager.createSession()
+    await manager.createSession()
+    await manager.createSession()
 
     const count = await manager.destroyAllSessions()
     expect(count).toBe(3)
     expect(manager.getAllSessions().size).toBe(0)
   })
 
-  test('maxSessions limit is enforced', () => {
+  test('maxSessions limit is enforced', async () => {
     for (let i = 0; i < 5; i++) {
-      manager.createSession()
+      await manager.createSession()
     }
-    expect(() => manager.createSession()).toThrow('Maximum sessions reached')
+    await expect(manager.createSession()).rejects.toThrow('Maximum sessions reached')
   })
 
-  test('session context is usable with ALS', () => {
-    const { sessionId, context } = manager.createSession()
+  test('session context is usable with ALS', async () => {
+    const { sessionId, context } = await manager.createSession()
 
     let capturedId: string | undefined
     let capturedIsServer: boolean = false
@@ -119,8 +119,8 @@ describe('SessionManager', () => {
     expect(isServerMode()).toBe(false) // Outside context
   })
 
-  test('session options are applied to config', () => {
-    const { context } = manager.createSession({
+  test('session options are applied to config', async () => {
+    const { context } = await manager.createSession({
       apiKey: 'sk-test-key',
       baseUrl: 'https://custom-api.example.com',
       provider: 'firstParty',
@@ -135,8 +135,8 @@ describe('SessionManager', () => {
     expect(context.config.permissions?.mode).toBe('deny_dangerous')
   })
 
-  test('touchSession updates lastActivityAt', () => {
-    const { sessionId } = manager.createSession()
+  test('touchSession updates lastActivityAt', async () => {
+    const { sessionId } = await manager.createSession()
     const before = manager.getSession(sessionId)!.lastActivityAt
 
     // Wait a tiny bit
@@ -149,15 +149,15 @@ describe('SessionManager', () => {
   })
 
   test('destroyed session aborts its AbortController', async () => {
-    const { sessionId, context } = manager.createSession()
+    const { sessionId, context } = await manager.createSession()
     expect(context.abortController.signal.aborted).toBe(false)
 
     await manager.destroySession(sessionId)
     expect(context.abortController.signal.aborted).toBe(true)
   })
 
-  test('handleWebSocketConnection adds ws to session', () => {
-    const { sessionId } = manager.createSession()
+  test('handleWebSocketConnection adds ws to session', async () => {
+    const { sessionId } = await manager.createSession()
     const ws = { close: () => {}, addEventListener: () => {} }
 
     manager.handleWebSocketConnection(ws, sessionId)

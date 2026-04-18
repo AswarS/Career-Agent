@@ -154,9 +154,9 @@ describe('isHeadless flag', () => {
     expect(ctx.isHeadless).toBe(true)
   })
 
-  test('SessionManager.createSession always sets isHeadless to true', () => {
+  test('SessionManager.createSession always sets isHeadless to true', async () => {
     const mgr = new SessionManager(TEST_CONFIG)
-    const { context } = mgr.createSession()
+    const { context } = await mgr.createSession()
     expect(context.isHeadless).toBe(true)
   })
 
@@ -199,8 +199,8 @@ describe('getIsHeadless() accessor', () => {
   test('returns true for multiple independent sessions', async () => {
     const getIsHeadless = await getGetIsHeadless()
     const mgr = new SessionManager(TEST_CONFIG)
-    const s1 = mgr.createSession()
-    const s2 = mgr.createSession()
+    const s1 = await mgr.createSession()
+    const s2 = await mgr.createSession()
 
     let r1: boolean = false
     let r2: boolean = false
@@ -228,13 +228,13 @@ describe('end-to-end session lifecycle', () => {
     manager.stopIdleSweeper()
   })
 
-  test('create session with apiKey -> verify config.apiKey', () => {
-    const { context } = manager.createSession({ apiKey: 'sk-e2e-key' })
+  test('create session with apiKey -> verify config.apiKey', async () => {
+    const { context } = await manager.createSession({ apiKey: 'sk-e2e-key' })
     expect(context.config.apiKey).toBe('sk-e2e-key')
   })
 
-  test('sessionId inside ALS matches the created session', () => {
-    const { sessionId, context } = manager.createSession()
+  test('sessionId inside ALS matches the created session', async () => {
+    const { sessionId, context } = await manager.createSession()
     let capturedId: string | undefined
     runWithSessionContext(context, () => {
       capturedId = getSessionContext()?.sessionId
@@ -243,7 +243,7 @@ describe('end-to-end session lifecycle', () => {
   })
 
   test('destroySession removes the session from manager', async () => {
-    const { sessionId } = manager.createSession()
+    const { sessionId } = await manager.createSession()
     expect(manager.getSession(sessionId)).toBeDefined()
 
     const result = await manager.destroySession(sessionId)
@@ -252,7 +252,7 @@ describe('end-to-end session lifecycle', () => {
   })
 
   test('destroySession aborts the AbortController', async () => {
-    const { sessionId, context } = manager.createSession()
+    const { sessionId, context } = await manager.createSession()
     expect(context.abortController.signal.aborted).toBe(false)
 
     await manager.destroySession(sessionId)
@@ -260,8 +260,8 @@ describe('end-to-end session lifecycle', () => {
   })
 
   test('multiple sessions coexist without state leakage', async () => {
-    const s1 = manager.createSession({ apiKey: 'sk-s1', cwd: '/ws/s1' })
-    const s2 = manager.createSession({ apiKey: 'sk-s2', cwd: '/ws/s2' })
+    const s1 = await manager.createSession({ apiKey: 'sk-s1', cwd: '/ws/s1' })
+    const s2 = await manager.createSession({ apiKey: 'sk-s2', cwd: '/ws/s2' })
 
     expect(s1.context.config.apiKey).toBe('sk-s1')
     expect(s2.context.config.apiKey).toBe('sk-s2')
@@ -274,8 +274,8 @@ describe('end-to-end session lifecycle', () => {
     expect(manager.getSession(s2.sessionId)).toBeDefined()
   })
 
-  test('createSession with permissions sets config.permissions correctly', () => {
-    const { context } = manager.createSession({
+  test('createSession with permissions sets config.permissions correctly', async () => {
+    const { context } = await manager.createSession({
       apiKey: 'sk-perm',
       permissions: { mode: 'deny_dangerous', deniedTools: ['rm'] },
     })
@@ -284,28 +284,28 @@ describe('end-to-end session lifecycle', () => {
     expect(context.config.permissions?.deniedTools).toEqual(['rm'])
   })
 
-  test('workspace falls back to config.workspace when cwd not specified', () => {
-    const { context } = manager.createSession()
+  test('workspace falls back to config.workspace when cwd not specified', async () => {
+    const { context } = await manager.createSession()
     expect(context.config.cwd).toBe(TEST_CONFIG.workspace)
   })
 
-  test('session cwd override takes precedence over workspace default', () => {
-    const { context } = manager.createSession({ cwd: '/custom/path' })
+  test('session cwd override takes precedence over workspace default', async () => {
+    const { context } = await manager.createSession({ cwd: '/custom/path' })
     expect(context.config.cwd).toBe('/custom/path')
   })
 
   test('destroyAllSessions returns the correct count', async () => {
-    manager.createSession({ apiKey: 'sk-1' })
-    manager.createSession({ apiKey: 'sk-2' })
-    manager.createSession({ apiKey: 'sk-3' })
+    await manager.createSession({ apiKey: 'sk-1' })
+    await manager.createSession({ apiKey: 'sk-2' })
+    await manager.createSession({ apiKey: 'sk-3' })
 
     const count = await manager.destroyAllSessions()
     expect(count).toBe(3)
     expect(manager.getAllSessions().size).toBe(0)
   })
 
-  test('touchSession updates lastActivityAt', () => {
-    const { sessionId } = manager.createSession()
+  test('touchSession updates lastActivityAt', async () => {
+    const { sessionId } = await manager.createSession()
     const before = manager.getSession(sessionId)!.lastActivityAt
 
     const start = Date.now()

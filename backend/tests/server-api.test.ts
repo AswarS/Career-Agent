@@ -116,8 +116,8 @@ describe('Router — no auth', () => {
     })
 
     test('reflects active session count', async () => {
-      manager.createSession()
-      manager.createSession()
+      await manager.createSession()
+      await manager.createSession()
 
       const resp = await router.handleRequest(
         new Request('http://localhost:8080/v1/health'),
@@ -139,8 +139,8 @@ describe('Router — no auth', () => {
     })
 
     test('returns list with created sessions', async () => {
-      const s1 = manager.createSession({ cwd: '/ws/a' })
-      const s2 = manager.createSession({ cwd: '/ws/b' })
+      const s1 = await manager.createSession({ cwd: '/ws/a' })
+      const s2 = await manager.createSession({ cwd: '/ws/b' })
 
       const resp = await router.handleRequest(
         new Request('http://localhost:8080/v1/sessions'),
@@ -207,7 +207,7 @@ describe('Router — no auth', () => {
 
   describe('GET /v1/sessions/:id', () => {
     test('returns session details for valid session', async () => {
-      const { sessionId } = manager.createSession({ cwd: '/test/workspace' })
+      const { sessionId } = await manager.createSession({ cwd: '/test/workspace' })
 
       const resp = await router.handleRequest(
         new Request(`http://localhost:8080/v1/sessions/${sessionId}`),
@@ -232,7 +232,7 @@ describe('Router — no auth', () => {
 
   describe('DELETE /v1/sessions/:id', () => {
     test('destroys an existing session and returns 200', async () => {
-      const { sessionId } = manager.createSession()
+      const { sessionId } = await manager.createSession()
 
       const resp = await router.handleRequest(
         new Request(`http://localhost:8080/v1/sessions/${sessionId}`, { method: 'DELETE' }),
@@ -256,7 +256,7 @@ describe('Router — no auth', () => {
 
   describe('POST /v1/sessions/:id/message', () => {
     test('returns SSE stream with correct events', async () => {
-      const { sessionId } = manager.createSession()
+      const { sessionId } = await manager.createSession()
 
       const resp = await router.handleRequest(
         new Request(`http://localhost:8080/v1/sessions/${sessionId}/message`, {
@@ -288,7 +288,7 @@ describe('Router — no auth', () => {
     })
 
     test('returns 400 when content is missing', async () => {
-      const { sessionId } = manager.createSession()
+      const { sessionId } = await manager.createSession()
 
       const resp = await router.handleRequest(
         new Request(`http://localhost:8080/v1/sessions/${sessionId}/message`, {
@@ -381,9 +381,9 @@ describe('WebSocket — handleWsMessage', () => {
   let manager: SessionManager
   let sessionId: string
 
-  beforeEach(() => {
+  beforeEach(async () => {
     manager = new SessionManager(NO_AUTH_CONFIG)
-    const result = manager.createSession()
+    const result = await manager.createSession()
     sessionId = result.sessionId
   })
 

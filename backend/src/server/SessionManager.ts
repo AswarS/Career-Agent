@@ -14,6 +14,7 @@ import { createSignal } from '../utils/signal.js'
 import { cleanupSessionResources, cleanupWithTimeout } from './cleanup.js'
 import type { SessionId } from '../types/ids.js'
 import { createQueryEngineForSession } from './queryEngineFactory.js'
+import { McpSessionManager, type SessionMcpConfig } from './mcpSessionManager.js'
 
 export type CreateSessionOptions = {
   apiKey?: string
@@ -22,11 +23,13 @@ export type CreateSessionOptions = {
   model?: string
   cwd?: string
   permissions?: SessionConfig['permissions']
+  mcpServers?: Record<string, SessionMcpConfig>
 }
 
 export type ManagedSession = {
   context: SessionContext
   lastActivityAt: number
+  mcpManager: McpSessionManager | null
 }
 
 export class SessionManager {
@@ -41,7 +44,7 @@ export class SessionManager {
   /**
    * Create a new isolated session with its own STATE, workspace, and clients.
    */
-  createSession(opts: CreateSessionOptions = {}): { sessionId: string; context: SessionContext } {
+  async createSession(opts: CreateSessionOptions = {}): Promise<{ sessionId: string; context: SessionContext }> {
     if (this.sessions.size >= (this.config.maxSessions ?? 100)) {
       throw new Error(`Maximum sessions reached (${this.config.maxSessions ?? 100})`)
     }
@@ -82,14 +85,28 @@ export class SessionManager {
     }
 
     // Create the QueryEngine — this gives the session full LLM + tool capabilities
+    let mcpManager: McpSessionManager | null = null
+
+    if (opts.mcpServers && Object.keys(opts.mcpServers).length > 0) {
+      mcpManager = new McpSessionManager()
+      try {
+        await mcpManager.connectAll(opts.mcpServers)
+        // Update context with MCP clients and tools
+        context.mcpClients = mcpManager.getConnectedClients()
+      } catch (err) {
+        console.warn(`[SessionManager] MCP connection failed for session ${sessionId}:`, err)
+      }
+    }
+
     try {
-      context.queryEngine = createQueryEngineForSession(context)
+      const mcpTools = mcpManager?.getMcpTools() ?? []
+      context.queryEngine = createQueryEngineForSession(context, { mcpTools })
     } catch (err) {
       console.warn(`[SessionManager] Failed to create QueryEngine for session ${sessionId}:`, err)
       // Session still works in echo mode if QueryEngine creation fails
     }
 
-    this.sessions.set(sessionId, { context, lastActivityAt: Date.now() })
+    this.sessions.set(sessionId, { context, lastActivityAt: Date.now(), mcpManager })
 
     return { sessionId, context }
   }
@@ -125,6 +142,13 @@ export class SessionManager {
   async destroySession(sessionId: string): Promise<boolean> {
     const session = this.sessions.get(sessionId)
     if (!session) return false
+
+    // Disconnect MCP servers first
+    if (session.mcpManager) {
+      await session.mcpManager.disconnectAll().catch((err) => {
+        console.warn(`[SessionManager] MCP disconnect failed for ${sessionId}:`, err)
+      })
+    }
 
     await cleanupWithTimeout(() =>
       cleanupSessionResources({

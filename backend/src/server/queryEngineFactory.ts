@@ -15,7 +15,7 @@ import type { ToolPermissionContext } from '../Tool.js'
 import { getEmptyToolPermissionContext } from '../Tool.js'
 import type { AppState } from '../state/AppStateStore.js'
 import type { DeepImmutable } from '../types/utils.js'
-import { getTools } from '../tools.js'
+import { getTools, assembleToolPool } from '../tools.js'
 import type { Command } from '../commands.js'
 import type { CanUseToolFn } from '../hooks/useCanUseTool.js'
 import type { PermissionDecision } from '../utils/permissions/permissions.js'
@@ -159,6 +159,7 @@ export function createQueryEngineForSession(
     commands?: Command[]
     initialMessages?: any[]
     readFileCache?: FileStateCache
+    mcpTools?: any[]
   } = {},
 ): QueryEngine {
   const { getAppState, setAppState } = createServerAppState(context.config.permissions)
@@ -167,13 +168,19 @@ export function createQueryEngineForSession(
 
   // Get the full tool set — this includes Read, Write, Edit, Bash, Glob, Grep, etc.
   // getTools filters based on toolPermissionContext and features.
-  const tools = getTools(toolPermissionContext)
+  const builtInTools = getTools(toolPermissionContext)
+
+  // Merge MCP tools if provided
+  const mcpTools = options.mcpTools ?? []
+  const tools = mcpTools.length > 0
+    ? assembleToolPool(toolPermissionContext, mcpTools)
+    : builtInTools
 
   const config: QueryEngineConfig = {
     cwd: context.config.cwd,
     tools,
     commands: options.commands ?? [],
-    mcpClients: [],
+    mcpClients: context.mcpClients ?? [],
     agents: [],
     canUseTool,
     getAppState,
