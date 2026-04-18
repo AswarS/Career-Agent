@@ -386,52 +386,78 @@ User-Separate 分支 (career-agent/User-Separate)
 | 1f. `cwd.ts` 无需改 | ✅ 无需修改 | 链路 `pwd()` → `getCwdState()` → 自动路由 per-session |
 | 测试 | ✅ 已完成 | `backend/tests/batch1-isolation.test.ts` — 28 tests, 53 assertions, 全部通过 |
 
-### 第 2 批：服务器骨架 🔧 进行中
+### 第 2 批：服务器骨架 ✅ 已完成
 
 | 子项 | 状态 | 说明 |
 |------|------|------|
-| 2a. `backend/src/server/index.ts` | ⬜ 未开始 | Bun.serve 入口 |
-| 2b. `backend/src/main.tsx` http-serve 子命令 | ⬜ 未开始 | Commander 注册 |
+| 2a. `backend/src/server/index.ts` | ✅ 已完成 | Bun.serve 入口，含 WS upgrade、graceful shutdown |
+| 2b. `backend/src/main.tsx` http-serve 子命令 | ✅ 已完成 | Commander 注册，CLI 选项解析 |
 | 2c. `backend/src/server/config.ts` | ✅ 已完成 | parseServerConfig，CLI/env/default 优先级 |
-| 2d. `backend/package.json` http-serve 脚本 | ⬜ 未开始 | |
+| 2d. `backend/package.json` http-serve 脚本 | ✅ 已完成 | 基于 main 分支创建，路径适配 backend/ 结构 |
 
-### 第 3 批：会话管理 + API 客户端 🔧 进行中
+### 第 3 批：会话管理 + API 客户端 ✅ 已完成
 
 | 子项 | 状态 | 说明 |
 |------|------|------|
 | 3a. `backend/src/server/SessionManager.ts` | ✅ 已完成 | 16 tests, 35 assertions |
-| 3b. `backend/src/services/api/client.ts` 服务模式 | ⬜ 未开始 | |
+| 3b. `backend/src/services/api/client.ts` 服务模式 | ✅ 已完成 | ALS 检测 → session apiKey/baseUrl 快速路径 |
 | 3c. `backend/src/server/permissions.ts` | ✅ 已完成 | checkToolPermission，4 种模式 |
 
-### 第 4 批：API 端点 + 可用性 🔧 进行中
+### 第 4 批：API 端点 + 可用性 ✅ 已完成
 
 | 子项 | 状态 | 说明 |
 |------|------|------|
-| 4a. `backend/src/server/router.ts` | ⬜ 未开始 | |
-| 4b. `backend/src/server/wsHandler.ts` | ⬜ 未开始 | |
-| 4c. `isHeadless` 标记 + Ink 解耦 | ⬜ 未开始 | |
+| 4a. `backend/src/server/router.ts` | ✅ 已完成 | REST API: health/sessions/message (SSE) |
+| 4b. `backend/src/server/wsHandler.ts` | ✅ 已完成 | ping/user_message/interrupt 协议 |
+| 4c. `isHeadless` 标记 + Ink 解耦 | ✅ 已完成 | getIsHeadless() 已通过 getState() ALS 路由 |
 | 4d. `backend/src/server/filesystemIsolation.ts` | ✅ 已完成 | validatePath 路径穿越防护 |
 | 4e. `backend/src/server/cleanup.ts` | ✅ 已完成 | WS/MCP/AbortController 资源清理 |
+
+### ALS 路由修复（2026-04-18）
+
+| 修复项 | 状态 | 说明 |
+|------|------|------|
+| `getIsHeadless()` ALS 路由 | ✅ 已修复 | `STATE.isInteractive` → `getState().isInteractive` |
+| `regenerateSessionId()` ALS 路由 | ✅ 已修复 | `STATE.*` → `getState().*` |
+| `SessionContext.ts` 填充 | ✅ 已修复 | Git 中的空文件已填充为完整实现（65 行） |
+| 测试 | ✅ 已完成 | `batch2-als-fixes.test.ts` — 12 tests, 31 assertions |
 
 ### 已有文件（User-Separate 分支）
 
 ```
 backend/src/server/
-  ├── SessionContext.ts          ✅ ALS 容器 (77 行)
+  ├── SessionContext.ts          ✅ ALS 容器 (65 行)
+  ├── SessionManager.ts          ✅ 会话管理 (216 行)
+  ├── config.ts                  ✅ 配置解析 (51 行)
+  ├── permissions.ts             ✅ 权限模型 (85 行)
+  ├── router.ts                  ✅ REST API (159 行)
+  ├── wsHandler.ts               ✅ WS 协议 (83 行)
+  ├── filesystemIsolation.ts     ✅ 路径隔离
+  ├── cleanup.ts                 ✅ 资源清理
+  ├── index.ts                   ✅ Bun.serve 入口 (68 行)
   ├── createDirectConnectSession.ts  (已有，不改)
   ├── directConnectManager.ts        (已有，不改)
-  └── types.ts                       (已有，2 批扩展)
+  └── types.ts                       (已有，已扩展)
 
 backend/src/bootstrap/
-  └── state.ts                   🔧 createIsolatedState 已加，ALS 路由未加
+  └── state.ts                   ✅ ALS 路由完成，所有 accessor 使用 getState()
 
-tests/
-  └── state-als.test.ts          ✅ 23 测试 47 断言（等 state.ts ALS 完成后可通过）
+backend/tests/
+  ├── batch1-isolation.test.ts   ✅ 28 tests, 53 assertions
+  ├── batch2-als-fixes.test.ts   ✅ 12 tests, 31 assertions
+  ├── session-manager.test.ts    ✅ 16 tests, 35 assertions
+  ├── server-api.test.ts         ✅
+  ├── server-integration.test.ts ✅
+  └── server-utilities.test.ts   ✅
+
+backend/package.json             ✅ 新建，含 http-serve 脚本
+backend/tsconfig.json            ✅ 新建，含 src/* 路径别名
 ```
 
-### 下一步行动
+### 下一步行动（第 5 批：V2 迭代）
 
-1. ~~**完成 1e**：为 state.ts 所有 accessor 注入 ALS routing~~ ✅
-2. ~~**完成 1c**：sessionSwitched 移入 SessionContext~~ ✅
-3. ~~运行测试确认全部通过~~ ✅ (28 tests, 53 assertions)
-4. **开始第 2 批**：服务器骨架 (index.ts, main.tsx http-serve, config.ts, package.json)
+1. **会话持久化与恢复**（server-sessions.json）
+2. **explicit 权限模式**（WS 实时确认）
+3. **CORS 白名单**
+4. **process.cwd() 全面替换**
+5. **QueryEngine 集成**（当前 router message 端点使用 echo 模式，需接入真实 QueryEngine）

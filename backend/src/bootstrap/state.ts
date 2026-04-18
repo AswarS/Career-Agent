@@ -467,18 +467,19 @@ export function getSessionId(): SessionId {
 export function regenerateSessionId(
   options: { setCurrentAsParent?: boolean } = {},
 ): SessionId {
+  const s = getState()
   if (options.setCurrentAsParent) {
-    STATE.parentSessionId = STATE.sessionId
+    s.parentSessionId = s.sessionId
   }
   // Drop the outgoing session's plan-slug entry so the Map doesn't
   // accumulate stale keys. Callers that need to carry the slug across
   // (REPL.tsx clearContext) read it before calling clearConversation.
-  STATE.planSlugCache.delete(STATE.sessionId)
+  s.planSlugCache.delete(s.sessionId)
   // Regenerated sessions live in the current project: reset projectDir to
   // null so getTranscriptPath() derives from originalCwd.
-  STATE.sessionId = randomUUID() as SessionId
-  STATE.sessionProjectDir = null
-  return STATE.sessionId
+  s.sessionId = randomUUID() as SessionId
+  s.sessionProjectDir = null
+  return s.sessionId
 }
 
 export function getParentSessionId(): SessionId | undefined {
@@ -1130,7 +1131,7 @@ export function setIsInteractive(value: boolean): void {
  * In CLI mode, headless when non-interactive (print/-p mode).
  */
 export function getIsHeadless(): boolean {
-  return !STATE.isInteractive
+  return !getState().isInteractive
 }
 
 export function getClientType(): string {
