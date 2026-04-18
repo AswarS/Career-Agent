@@ -21,6 +21,14 @@ export type ServerConfig = {
   maxSessions?: number
   /** Default workspace directory for sessions that don't specify cwd. */
   workspace?: string
+  /** CORS allowed origins. Default: ['*']. Set to specific domains for production. */
+  corsOrigins?: string[]
+  /** Max requests per minute per IP. 0 = unlimited. Default: 0. */
+  rateLimitPerMinute?: number
+  /** Max request body size in bytes. Default: 1MB. */
+  maxRequestBodyBytes?: number
+  /** Request timeout in ms. Default: 300000 (5 min). */
+  requestTimeoutMs?: number
 }
 
 export type SessionState =

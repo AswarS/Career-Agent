@@ -2,13 +2,15 @@
  * index.ts — Bun.serve entry point for multi-user HTTP API server
  *
  * Combines HTTP REST API with WebSocket support in a single Bun.serve instance.
- * Handles graceful shutdown, idle session cleanup, and request routing.
+ * Handles graceful shutdown, idle session cleanup, request routing,
+ * CORS, rate limiting, and structured logging.
  */
 
 import { parseServerConfig, DEFAULT_SERVER_CONFIG } from './config.js'
 import { SessionManager } from './SessionManager.js'
 import { createRouter } from './router.js'
 import { handleWsOpen, handleWsMessage } from './wsHandler.js'
+import { runMiddleware, finalizeResponse, cleanupRateLimitStore } from './middleware.js'
 import type { ServerConfig } from './types.js'
 
 export async function startServer(rawConfig?: Partial<ServerConfig>): Promise<void> {
@@ -19,6 +21,13 @@ export async function startServer(rawConfig?: Partial<ServerConfig>): Promise<vo
   // Start idle session sweeper
   if ((config.idleTimeoutMs ?? 0) > 0) {
     manager.startIdleSweeper()
+  }
+
+  // Rate limit cleanup interval (every 2 minutes)
+  let rateLimitCleanupTimer: ReturnType<typeof setInterval> | null = null
+  if ((config.rateLimitPerMinute ?? 0) > 0) {
+    rateLimitCleanupTimer = setInterval(cleanupRateLimitStore, 120_000)
+    if (rateLimitCleanupTimer.unref) rateLimitCleanupTimer.unref()
   }
 
   const server = Bun.serve({
@@ -34,8 +43,19 @@ export async function startServer(rawConfig?: Partial<ServerConfig>): Promise<vo
         if (upgraded) return // WebSocket handled
       }
 
+      // Run middleware (CORS, rate limiting, body size)
+      const middlewareResult = runMiddleware(req, config)
+      if (middlewareResult.type === 'response') {
+        return middlewareResult.response
+      }
+
+      const { requestId, startTime } = middlewareResult
+
       // HTTP REST API
-      return router.handleRequest(req)
+      const response = await router.handleRequest(req)
+
+      // Finalize response with CORS headers and request logging
+      return finalizeResponse(req, response, config, requestId, startTime)
     },
 
     websocket: {
@@ -63,11 +83,18 @@ export async function startServer(rawConfig?: Partial<ServerConfig>): Promise<vo
   } else {
     console.log('[Server] Authentication: disabled')
   }
+  if ((config.rateLimitPerMinute ?? 0) > 0) {
+    console.log(`[Server] Rate limit: ${config.rateLimitPerMinute} req/min per IP`)
+  }
+  if (config.corsOrigins && !config.corsOrigins.includes('*')) {
+    console.log(`[Server] CORS origins: ${config.corsOrigins.join(', ')}`)
+  }
 
   // Graceful shutdown
   const shutdown = async () => {
     console.log('\n[Server] Shutting down...')
     manager.stopIdleSweeper()
+    if (rateLimitCleanupTimer) clearInterval(rateLimitCleanupTimer)
     const count = await manager.destroyAllSessions()
     console.log(`[Server] Destroyed ${count} sessions`)
     server.stop()

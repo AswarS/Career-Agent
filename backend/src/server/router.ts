@@ -15,6 +15,7 @@ import type { SessionManager } from './SessionManager.js'
 import type { ServerConfig } from './types.js'
 import { runWithSessionContext } from './SessionContext.js'
 import { createResumedQueryEngine, listSessionHistory } from './sessionResume.js'
+import { pwd } from '../utils/cwd.js'
 import { getProjectDir } from '../utils/sessionStoragePortable.js'
 
 type RouteMethod = 'GET' | 'POST' | 'DELETE' | 'PUT' | 'PATCH'
@@ -192,7 +193,7 @@ function sessionHistoryRoute(): Route {
     handler: async (_params, req, _config, manager?: SessionManager) => {
       // Parse optional cwd query param to determine project directory
       const url = new URL(req.url)
-      const cwd = url.searchParams.get('cwd') ?? process.cwd()
+      const cwd = url.searchParams.get('cwd') ?? pwd()
       const projectDir = getProjectDir(cwd)
 
       try {
@@ -287,7 +288,6 @@ function messageRoute(): Route {
         headers: {
           'Content-Type': 'text/event-stream',
           'Cache-Control': 'no-cache',
-          'Access-Control-Allow-Origin': '*',
         },
       })
     },
