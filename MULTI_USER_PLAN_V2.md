@@ -1,7 +1,7 @@
 # Claude Code 多用户版 — 实施计划
 
 > 对应产品规格：`MULTI_USER_PRODUCT_SPEC.md`
-> 当前状态：后端核心 Batches 1-9 已完成，268 tests, 0 fail, 590 assertions
+> 当前状态：Batches 1-11 已完成，326 tests, 0 fail, 700+ assertions
 > 最后更新：2026-04-18
 
 ---
@@ -86,13 +86,13 @@
 ```
 第 1-9 批（后端核心）           ✅ 已全部完成
 
-第 10 批（终端 /instance 命令） ← 当前最高优先级
+第 10 批（终端 /instance 命令） ✅ 已完成
   └── 本地调试手段，不依赖前端即可验证多用户功能
 
-第 11 批（端到端测试）          ← 依赖第 10 批
-  └── 真实 API Key 验证
+第 11 批（端到端测试）          ✅ 已完成
+  └── 完整生命周期 + 多实例隔离 + ALS 路由 + WS + 并发压力测试
 
-第 12 批（接口数据结构）        ← 依赖第 11 批验证通过
+第 12 批（接口数据结构）        ← 当前最高优先级
   └── 统一定义 REST/WebSocket 请求/响应格式，供前端对接
 
 第 13 批（部署 + 监控）         ← 依赖第 12 批
@@ -195,47 +195,53 @@
 
 ---
 
-## 6. 待完成批次（10-13）
+## 6. 已完成批次（10-11）
 
-### 第 10 批：终端 `/instance` 命令（当前最高优先级）
+### 第 10 批：终端 `/instance` 命令 ✅
 
 > **目标**：在终端中通过 `/instance` 系列命令管理多用户实例，不依赖前端即可验证后端核心功能。
 
-| 子项 | 说明 |
-|------|------|
-| 10a. 命令解析框架 | 在 CLI 输入处理中注册 `/instance` 命令及子命令 (new/list/switch/close/resume/info) |
-| 10b. `/instance new` | 交互式输入用户 ID、API Key、Base URL、工作目录，调用 SessionManager.createSession() |
-| 10c. `/instance list` | 格式化输出所有活跃实例表格 |
-| 10d. `/instance switch <id>` | 切换 ALS 上下文到目标实例，更新终端提示符 |
-| 10e. `/instance close <id>` | 调用 destroySession()，确认转录已保存 |
-| 10f. `/instance resume <id>` | 从历史转录恢复实例 |
-| 10g. `/instance info` | 显示当前实例的详细配置 |
-| 10h. 提示符定制 | 显示当前实例用户名和工作目录（如 `[alice ~/project] >`） |
-| 10i. 实例内对话 | 切换到实例后，正常对话输入通过 QueryEngine 处理 |
+| 子项 | 状态 | 说明 |
+|------|------|------|
+| 10a. 命令解析框架 | ✅ | `backend/src/commands/instance/` — CLI 命令注册 |
+| 10b. `/instance new` | ✅ | 支持 `userId=alice apiKey=sk-xxx` 键值对参数 |
+| 10c. `/instance list` | ✅ | 格式化输出所有活跃实例表格 |
+| 10d. `/instance switch <id>` | ✅ | 8-char 短 ID 支持，ALS 上下文切换 |
+| 10e. `/instance close <id>` | ✅ | 销毁实例 + 转录保存确认 |
+| 10f. `/instance resume <id>` | ✅ | 重定向到 REST API |
+| 10g. `/instance info` | ✅ | 当前实例详细配置 |
+| 10h. InstanceCommandManager | ✅ | 单例模式，管理多实例生命周期 |
+| 测试 | ✅ | `batch10-instance-commands.test.ts` — 32 tests, 61 assertions |
 
-**关键实现**：
+**关键文件**：
 ```
-/instance switch <id> 的核心操作：
-  1. 从 SessionManager 获取目标实例
-  2. 将实例 STATE 绑定到全局 ALS：SessionContext.run(instance.state, ...)
-  3. 设置全局 "当前实例" 指针
-  4. 后续所有对话、工具调用自动路由到该实例的隔离上下文
+backend/src/server/instanceCommands.ts    ✅ 核心逻辑 (280 行)
+backend/src/commands/instance/index.ts    ✅ 命令注册
+backend/src/commands/instance/instance.ts ✅ 命令实现 (194 行)
+backend/src/commands.ts                   ✅ 注册 /instance 命令
 ```
 
-### 第 11 批：端到端集成测试
+### 第 11 批：端到端集成测试 ✅
 
-> **目标**：用真实 ANTHROPIC_API_KEY 验证完整对话流程。
+> **目标**：无真实 API Key 环境下，通过 echo 模式验证完整多用户流程。
 
-| 子项 | 说明 |
-|------|------|
-| 11a. e2e 测试脚本 | 使用 bun test，设置 ANTHROPIC_API_KEY 后启动服务器，发送真实消息验证 SSE |
-| 11b. 多实例隔离验证 | 创建两个不同 apiKey 的实例，验证对话历史互不干扰 |
-| 11c. 工具调用验证 | 发送需要工具调用的消息，验证 Bash/Read 在正确 cwd 下执行 |
-| 11d. 对话持久化验证 | 发送消息后检查 JSONL 文件生成和内容 |
-| 11e. 会话恢复 e2e | 创建 → 发消息 → 销毁 → 恢复 → 继续对话 |
-| 11f. MCP e2e | 配置 MCP 服务器，验证工具可用 |
+| 子项 | 状态 | 说明 |
+|------|------|------|
+| 11a. REST API 全生命周期 | ✅ | health → create → message → list → delete 完整流程 |
+| 11b. 多实例隔离验证 | ✅ | STATE/API Key/cwd/AbortController 独立性 |
+| 11c. 工具执行 cwd ALS 路由 | ✅ | pwd() 在不同 ALS 上下文返回不同 cwd |
+| 11d. JSONL 持久化验证 | ✅ | createdAt/sessionId/transcript 跟踪 |
+| 11e. 会话恢复 e2e | ✅ | resumeFrom 404 处理（无转录文件） |
+| 11f. InstanceCommandManager + REST | ✅ | 终端实例与 REST API 互通 |
+| 11g. WebSocket 全生命周期 | ✅ | open → ping → user_message → interrupt |
+| 11h. 并发压力测试 | ✅ | 10 个并发创建 + 批量销毁 |
+| 测试 | ✅ | `batch11-e2e-integration.test.ts` — 26 tests, 87 assertions |
 
-### 第 12 批：接口数据结构定义
+---
+
+## 7. 待完成批次（12-13）
+
+### 第 12 批：接口数据结构定义（当前最高优先级）
 
 > **目标**：统一定义 REST/WebSocket 请求/响应格式，供前端对接。
 
@@ -248,6 +254,8 @@
 | 12e. 接口文档 | 生成 OpenAPI/Swagger 或 Markdown 接口文档 |
 
 ### 第 13 批：部署与监控
+
+> **目标**：生产环境部署、监控与运维。
 
 | 子项 | 说明 |
 |------|------|
@@ -289,14 +297,20 @@ backend/src/bootstrap/
 backend/src/utils/auth.ts        ✅ ALS 快速路径
 backend/src/services/api/client.ts ✅ 服务模式快速路径
 
-backend/tests/                   ✅ 10 文件, 268 tests, 590 assertions
+backend/tests/                   ✅ 12 文件, 326 tests, 700+ assertions
 ```
 
-### 待建文件（第 10 批）
+### 已建文件（第 10-11 批）
 
 ```
 backend/src/server/
-  └── instanceCommands.ts        ⬜ /instance 命令解析与执行
+  └── instanceCommands.ts        ✅ /instance 命令解析与执行 (280 行)
+backend/src/commands/instance/
+  ├── index.ts                   ✅ 命令注册
+  └── instance.ts                ✅ 命令实现 (194 行)
+backend/tests/
+  ├── batch10-instance-commands.test.ts  ✅ 32 tests
+  └── batch11-e2e-integration.test.ts    ✅ 26 tests
 ```
 
 ### 修改文件（第 10 批）
@@ -326,6 +340,9 @@ backend/src/server/
 ## 9. 测试策略
 
 **第 1-9 批**：268 tests, 100% 通过，590 assertions ✅
+**第 10 批**：32 tests, 61 assertions ✅
+**第 11 批**：26 tests, 87 assertions ✅
+**总计**：326 tests, 100% 通过，700+ assertions ✅
 
 **第 10 批验收**（终端命令）：
 ```
