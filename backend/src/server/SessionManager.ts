@@ -13,6 +13,7 @@ import { createIsolatedState } from '../bootstrap/state.js'
 import { createSignal } from '../utils/signal.js'
 import { cleanupSessionResources, cleanupWithTimeout } from './cleanup.js'
 import type { SessionId } from '../types/ids.js'
+import { createQueryEngineForSession } from './queryEngineFactory.js'
 
 export type CreateSessionOptions = {
   apiKey?: string
@@ -70,7 +71,7 @@ export class SessionManager {
       state,
       config: sessionConfig,
       anthropicClient: null, // Will be initialized lazily when first API call is made
-      queryEngine: null, // Will be initialized lazily
+      queryEngine: null, // Will be set below after context is assembled
       mcpClients: [],
       wsConnections: new Set(),
       abortController: new AbortController(),
@@ -78,6 +79,14 @@ export class SessionManager {
       lastActivityAt: Date.now(),
       isHeadless: true as const,
       sessionSwitched: createSignal<[id: SessionId]>(),
+    }
+
+    // Create the QueryEngine — this gives the session full LLM + tool capabilities
+    try {
+      context.queryEngine = createQueryEngineForSession(context)
+    } catch (err) {
+      console.warn(`[SessionManager] Failed to create QueryEngine for session ${sessionId}:`, err)
+      // Session still works in echo mode if QueryEngine creation fails
     }
 
     this.sessions.set(sessionId, { context, lastActivityAt: Date.now() })

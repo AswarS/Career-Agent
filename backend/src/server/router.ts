@@ -205,22 +205,37 @@ function messageRoute(): Route {
 
       // SSE stream
       const stream = new ReadableStream({
-        start(controller) {
+        async start(controller) {
           const encoder = new TextEncoder()
 
           const send = (event: string, data: unknown) => {
             controller.enqueue(encoder.encode(sseEvent(event, data)))
           }
 
-          runWithSessionContext(session.context, () => {
-            // V1: Echo response. V2 will integrate with QueryEngine.
-            send('session_id', { sessionId })
-            send('assistant', {
-              content: `[Echo] You said: ${content}`,
-              sessionId,
+          send('session_id', { sessionId })
+
+          // Use QueryEngine if available, otherwise fall back to echo mode
+          if (session.context.queryEngine) {
+            try {
+              for await (const msg of session.context.queryEngine.submitMessage(content)) {
+                send(msg.type, { ...msg, sessionId })
+              }
+              send('done', { sessionId })
+            } catch (err: any) {
+              if (err.name !== 'AbortError') {
+                send('error', { message: err.message ?? String(err), sessionId })
+              }
+            }
+          } else {
+            // Echo mode fallback — no QueryEngine available
+            runWithSessionContext(session.context, () => {
+              send('assistant', {
+                content: `[Echo] You said: ${content}`,
+                sessionId,
+              })
+              send('done', { sessionId })
             })
-            send('done', { sessionId })
-          })
+          }
 
           controller.close()
         },

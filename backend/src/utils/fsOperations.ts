@@ -13,6 +13,7 @@ import {
 import { homedir } from 'os'
 import * as nodePath from 'path'
 import { getErrnoCode } from './errors.js'
+import { pwd } from './cwd.js'
 import { slowLogging } from './slowOperations.js'
 
 /**
@@ -383,7 +384,7 @@ export function getPathsForPermissionCheck(inputPath: string): string[] {
 
 export const NodeFsOperations: FsOperations = {
   cwd() {
-    return process.cwd()
+    return pwd()
   },
 
   existsSync(fsPath) {
