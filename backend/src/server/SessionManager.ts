@@ -15,6 +15,7 @@ import { cleanupSessionResources, cleanupWithTimeout } from './cleanup.js'
 import type { SessionId } from '../types/ids.js'
 import { createQueryEngineForSession } from './queryEngineFactory.js'
 import { McpSessionManager, type SessionMcpConfig } from './mcpSessionManager.js'
+import { runWithSessionContext } from './SessionContext.js'
 
 export type CreateSessionOptions = {
   apiKey?: string
@@ -100,7 +101,12 @@ export class SessionManager {
 
     try {
       const mcpTools = mcpManager?.getMcpTools() ?? []
-      context.queryEngine = createQueryEngineForSession(context, { mcpTools })
+      // Run QueryEngine creation inside ALS context so that
+      // getAnthropicApiKeyWithSource() and getAnthropicClient() can find the
+      // per-session API key via getSessionContext().
+      context.queryEngine = runWithSessionContext(context, () =>
+        createQueryEngineForSession(context, { mcpTools }),
+      )
     } catch (err) {
       console.warn(`[SessionManager] Failed to create QueryEngine for session ${sessionId}:`, err)
       // Session still works in echo mode if QueryEngine creation fails

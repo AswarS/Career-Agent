@@ -80,7 +80,8 @@ export function handleWsOpen(ws: any, sessionId: string): void {
 
 /**
  * Handle a user_message from WebSocket.
- * V1: Echo response. V2 will integrate with QueryEngine.
+ * Routes to QueryEngine for real LLM conversations, falls back to echo if
+ * QueryEngine is not available.
  */
 function handleUserMessage(
   ws: any,
@@ -94,14 +95,57 @@ function handleUserMessage(
     return
   }
 
-  // Run within the session's ALS context
-  runWithSessionContext(context, () => {
-    // V1: Echo
-    sendWs(ws, {
-      type: 'assistant',
-      content: `[Echo] You said: ${content}`,
-      sessionId: context.sessionId,
+  // Use QueryEngine if available, otherwise echo
+  if (context.queryEngine) {
+    // Fire-and-forget async — errors are sent over the WebSocket
+    handleQueryEngineMessage(ws, content, context).catch((err: any) => {
+      sendWsError(ws, err.message ?? String(err))
     })
+  } else {
+    // Echo mode fallback — no QueryEngine available
+    runWithSessionContext(context, () => {
+      sendWs(ws, {
+        type: 'assistant',
+        content: `[Echo] You said: ${content}`,
+        sessionId: context.sessionId,
+      })
+    })
+  }
+}
+
+/**
+ * Stream a user message through the QueryEngine and send events over WebSocket.
+ * The entire async iteration runs inside the session's ALS context so that
+ * any code calling getSessionContext() (e.g. getAnthropicClient, getState)
+ * resolves to the correct per-session state.
+ */
+async function handleQueryEngineMessage(
+  ws: any,
+  content: string,
+  context: any,
+): Promise<void> {
+  await runWithSessionContext(context, async () => {
+    try {
+      for await (const msg of context.queryEngine.submitMessage(content)) {
+        // Check if WebSocket is still open before sending
+        if (ws.readyState !== 1 /* OPEN */) break
+
+        sendWs(ws, {
+          type: msg.type,
+          ...msg,
+          sessionId: context.sessionId,
+        })
+      }
+      sendWs(ws, { type: 'done', sessionId: context.sessionId })
+    } catch (err: any) {
+      if (err.name !== 'AbortError') {
+        sendWs(ws, {
+          type: 'error',
+          message: err.message ?? String(err),
+          sessionId: context.sessionId,
+        })
+      }
+    }
   })
 }
 
