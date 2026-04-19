@@ -1,7 +1,7 @@
 # Claude Code 多用户版 — 实施计划
 
 > 对应产品规格：`MULTI_USER_PRODUCT_SPEC.md`
-> 当前状态：Batches 1-11 已完成，326 tests, 0 fail, 740 assertions
+> 当前状态：Batches 1-12 已完成，347 tests, 0 fail, 788 assertions
 > 最后更新：2026-04-19
 
 ---
@@ -492,6 +492,38 @@ bun run dev
 /instance close abc12345
 ```
 
+#### 并行监控（后台发送 + 状态查看）
+
+```
+# 创建两个实例
+/instance new userId=alice apiKey=sk-ant-alice
+/instance new userId=bob apiKey=sk-ant-bob
+
+# 后台给 bob 发消息（不阻塞当前操作）
+/instance send bob 给我写一个排序算法
+# 输出: Background task started for bob (def67890). Use /instance logs bob to check result.
+
+# 同时在 alice 上正常对话（前台不阻塞）
+帮我写个 hello world
+
+# 查看所有实例状态（running/idle/done）
+/instance status
+# 输出:
+#  Instance status:
+#   * abc12345  alice        idle
+#     def67890  bob          done (5.2s)
+
+# 查看 bob 的后台响应
+/instance logs bob
+# 输出:
+# --- bob (def67890) ---
+#   Status: done | Time: 5.2s
+#   Response: 这是一个快速排序的实现...
+
+# 查看所有后台任务日志
+/instance logs
+```
+
 ### 10.4 运行测试套件
 
 ```bash
@@ -504,10 +536,10 @@ npx bun test
 npx bun test tests/batch11-e2e-integration.test.ts
 
 # 预期输出:
-#   326 pass
+#   347 pass
 #   0 fail
-#   740 expect() calls
-#   Ran 326 tests across 12 files.
+#   788 expect() calls
+#   Ran 347 tests across 13 files.
 ```
 
 ### 10.5 无 API Key 时的行为
