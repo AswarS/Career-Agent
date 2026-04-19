@@ -1,8 +1,8 @@
 # Claude Code 多用户版 — 实施计划
 
 > 对应产品规格：`MULTI_USER_PRODUCT_SPEC.md`
-> 当前状态：Batches 1-11 已完成，326 tests, 0 fail, 700+ assertions
-> 最后更新：2026-04-18
+> 当前状态：Batches 1-11 已完成，326 tests, 0 fail, 740 assertions
+> 最后更新：2026-04-19
 
 ---
 
@@ -371,31 +371,155 @@ curl -X POST http://localhost:9090/v1/sessions/<idB>/message -d '{"content":"Hel
 
 ---
 
-## 10. 运行方式
+## 10. 启动与测试
+
+### 10.1 前置条件
 
 ```bash
-# 开发调试（终端模式，/instance 命令）
-claude
+# 确认 bun 已安装
+bun --version   # 需要 >= 1.3.5
 
-# 后端服务模式
-bun run http-serve --port 9090 --auth-token secret
+# 进入后端目录
+cd backend
 
-# 创建会话
-curl -X POST http://localhost:9090/v1/sessions \
-  -H "Authorization: Bearer secret" \
-  -d '{"apiKey":"sk-ant-xxx","baseUrl":"https://api.anthropic.com"}'
-
-# 发消息
-curl -X POST http://localhost:9090/v1/sessions/<id>/message \
-  -H "Authorization: Bearer secret" \
-  -d '{"content":"Hello"}'
-
-# WebSocket
-new WebSocket('ws://localhost:9090/v1/sessions/<id>/ws?token=secret')
-
-# 销毁
-curl -X DELETE http://localhost:9090/v1/sessions/<id> -H "Authorization: Bearer secret"
+# 安装依赖（如 node_modules 不存在）
+bun install
 ```
+
+### 10.2 模式一：HTTP 服务器（REST / WebSocket API）
+
+```bash
+# 启动服务器
+bun run http-serve --port 9090 --auth-token mysecret
+
+# 可选参数
+#   --port <端口>           默认 8080
+#   --host <地址>           默认 0.0.0.0
+#   --auth-token <令牌>     无默认值（留空则不鉴权）
+#   --max-sessions <数量>   默认 100
+#   --idle-timeout <毫秒>   默认 1800000（30 分钟）
+#   --workspace <目录>      默认当前目录
+```
+
+#### 测试 API 端点
+
+```bash
+# 1. 健康检查
+curl http://localhost:9090/v1/health
+# 预期: {"status":"ok","sessions":0,"uptime":...}
+
+# 2. 创建 alice 的会话
+curl -X POST http://localhost:9090/v1/sessions \
+  -H "Authorization: Bearer mysecret" \
+  -H "Content-Type: application/json" \
+  -d '{"apiKey":"sk-ant-alice","userId":"alice"}'
+# 预期: 201, {"id":"...","createdAt":...,"cwd":"..."}
+
+# 3. 创建 bob 的会话
+curl -X POST http://localhost:9090/v1/sessions \
+  -H "Authorization: Bearer mysecret" \
+  -H "Content-Type: application/json" \
+  -d '{"apiKey":"sk-ant-bob","userId":"bob"}'
+# 预期: 201
+
+# 4. 列出所有会话
+curl -H "Authorization: Bearer mysecret" \
+  http://localhost:9090/v1/sessions
+# 预期: {"sessions":[...]}
+
+# 5. 给 alice 发消息（SSE 流式响应，用步骤 2 返回的 id）
+curl -N -X POST http://localhost:9090/v1/sessions/<alice-session-id>/message \
+  -H "Authorization: Bearer mysecret" \
+  -H "Content-Type: application/json" \
+  -d '{"content":"Hello, who are you?"}'
+# 预期: SSE 事件流 (event: start / content / end)
+# 无有效 apiKey 时回显 echo 消息；有有效 apiKey 时调用 LLM 返回真实响应
+
+# 6. 销毁会话
+curl -X DELETE http://localhost:9090/v1/sessions/<session-id> \
+  -H "Authorization: Bearer mysecret"
+# 预期: 200
+```
+
+#### WebSocket 测试（浏览器控制台）
+
+```javascript
+const ws = new WebSocket('ws://localhost:9090/v1/sessions/<session-id>/ws?token=mysecret')
+ws.onopen = () => ws.send(JSON.stringify({ type: 'user_message', content: 'Hello' }))
+ws.onmessage = (e) => console.log(JSON.parse(e.data))
+```
+
+### 10.3 模式二：交互式终端（/instance 命令）
+
+```bash
+# 启动交互式 CLI
+bun run dev
+```
+
+进入 CLI 后，在提示符 `>` 中输入以下命令：
+
+```
+# 查看帮助
+/instance help
+
+# 创建实例（无 apiKey 时降级 echo 模式）
+/instance new userId=alice apiKey=sk-ant-alice
+# 输出: Instance created: abc12345 | user: alice | cwd: default
+
+# 再创建一个实例
+/instance new userId=bob apiKey=sk-ant-bob
+
+# 列出所有实例
+/instance list
+# 输出: 表格，* 标记当前实例
+
+# 查看当前实例详情
+/instance info
+
+# 切换到 alice（支持 8 位短 ID）
+/instance switch abc12345
+
+# 正常对话（在 alice 的隔离上下文中）
+帮我写个 hello world
+
+# 切换到 bob
+/instance switch def67890
+
+# 在 bob 上下文中对话（完全隔离）
+帮我排序一个数组
+
+# 关闭实例（保存转录）
+/instance close abc12345
+```
+
+### 10.4 运行测试套件
+
+```bash
+cd backend
+
+# 运行全部测试
+npx bun test
+
+# 运行单个测试文件
+npx bun test tests/batch11-e2e-integration.test.ts
+
+# 预期输出:
+#   326 pass
+#   0 fail
+#   740 expect() calls
+#   Ran 326 tests across 12 files.
+```
+
+### 10.5 无 API Key 时的行为
+
+| 场景 | 行为 |
+|------|------|
+| 无 `apiKey` 创建会话 | 会话正常创建，QueryEngine 降级为 echo 模式（回显用户消息） |
+| 有有效 `apiKey` | QueryEngine 调用 Anthropic API，返回真实 LLM 响应 |
+| 有无效 `apiKey` | 会话创建成功，发消息时 QueryEngine 初始化失败，日志打印警告 |
+| 测试环境 | 326 个测试均不需要真实 API Key，使用 mock/echo 模式 |
+
+### 10.6 环境变量
 
 | 环境变量 | 默认值 |
 |---------|--------|
@@ -410,7 +534,7 @@ curl -X DELETE http://localhost:9090/v1/sessions/<id> -H "Authorization: Bearer 
 
 ## 11. 进度追踪
 
-> 最后更新：2026-04-18
+> 最后更新：2026-04-19
 
 ### 分支结构
 

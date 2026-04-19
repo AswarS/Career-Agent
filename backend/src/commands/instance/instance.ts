@@ -2,7 +2,7 @@
  * /instance command implementation
  *
  * Dispatches subcommands to InstanceCommandManager.
- * Usage: /instance new|list|switch|close|resume|info [args]
+ * Usage: /instance new|list|switch|close|send|logs|status|resume|info [args]
  */
 import type { LocalCommandCall } from '../../types/command.js'
 import {
@@ -10,6 +10,7 @@ import {
   parseInstanceCommand,
   formatInstanceList,
   type CreateInstanceOptions,
+  type BackgroundInstanceTask,
 } from '../../server/instanceCommands.js'
 
 export const call: LocalCommandCall = async (args, _context) => {
@@ -29,8 +30,19 @@ export const call: LocalCommandCall = async (args, _context) => {
     case 'rm':
     case 'destroy':
       return await handleClose(manager, subArgs)
-    case 'info':
+    case 'send':
+    case 'message':
+    case 'msg':
+      return handleSend(manager, subArgs)
+    case 'logs':
+    case 'log':
+    case 'output':
+      return handleLogs(manager, subArgs)
     case 'status':
+    case 'bg':
+    case 'tasks':
+      return handleBgStatus(manager)
+    case 'info':
     case 'current':
       return handleInfo(manager)
     case 'resume':
@@ -106,6 +118,84 @@ function handleInfo(manager: ReturnType<typeof getInstanceManager>) {
   return { type: 'text', value: lines.join('\n') }
 }
 
+function handleSend(manager: ReturnType<typeof getInstanceManager>, args: string) {
+  const trimmed = args.trim()
+  if (!trimmed) {
+    return { type: 'text', value: 'Usage: /instance send <id|userId> <message>' }
+  }
+  // First token is target, rest is message
+  const spaceIndex = trimmed.indexOf(' ')
+  if (spaceIndex === -1) {
+    return { type: 'text', value: 'Usage: /instance send <id|userId> <message>' }
+  }
+  const target = trimmed.slice(0, spaceIndex)
+  const message = trimmed.slice(spaceIndex + 1)
+  const result = manager.sendToInstance(target, message)
+  if (!result.ok) {
+    return { type: 'text', value: `Error: ${result.error}` }
+  }
+  return { type: 'text', value: result.message }
+}
+
+function handleLogs(manager: ReturnType<typeof getInstanceManager>, args: string) {
+  const target = args.trim() || undefined
+  const result = manager.getInstanceLogs(target)
+  if (!result.ok) {
+    return { type: 'text', value: `Error: ${result.error}` }
+  }
+  const lines: string[] = []
+  for (const task of result.logs) {
+    const shortId = task.instanceId.slice(0, 8)
+    const elapsed = task.endTime ? `${((task.endTime - task.startTime) / 1000).toFixed(1)}s` : '...'
+    lines.push(`--- ${task.userId} (${shortId}) ---`)
+    lines.push(`  Status: ${task.status} | Time: ${elapsed}`)
+    if (task.status === 'done' && task.response) {
+      // Truncate long responses for inline display
+      const display = task.response.length > 500
+        ? task.response.slice(0, 500) + `... (${task.response.length} chars total)`
+        : task.response
+      lines.push(`  Response: ${display}`)
+    }
+    if (task.status === 'error' && task.error) {
+      lines.push(`  Error: ${task.error}`)
+    }
+    lines.push('')
+  }
+  return { type: 'text', value: lines.join('\n') || 'No background tasks yet.' }
+}
+
+function handleBgStatus(manager: ReturnType<typeof getInstanceManager>) {
+  const bgStatus = manager.getBackgroundStatus()
+  const instances = manager.listInstances()
+
+  if (instances.length === 0) {
+    return { type: 'text', value: 'No active instances.' }
+  }
+
+  const lines: string[] = ['Instance status:', '']
+  for (const inst of instances) {
+    const shortId = inst.sessionId.slice(0, 8)
+    const task = bgStatus.get(inst.sessionId)
+    let statusStr: string
+    if (!task) {
+      statusStr = 'idle'
+    } else if (task.status === 'running') {
+      const elapsed = ((Date.now() - task.startTime) / 1000).toFixed(0)
+      statusStr = `running (${elapsed}s)`
+    } else if (task.status === 'done') {
+      const elapsed = ((task.endTime! - task.startTime) / 1000).toFixed(1)
+      statusStr = `done (${elapsed}s)`
+    } else {
+      statusStr = `error: ${task.error?.slice(0, 60)}`
+    }
+    const marker = inst.sessionId === manager.getCurrentInstanceId() ? '*' : ' '
+    lines.push(` ${marker} ${shortId}  ${inst.userId.padEnd(12)}  ${statusStr}`)
+  }
+  lines.push('')
+  lines.push('  * = current instance')
+  return { type: 'text', value: lines.join('\n') }
+}
+
 async function handleResume(manager: ReturnType<typeof getInstanceManager>, args: string) {
   // Resume is a create with resumeFrom — for now just redirect to new
   // Full resume support requires session transcript lookup (batch 6 feature)
@@ -123,7 +213,16 @@ function handleHelp() {
     '    List all active instances',
     '',
     '  /instance switch <session-id>',
-    '    Switch to an instance (8-char ID is ok)',
+    '    Switch to an instance (8-char ID or userId)',
+    '',
+    '  /instance send <id|userId> <message>',
+    '    Send message to an instance in background (non-blocking)',
+    '',
+    '  /instance logs [id|userId]',
+    '    View background task response (omit for all)',
+    '',
+    '  /instance status',
+    '    Show all instances with running/idle/done status',
     '',
     '  /instance close <session-id>',
     '    Close and destroy an instance',

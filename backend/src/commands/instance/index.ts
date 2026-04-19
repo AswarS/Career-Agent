@@ -1,14 +1,14 @@
 /**
  * /instance command — Manage multi-user instances in terminal mode
  *
- * Subcommands: new, list, switch, close, resume, info
+ * Subcommands: new, list, switch, close, send, logs, status, resume, info
  */
 import type { Command } from '../../commands.js'
 
 const instance = {
   type: 'local',
   name: 'instance',
-  description: 'Manage multi-user instances (new/list/switch/close/resume/info)',
+  description: 'Manage multi-user instances (new/list/switch/close/send/logs/status/info)',
   aliases: ['instances', 'inst'],
   supportsNonInteractive: false,
   argumentHint: '<subcommand>',

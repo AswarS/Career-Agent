@@ -82,6 +82,7 @@ function createMinimalAppState(tpc: ToolPermissionContext): AppState {
     showRemoteCallout: false,
     tasks: {},
     agentNameRegistry: new Map(),
+    sessionHooks: new Map(),
     mcp: {
       clients: [],
       tools: [],

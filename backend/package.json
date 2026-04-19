@@ -19,7 +19,7 @@
     "start": "bun run ./src/bootstrap-entry.ts",
     "version": "bun run ./src/bootstrap-entry.ts --version",
     "dev:restore-check": "bun run ./src/dev-entry.ts",
-    "http-serve": "bun run ./src/main.tsx http-serve"
+    "http-serve": "bun run ./src/bootstrap-entry.ts http-serve"
   },
   "dependencies": {
     "@alcalzone/ansi-tokenize": "*",

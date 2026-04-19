@@ -42,6 +42,18 @@ export type InstanceCommandResult =
   | { ok: true; message: string; sessionId?: string }
   | { ok: false; error: string }
 
+export type BackgroundTaskStatus = 'running' | 'done' | 'error'
+
+export type BackgroundInstanceTask = {
+  instanceId: string
+  userId: string
+  status: BackgroundTaskStatus
+  startTime: number
+  endTime?: number
+  response?: string
+  error?: string
+}
+
 // ---------------------------------------------------------------------------
 // InstanceCommandManager
 // ---------------------------------------------------------------------------
@@ -51,6 +63,8 @@ export class InstanceCommandManager {
   private currentInstanceId: string | null = null
   /** userId lookup (stored because SessionManager doesn't track it) */
   private userIdMap: Map<string, string> = new Map()
+  /** Background tasks: instanceId → latest background task */
+  private backgroundTasks: Map<string, BackgroundInstanceTask> = new Map()
 
   constructor() {
     const config: ServerConfig = {
@@ -205,10 +219,110 @@ export class InstanceCommandManager {
     return this.sessionManager.getAllSessions().size > 0
   }
 
+  /** Send a message to an instance in the background (non-blocking) */
+  sendToInstance(target: string, message: string): InstanceCommandResult {
+    const sessionId = this.resolveTarget(target)
+    if (!sessionId) {
+      return { ok: false, error: `Instance not found: ${target}` }
+    }
+
+    const managed = this.sessionManager.getSession(sessionId)
+    if (!managed) {
+      return { ok: false, error: `Instance not found: ${target}` }
+    }
+
+    if (!managed.context.queryEngine) {
+      return { ok: false, error: `Instance ${target} has no QueryEngine (echo mode only)` }
+    }
+
+    const userId = this.userIdMap.get(sessionId) ?? 'unknown'
+
+    // Check if already running
+    const existing = this.backgroundTasks.get(sessionId)
+    if (existing?.status === 'running') {
+      return { ok: false, error: `Instance ${userId} already has a running task` }
+    }
+
+    // Create background task entry
+    const task: BackgroundInstanceTask = {
+      instanceId: sessionId,
+      userId,
+      status: 'running',
+      startTime: Date.now(),
+    }
+    this.backgroundTasks.set(sessionId, task)
+
+    // Run query in background — fire-and-forget
+    const qe = managed.context.queryEngine
+    const context = managed.context
+
+    runWithSessionContext(context, async () => {
+      try {
+        let fullResponse = ''
+        for await (const event of qe.submitMessage(message)) {
+          if (event.type === 'assistant' && event.message?.content) {
+            for (const block of event.message.content) {
+              if (block.type === 'text' && block.text) {
+                fullResponse += block.text
+              }
+            }
+          }
+          if (event.type === 'result') {
+            if (event.result && typeof event.result === 'string') {
+              fullResponse = fullResponse || event.result
+            }
+          }
+        }
+        task.status = 'done'
+        task.endTime = Date.now()
+        task.response = fullResponse || '(no text response)'
+      } catch (err: any) {
+        task.status = 'error'
+        task.endTime = Date.now()
+        task.error = err.message || String(err)
+      }
+    })
+
+    return {
+      ok: true,
+      message: `Background task started for ${userId} (${sessionId.slice(0, 8)}). Use /instance logs ${userId} to check result.`,
+    }
+  }
+
+  /** Get logs from background tasks */
+  getInstanceLogs(target?: string): { ok: true; logs: BackgroundInstanceTask[] } | { ok: false; error: string } {
+    if (target) {
+      const sessionId = this.resolveTarget(target)
+      if (!sessionId) {
+        return { ok: false, error: `Instance not found: ${target}` }
+      }
+      const task = this.backgroundTasks.get(sessionId)
+      if (!task) {
+        return { ok: false, error: `No background task for ${target}` }
+      }
+      return { ok: true, logs: [task] }
+    }
+
+    // Return all
+    return { ok: true, logs: [...this.backgroundTasks.values()] }
+  }
+
+  /** Get background status for all instances */
+  getBackgroundStatus(): Map<string, BackgroundInstanceTask> {
+    return new Map(this.backgroundTasks)
+  }
+
+  /** Resolve a target string (short ID or userId) to a full session ID */
+  private resolveTarget(target: string): string | null {
+    const instances = this.listInstances()
+    return resolveInstanceTarget(instances, this.userIdMap, target)
+  }
+
   /** Destroy all instances (for cleanup) */
   async destroyAll(): Promise<number> {
     this.currentInstanceId = null
     this.userIdMap.clear()
+    this.backgroundTasks.clear()
     return this.sessionManager.destroyAllSessions()
   }
 }
@@ -276,4 +390,28 @@ export function parseInstanceCommand(input: string): ParsedInstanceCommand {
     subcommand: trimmed.slice(0, spaceIndex),
     args: trimmed.slice(spaceIndex + 1).trim(),
   }
+}
+
+// ---------------------------------------------------------------------------
+// Resolve instance target (short ID or userId)
+// ---------------------------------------------------------------------------
+
+export function resolveInstanceTarget(
+  instances: InstanceInfo[],
+  userIdMap: Map<string, string>,
+  target: string,
+): string | null {
+  // Exact session ID match
+  if (instances.some(i => i.sessionId === target)) {
+    return target
+  }
+  // Short ID prefix match
+  const prefixMatches = instances.filter(i => i.sessionId.startsWith(target))
+  if (prefixMatches.length === 1) return prefixMatches[0].sessionId
+  if (prefixMatches.length > 1) return null
+  // userId match
+  const userIdMatches = instances.filter(i => i.userId === target)
+  if (userIdMatches.length === 1) return userIdMatches[0].sessionId
+  if (userIdMatches.length > 1) return null
+  return null
 }
