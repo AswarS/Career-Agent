@@ -68,6 +68,7 @@ interface WorkspaceState {
   artifactPaneOpen: boolean;
   artifactViewMode: ArtifactViewMode;
   threadsStatus: LoadState;
+  threadCreateStatus: LoadState;
   messagesStatus: LoadState;
   profileStatus: LoadState;
   profileSuggestionsStatus: LoadState;
@@ -90,6 +91,7 @@ export const useWorkspaceStore = defineStore('workspace', {
     artifactPaneOpen: false,
     artifactViewMode: 'pane',
     threadsStatus: 'idle',
+    threadCreateStatus: 'idle',
     messagesStatus: 'idle',
     profileStatus: 'idle',
     profileSuggestionsStatus: 'idle',
@@ -172,6 +174,7 @@ export const useWorkspaceStore = defineStore('workspace', {
           this.initialized = true;
 
           this.threadsStatus = 'ready';
+          this.threadCreateStatus = 'idle';
           this.profileStatus = 'ready';
           this.profileSuggestionsStatus = 'ready';
           this.artifactsStatus = 'ready';
@@ -179,6 +182,7 @@ export const useWorkspaceStore = defineStore('workspace', {
           this.profileSaveStatus = 'idle';
         } catch (error) {
           this.threadsStatus = 'error';
+          this.threadCreateStatus = 'error';
           this.profileStatus = 'error';
           this.profileSuggestionsStatus = 'error';
           this.artifactsStatus = 'error';
@@ -193,16 +197,10 @@ export const useWorkspaceStore = defineStore('workspace', {
     },
     async setActiveThread(threadId: string) {
       if (this.activeThreadId === threadId && (this.messagesStatus === 'loading' || this.messagesStatus === 'ready')) {
-        return;
+        return this.activeThreadId;
       }
 
-      const isThreadSwitch = this.activeThreadId !== threadId;
       const requestToken = ++threadLoadRequestToken;
-
-      this.activeThreadId = threadId;
-      if (isThreadSwitch) {
-        this.closeArtifact();
-      }
 
       this.messagesStatus = 'loading';
       this.errorMessage = null;
@@ -211,29 +209,81 @@ export const useWorkspaceStore = defineStore('workspace', {
 
       await this.initialize();
 
-      if (!this.initialized || requestToken !== threadLoadRequestToken || this.activeThreadId !== threadId) {
-        return;
+      if (!this.initialized || requestToken !== threadLoadRequestToken) {
+        return null;
       }
 
-      try {
-        const nextMessages = await client.getThreadMessages(threadId);
+      const targetThreadId = this.threads.some((thread) => thread.id === threadId)
+        ? threadId
+        : this.threads[0]?.id ?? null;
 
-        if (requestToken !== threadLoadRequestToken || this.activeThreadId !== threadId) {
-          return;
+      if (!targetThreadId) {
+        this.activeThreadId = null;
+        this.messagesStatus = 'ready';
+        return null;
+      }
+
+      if (this.activeThreadId !== targetThreadId) {
+        this.closeArtifact();
+      }
+
+      this.activeThreadId = targetThreadId;
+
+      try {
+        const nextMessages = await client.getThreadMessages(targetThreadId);
+
+        if (requestToken !== threadLoadRequestToken || this.activeThreadId !== targetThreadId) {
+          return null;
         }
 
         revokeLocalMessageResources(this.messages);
         this.messages = nextMessages;
         this.messagesStatus = 'ready';
+        return targetThreadId;
       } catch (error) {
-        if (requestToken !== threadLoadRequestToken || this.activeThreadId !== threadId) {
-          return;
+        if (requestToken !== threadLoadRequestToken || this.activeThreadId !== targetThreadId) {
+          return null;
         }
 
         revokeLocalMessageResources(this.messages);
         this.messages = [];
         this.messagesStatus = 'error';
         this.errorMessage = error instanceof Error ? error.message : 'Unknown message loading error';
+        return null;
+      }
+    },
+    async createThread() {
+      await this.initialize();
+
+      if (!this.initialized) {
+        throw new Error(this.errorMessage ?? 'Workspace is not initialized.');
+      }
+
+      this.threadCreateStatus = 'loading';
+      this.errorMessage = null;
+
+      try {
+        const nextThread = await client.createThread({
+          title: '新对话',
+          preview: '',
+        });
+
+        this.threads = [
+          nextThread,
+          ...this.threads.filter((thread) => thread.id !== nextThread.id),
+        ];
+        this.activeThreadId = nextThread.id;
+        this.closeArtifact();
+        revokeLocalMessageResources(this.messages);
+        this.messages = [];
+        this.messagesStatus = 'idle';
+        this.threadCreateStatus = 'ready';
+
+        return nextThread;
+      } catch (error) {
+        this.threadCreateStatus = 'error';
+        this.errorMessage = error instanceof Error ? error.message : 'Unknown thread creation error';
+        throw error;
       }
     },
     async openArtifact(artifactId: string, viewMode: ArtifactViewMode = 'pane') {

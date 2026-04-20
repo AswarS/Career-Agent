@@ -8,7 +8,6 @@ import {
 
 export interface CareerAgentClientFactoryOptions {
   config?: RuntimeConfig;
-  fetcher?: typeof fetch;
   mockFactory?: () => CareerAgentClient;
   upstreamFactory?: (options: UpstreamCareerAgentClientOptions) => CareerAgentClient;
 }
@@ -20,6 +19,7 @@ function createUnavailableCareerAgentClient(message: string): CareerAgentClient 
 
   return {
     listThreads: unavailable,
+    createThread: unavailable,
     getThreadMessages: unavailable,
     getProfile: unavailable,
     updateProfile: unavailable,
@@ -45,7 +45,7 @@ export function createCareerAgentClient(
     return (options.upstreamFactory ?? createUpstreamCareerAgentClient)({
       baseUrl: config.apiBaseUrl,
       userId: config.userId,
-      fetcher: options.fetcher,
+      withCredentials: config.upstreamWithCredentials,
     });
   }
 

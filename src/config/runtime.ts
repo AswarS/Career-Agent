@@ -6,6 +6,7 @@ export interface RuntimeEnvLike {
   VITE_CAREER_AGENT_CLIENT_MODE?: string;
   VITE_CAREER_AGENT_API_BASE_URL?: string;
   VITE_CAREER_AGENT_USER_ID?: string;
+  VITE_CAREER_AGENT_WITH_CREDENTIALS?: string;
   VITE_CAREER_AGENT_ARTIFACT_TRANSPORT?: string;
   VITE_CAREER_AGENT_ENABLE_VOICE_INPUT?: string;
   VITE_CAREER_AGENT_TRUSTED_CANVAS_ORIGINS?: string;
@@ -19,6 +20,7 @@ export interface RuntimeConfig {
   clientMode: CareerAgentClientMode;
   apiBaseUrl: string | null;
   userId: string;
+  upstreamWithCredentials: boolean;
   artifactTransport: ArtifactTransport;
   voiceInputEnabled: boolean;
   trustedCanvasOrigins: string[];
@@ -116,6 +118,7 @@ export function resolveRuntimeConfig(env: RuntimeEnvLike): RuntimeConfig {
     clientMode,
     apiBaseUrl,
     userId: normalizeUserId(env.VITE_CAREER_AGENT_USER_ID),
+    upstreamWithCredentials: normalizeBoolean(env.VITE_CAREER_AGENT_WITH_CREDENTIALS),
     artifactTransport: normalizeArtifactTransport(clientMode, env.VITE_CAREER_AGENT_ARTIFACT_TRANSPORT),
     voiceInputEnabled: normalizeBoolean(env.VITE_CAREER_AGENT_ENABLE_VOICE_INPUT),
     trustedCanvasOrigins: normalizeTrustedCanvasOrigins(env.VITE_CAREER_AGENT_TRUSTED_CANVAS_ORIGINS),

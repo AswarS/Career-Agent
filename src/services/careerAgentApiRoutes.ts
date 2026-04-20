@@ -1,11 +1,12 @@
 const CAREER_AGENT_API_BASE_PATH = '/api/career-agent';
 
 export const CAREER_AGENT_API_ROUTE_PATTERNS = {
+  createThread: `${CAREER_AGENT_API_BASE_PATH}/threads`,
   listThreads: `${CAREER_AGENT_API_BASE_PATH}/threads/:userId`,
   threadMessages: `${CAREER_AGENT_API_BASE_PATH}/threads/:threadId/messages`,
   profile: `${CAREER_AGENT_API_BASE_PATH}/profile`,
   profileSuggestions: `${CAREER_AGENT_API_BASE_PATH}/profile/suggestions`,
-  listArtifacts: `${CAREER_AGENT_API_BASE_PATH}/artifacts`,
+  listArtifacts: `${CAREER_AGENT_API_BASE_PATH}/artifacts/:userId`,
   artifact: `${CAREER_AGENT_API_BASE_PATH}/artifacts/:artifactId`,
   refreshArtifact: `${CAREER_AGENT_API_BASE_PATH}/artifacts/:artifactId/refresh`,
 } as const;
@@ -15,6 +16,11 @@ export const CAREER_AGENT_API_ROUTE_DESCRIPTORS = [
     method: 'GET',
     path: CAREER_AGENT_API_ROUTE_PATTERNS.listThreads,
     purpose: '按用户填充左侧会话导航栏。',
+  },
+  {
+    method: 'POST',
+    path: CAREER_AGENT_API_ROUTE_PATTERNS.createThread,
+    purpose: '为当前用户创建新会话，并加入左侧导航。',
   },
   {
     method: 'GET',
@@ -39,7 +45,7 @@ export const CAREER_AGENT_API_ROUTE_DESCRIPTORS = [
   {
     method: 'GET',
     path: CAREER_AGENT_API_ROUTE_PATTERNS.listArtifacts,
-    purpose: '加载工件目录及其版本信息。',
+    purpose: '按用户加载工件目录及其版本信息；当前 server 以 :userId 参数实现。',
   },
   {
     method: 'GET',
@@ -54,6 +60,9 @@ export const CAREER_AGENT_API_ROUTE_DESCRIPTORS = [
 ] as const;
 
 export const CAREER_AGENT_API_ROUTES = {
+  createThread() {
+    return CAREER_AGENT_API_ROUTE_PATTERNS.createThread;
+  },
   listThreads(userId: string) {
     return CAREER_AGENT_API_ROUTE_PATTERNS.listThreads.replace(':userId', encodeURIComponent(userId));
   },
@@ -66,8 +75,8 @@ export const CAREER_AGENT_API_ROUTES = {
   profileSuggestions() {
     return CAREER_AGENT_API_ROUTE_PATTERNS.profileSuggestions;
   },
-  listArtifacts() {
-    return CAREER_AGENT_API_ROUTE_PATTERNS.listArtifacts;
+  listArtifacts(userId: string) {
+    return CAREER_AGENT_API_ROUTE_PATTERNS.listArtifacts.replace(':userId', encodeURIComponent(userId));
   },
   artifact(artifactId: string) {
     return CAREER_AGENT_API_ROUTE_PATTERNS.artifact.replace(':artifactId', encodeURIComponent(artifactId));

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue';
 import { storeToRefs } from 'pinia';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import ConversationComposer from '../modules/conversation/ConversationComposer.vue';
 import ConversationMessageCard from '../modules/conversation/ConversationMessageCard.vue';
 import { shouldUseMultiAgentPresentation } from '../modules/conversation/messagePresentation';
@@ -9,6 +9,7 @@ import { useWorkspaceStore } from '../stores/workspace';
 import type { DraftMessageSubmission, MessageAction } from '../types/entities';
 
 const route = useRoute();
+const router = useRouter();
 const workspaceStore = useWorkspaceStore();
 const { activeThread, errorMessage, messages, messagesStatus } = storeToRefs(workspaceStore);
 
@@ -18,7 +19,10 @@ const multiAgentMode = computed(() => shouldUseMultiAgentPresentation(messages.v
 watch(
   threadId,
   async (value) => {
-    await workspaceStore.setActiveThread(value);
+    const activeThreadId = await workspaceStore.setActiveThread(value);
+    if (activeThreadId && activeThreadId !== value) {
+      await router.replace(`/threads/${activeThreadId}`);
+    }
   },
   { immediate: true },
 );

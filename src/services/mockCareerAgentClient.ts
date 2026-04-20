@@ -1648,6 +1648,20 @@ export function createMockCareerAgentClient(): CareerAgentClient {
     async listThreads() {
       return threads;
     },
+    async createThread(input) {
+      const nextThread: ThreadSummary = {
+        id: `thread-local-${Date.now()}`,
+        title: input?.title ?? '新对话',
+        preview: input?.preview ?? '新的本地演示会话。',
+        updatedAt: new Date().toISOString(),
+        status: 'active',
+      };
+
+      threads.unshift(nextThread);
+      messagesByThread[nextThread.id] = [];
+
+      return { ...nextThread };
+    },
     async getThreadMessages(threadId: string) {
       return messagesByThread[threadId] ?? [];
     },

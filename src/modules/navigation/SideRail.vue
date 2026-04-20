@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { RouterLink, useRoute } from 'vue-router';
+import { RouterLink, useRoute, useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
 import { useWorkspaceStore } from '../../stores/workspace';
 
 const workspaceStore = useWorkspaceStore();
 const route = useRoute();
-const { threads, activeThreadId, sideRailCollapsed } = storeToRefs(workspaceStore);
+const router = useRouter();
+const { threads, activeThreadId, sideRailCollapsed, threadCreateStatus } = storeToRefs(workspaceStore);
 
 const navItems = computed(() => [
   { label: '会话', compactLabel: '话', to: `/threads/${activeThreadId.value ?? 'thread-001'}` },
@@ -24,6 +25,15 @@ function toggleSideRail() {
 
 function getThreadGlyph(title: string) {
   return title.trim().charAt(0).toUpperCase();
+}
+
+async function createThread() {
+  try {
+    const thread = await workspaceStore.createThread();
+    await router.push(`/threads/${thread.id}`);
+  } catch {
+    // Store-level errorMessage owns the visible failure state.
+  }
 }
 </script>
 
@@ -73,6 +83,18 @@ function getThreadGlyph(title: string) {
           <span v-if="isThreadRoute && !sideRailCollapsed">当前</span>
         </div>
         <div v-else class="section-divider" aria-hidden="true"></div>
+
+        <button
+          type="button"
+          class="new-thread-button"
+          :class="{ compact: sideRailCollapsed }"
+          :disabled="threadCreateStatus === 'loading'"
+          :aria-label="sideRailCollapsed ? '新建对话' : undefined"
+          @click="createThread"
+        >
+          <span aria-hidden="true">+</span>
+          <strong v-if="!sideRailCollapsed">{{ threadCreateStatus === 'loading' ? '创建中...' : '新建对话' }}</strong>
+        </button>
 
         <div class="thread-list">
           <RouterLink
@@ -220,6 +242,46 @@ function getThreadGlyph(title: string) {
   border: 1px solid transparent;
 }
 
+.new-thread-button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  border: 1px dashed color-mix(in srgb, var(--color-primary) 36%, var(--color-border));
+  border-radius: 18px;
+  padding: 0.76rem 0.92rem;
+  background: color-mix(in srgb, var(--color-primary-soft) 34%, white);
+  color: var(--color-primary);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.new-thread-button span {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font-weight: 900;
+}
+
+.new-thread-button strong {
+  color: inherit;
+  font-size: 0.88rem;
+}
+
+.new-thread-button:hover {
+  background: color-mix(in srgb, var(--color-primary-soft) 56%, white);
+}
+
+.new-thread-button:disabled {
+  cursor: wait;
+  opacity: 0.68;
+}
+
 .thread-list {
   display: grid;
   gap: 10px;
@@ -285,16 +347,19 @@ function getThreadGlyph(title: string) {
 }
 
 .side-rail.collapsed .nav-link,
-.side-rail.collapsed .thread-link.compact {
+.side-rail.collapsed .thread-link.compact,
+.side-rail.collapsed .new-thread-button.compact {
   display: grid;
   place-items: center;
   width: 100%;
+  border: 0;
   padding: 0;
   background: transparent;
 }
 
 .side-rail.collapsed .nav-glyph,
-.side-rail.collapsed .thread-glyph {
+.side-rail.collapsed .thread-glyph,
+.side-rail.collapsed .new-thread-button span {
   display: grid;
   place-items: center;
   width: 42px;
@@ -306,6 +371,12 @@ function getThreadGlyph(title: string) {
   font-size: 0.86rem;
   font-weight: 700;
   letter-spacing: 0.04em;
+}
+
+.side-rail.collapsed .new-thread-button span {
+  border-style: dashed;
+  background: color-mix(in srgb, var(--color-primary-soft) 74%, white);
+  color: var(--color-primary);
 }
 
 .side-rail.collapsed .nav-link.router-link-active {

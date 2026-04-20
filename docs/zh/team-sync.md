@@ -89,6 +89,26 @@
 
 ## 你需要持续关注的沟通项
 
+### 0. 当前 4000 端口 server 联调事实
+
+更新时间：2026-04-20
+
+前端已按 `axios` 接入当前 server 的读取路径，并以 `VITE_CAREER_AGENT_API_BASE_URL=http://localhost:4000` 作为本地联调默认示例。
+
+当前从 `/Users/fancy/code/Career-Agent/server` 看到的真实接口是：
+
+- `POST /api/career-agent/threads`：创建会话
+- `GET /api/career-agent/threads/:id`：当前 `:id` 实际是用户 id，不是会话 id
+- `GET /api/career-agent/threads/:id/messages`：当前 `:id` 是会话 id
+- `GET /api/career-agent/artifacts/:id`：当前 controller 参数名像单详情，但 service 实际按 `uid` 返回工件列表
+
+需要你和 server 同学确认或推动：
+
+- `POST /api/career-agent/threads` 需要由后端保证 `createdAt` / `updatedAt` 默认值，否则当前实体的 `createdAt` 非空约束可能导致新建失败。
+- 如果要符合接口图里的 `GET /api/career-agent/artifacts` 和 `GET /api/career-agent/artifacts/:artifactId`，server 需要区分“工件列表”和“单工件详情”，当前实现还没有真正的单工件详情。
+- `POST /api/career-agent/artifacts/:artifactId/refresh` 当前 server 未实现，前端只保留了可调用入口和 404 兼容。
+- 当前 server 仍没有真实消息发送 endpoint，也没有 upload controller；图片/文件选择仍是前端本地预览，不是端到端上传。
+
 ### 1. 上游 artifact payload 对齐
 
 你需要和后端 / agent 团队确认：
@@ -127,6 +147,7 @@
 - `VITE_CAREER_AGENT_CLIENT_MODE`
 - `VITE_CAREER_AGENT_API_BASE_URL`
 - `VITE_CAREER_AGENT_USER_ID`
+- `VITE_CAREER_AGENT_WITH_CREDENTIALS`
 - `VITE_CAREER_AGENT_ARTIFACT_TRANSPORT`
 - `VITE_CAREER_AGENT_ENABLE_VOICE_INPUT`
 - `VITE_CAREER_AGENT_TRUSTED_CANVAS_ORIGINS`

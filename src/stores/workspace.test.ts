@@ -25,6 +25,31 @@ describe('useWorkspaceStore', () => {
     expect(workspaceStore.artifactViewMode).toBe('pane');
   });
 
+  it('falls back to the first known thread when a route thread id is unknown', async () => {
+    const workspaceStore = useWorkspaceStore();
+
+    const activeThreadId = await workspaceStore.setActiveThread('unknown-thread');
+
+    expect(activeThreadId).toBe('thread-001');
+    expect(workspaceStore.activeThreadId).toBe('thread-001');
+    expect(workspaceStore.messagesStatus).toBe('ready');
+    expect(workspaceStore.messages.length).toBeGreaterThan(0);
+  });
+
+  it('creates a local mock thread and leaves messages idle for route-driven loading', async () => {
+    const workspaceStore = useWorkspaceStore();
+
+    await workspaceStore.initialize();
+    const thread = await workspaceStore.createThread();
+
+    expect(thread.title).toBe('新对话');
+    expect(workspaceStore.threads[0]?.id).toBe(thread.id);
+    expect(workspaceStore.activeThreadId).toBe(thread.id);
+    expect(workspaceStore.threadCreateStatus).toBe('ready');
+    expect(workspaceStore.messages).toEqual([]);
+    expect(workspaceStore.messagesStatus).toBe('idle');
+  });
+
   it('adds local image media and file attachments when submitting a draft message', () => {
     const workspaceStore = useWorkspaceStore();
     workspaceStore.activeThreadId = 'thread-001';

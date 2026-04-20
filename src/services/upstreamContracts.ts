@@ -86,22 +86,27 @@ export interface UpstreamProfileSuggestion {
 }
 
 export interface UpstreamArtifactRecord {
-  id: string;
-  type: ArtifactRecord['type'];
-  title: string;
-  status: ArtifactStatus | 'queued' | 'failed';
-  render_mode?: ArtifactRenderMode;
-  renderMode?: ArtifactRenderMode;
-  revision: number;
-  updated_at?: string;
-  updatedAt?: string;
-  summary: string;
-  payload: {
+  id: string | number;
+  uid?: string | number | null;
+  type?: ArtifactRecord['type'] | string | null;
+  title?: string | null;
+  status?: ArtifactStatus | 'queued' | 'failed' | string | null;
+  render_mode?: ArtifactRenderMode | string | null;
+  renderMode?: ArtifactRenderMode | string | null;
+  revision?: number | null;
+  updated_at?: string | number | Date | null;
+  updatedAt?: string | number | Date | null;
+  created_at?: string | number | Date | null;
+  createdAt?: string | number | Date | null;
+  summary?: string | null;
+  payloadPath?: string | null;
+  payload_path?: string | null;
+  payload?: {
     html?: string | null;
     url?: string | null;
     markdown?: string | null;
     cards?: unknown[] | null;
-  };
+  } | null;
 }
 
 function normalizeArtifactStatus(value: UpstreamArtifactRecord['status']): ArtifactStatus {
@@ -113,11 +118,31 @@ function normalizeArtifactStatus(value: UpstreamArtifactRecord['status']): Artif
     return 'error';
   }
 
-  return value;
+  if (value === 'idle' || value === 'loading' || value === 'streaming' || value === 'ready' || value === 'stale' || value === 'error') {
+    return value;
+  }
+
+  return 'idle';
 }
 
-function normalizeArtifactRenderMode(value: ArtifactRenderMode | undefined): ArtifactRenderMode {
+function normalizeArtifactRenderMode(value: string | null | undefined): ArtifactRenderMode {
   return value === 'cards' || value === 'markdown' || value === 'url' ? value : 'html';
+}
+
+function normalizeArtifactType(value: string | null | undefined): ArtifactRecord['type'] {
+  if (
+    value === 'weekly-plan'
+    || value === 'profile-summary'
+    || value === 'career-roadmap'
+    || value === 'mock-interview'
+    || value === 'coding-assessment'
+    || value === 'visual-learning'
+    || value === 'app-example'
+  ) {
+    return value;
+  }
+
+  return 'app-example';
 }
 
 function normalizeMessageKind(value: MessageKind | undefined): MessageKind {
@@ -142,6 +167,11 @@ function normalizeTimestamp(value: string | number | Date | null | undefined): s
   const nextValue = value?.trim();
   if (!nextValue) {
     return new Date(0).toISOString();
+  }
+
+  if (/^\d+$/.test(nextValue)) {
+    const date = new Date(Number(nextValue));
+    return Number.isNaN(date.getTime()) ? new Date(0).toISOString() : date.toISOString();
   }
 
   return nextValue;
@@ -368,15 +398,19 @@ export function normalizeProfileSuggestion(input: UpstreamProfileSuggestion): Pr
 }
 
 export function normalizeArtifactRecord(input: UpstreamArtifactRecord): ArtifactRecord {
-  const renderMode = normalizeArtifactRenderMode(input.renderMode ?? input.render_mode);
+  const payloadPath = normalizeOptionalText(input.payloadPath ?? input.payload_path);
+  const renderMode = payloadPath
+    ? normalizeArtifactRenderMode(input.renderMode ?? input.render_mode ?? 'url')
+    : normalizeArtifactRenderMode(input.renderMode ?? input.render_mode);
+  const id = normalizeId(input.id, 'artifact-unknown');
   const baseRecord = {
-    id: input.id,
-    type: input.type,
-    title: input.title,
+    id,
+    type: normalizeArtifactType(input.type),
+    title: normalizeOptionalText(input.title) ?? `工件 ${id}`,
     status: normalizeArtifactStatus(input.status),
-    revision: input.revision,
-    updatedAt: input.updatedAt ?? input.updated_at ?? new Date(0).toISOString(),
-    summary: input.summary,
+    revision: input.revision ?? 1,
+    updatedAt: normalizeTimestamp(input.updatedAt ?? input.updated_at ?? input.createdAt ?? input.created_at),
+    summary: normalizeOptionalText(input.summary) ?? '',
   };
 
   if (renderMode === 'url') {
@@ -384,7 +418,7 @@ export function normalizeArtifactRecord(input: UpstreamArtifactRecord): Artifact
       ...baseRecord,
       renderMode,
       payload: {
-        url: input.payload.url?.trim() ?? '',
+        url: input.payload?.url?.trim() ?? payloadPath ?? '',
       },
     };
   }
@@ -394,7 +428,7 @@ export function normalizeArtifactRecord(input: UpstreamArtifactRecord): Artifact
       ...baseRecord,
       renderMode,
       payload: {
-        markdown: input.payload.markdown?.trim() ?? '',
+        markdown: input.payload?.markdown?.trim() ?? '',
       },
     };
   }
@@ -404,7 +438,7 @@ export function normalizeArtifactRecord(input: UpstreamArtifactRecord): Artifact
       ...baseRecord,
       renderMode,
       payload: {
-        cards: Array.isArray(input.payload.cards) ? [...input.payload.cards] : [],
+        cards: Array.isArray(input.payload?.cards) ? [...input.payload.cards] : [],
       },
     };
   }
@@ -413,7 +447,7 @@ export function normalizeArtifactRecord(input: UpstreamArtifactRecord): Artifact
     ...baseRecord,
     renderMode,
     payload: {
-      html: input.payload.html ?? '',
+      html: input.payload?.html ?? '',
     },
   };
 }

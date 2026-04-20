@@ -13,16 +13,17 @@
 ## 2. 结论摘要
 
 1. 会话列表读取已按当前 server 形态调整为 `GET /api/career-agent/threads/:userId`，默认用户 id 为 `1`。
-2. v1 读取接口（线程读取、画像读取/更新、工件读取/刷新）大多已在前端客户端层落地，但真实 server 的部分路径仍需继续对齐。
-3. Composer 已支持图片和文件本地选择、本地预览和本地草稿消息；这不是端到端上传。
-4. 扩展接口（真实会话写入、真实多模态上传、工作画布交互回传）尚未接入前端实现。
-5. 仍存在可执行层面的合同差异，主要集中在错误模型透传、真实发送链路和真实上传链路。
+2. 前端 upstream client 已改为 `axios`，本地联调默认指向 `http://localhost:4000`。
+3. 新建会话已接入 `POST /api/career-agent/threads`，左侧导航已有“新建对话”入口。
+4. 当前 server 的工件接口仍和接口图不完全一致：`GET /api/career-agent/artifacts/:id` 实际按 `uid` 返回列表，前端已做兼容，但仍缺真正的单工件详情。
+5. Composer 已支持图片和文件本地选择、本地预览和本地草稿消息；这不是端到端上传。
+6. 扩展接口（真实消息发送、真实多模态上传、工作画布交互回传）尚未接入前端实现。
 
 ## 3. 已对齐项
 
 1. 路由与基础路径对齐：`/api/career-agent/*` 已在 `src/services/careerAgentApiRoutes.ts` 定义。
 2. 会话列表用户路径已对齐当前 server：`GET /api/career-agent/threads/:userId`。
-2. 客户端接口对齐：`src/services/careerAgentClient.ts` 已覆盖 v1 核心 8 接口。
+2. 客户端接口对齐：`src/services/careerAgentClient.ts` 已覆盖 v1 核心读取接口，并新增 `createThread`。
 3. 字段兼容与归一化对齐：
    - snake_case/camelCase 兼容
    - `open-artifact`/`open_artifact` 兼容
@@ -51,6 +52,20 @@
 - 当前前端：只做本地附件选择、本地 object URL 预览和本地草稿消息。
 - 影响：暂时无法做真实上传、服务端资产引用和真实 agent 消息发送闭环。
 
+### C-04 当前 server 工件接口语义不一致
+
+- 接口图：`GET /api/career-agent/artifacts` 是工件目录，`GET /api/career-agent/artifacts/:artifactId` 是单工件详情。
+- 当前 server：`ArtifactController.getById(@Param('id') uid)` 调用 `listArtifacts(uid)`，也就是 `:id` 实际是用户 id。
+- 当前前端：`listArtifacts()` 请求当前 server 真实路径 `/api/career-agent/artifacts/:userId`；`getArtifact()` 能兼容数组响应并按 artifact id 本地筛选。
+- 影响：后端需要补真正的单工件详情和刷新接口，前端才能做严格的详情读取和刷新闭环。
+
+### C-05 新建会话可能受后端时间字段默认值影响
+
+- 当前 server entity 中 `createdAt` / `updatedAt` 是非空字段。
+- 当前 DTO 只有 `updatedAt` 字段，且 `ValidationPipe({ whitelist: true })` 会丢弃 DTO 未声明字段。
+- 前端会提交 `userId`、`title`、`preview`、`updatedAt`，但 `createdAt` 是否能落库取决于后端是否补默认值。
+- 影响：如果 `POST /api/career-agent/threads` 返回 500，需要后端为 `createdAt` 增加默认值或在 service 创建时填充。
+
 ## 5. 前端未实现项
 
 ## 5.1 P0（优先联调闭环）
@@ -62,8 +77,8 @@
 
 2. 会话新建与删除
 - 目标：接入 `POST /api/career-agent/threads`、`DELETE /api/career-agent/threads/:threadId`。
-- 当前证据：`CareerAgentClient` 与路由常量未定义对应方法与路径。
-- 缺口：左侧会话列表仅支持读取与切换，缺少真实生命周期操作。
+- 当前状态：`POST /api/career-agent/threads` 已接入；删除尚未接入。
+- 缺口：后端需确认创建会话的时间字段默认值；删除接口尚未定义。
 
 3. 错误模型接线
 - 目标：将统一错误对象接入 `upstreamCareerAgentClient`。

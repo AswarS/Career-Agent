@@ -1,3 +1,4 @@
+import axios, { type AxiosInstance, type AxiosRequestConfig } from 'axios';
 import type { CareerAgentClient } from './careerAgentClient';
 import { CAREER_AGENT_API_ROUTES } from './careerAgentApiRoutes';
 import type { ProfileRecord } from '../types/entities';
@@ -18,58 +19,99 @@ import {
 export interface UpstreamCareerAgentClientOptions {
   baseUrl: string;
   userId: string;
-  fetcher?: typeof fetch;
+  withCredentials?: boolean;
+  httpClient?: AxiosInstance;
 }
 
-function mergeHeaders(init?: RequestInit) {
+function createDefaultProfile(): ProfileRecord {
   return {
-    Accept: 'application/json',
-    ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
-    ...(init?.headers ?? {}),
+    displayName: '',
+    locale: 'zh-CN',
+    timezone: 'Asia/Singapore',
+    currentRole: '',
+    employmentStatus: '',
+    experienceSummary: '',
+    educationSummary: '',
+    locationRegion: '',
+    targetRole: '',
+    targetIndustries: [],
+    shortTermGoal: '',
+    longTermGoal: '',
+    weeklyTimeBudget: '',
+    constraints: [],
+    workPreferences: [],
+    learningPreferences: [],
+    keyStrengths: [],
+    riskSignals: [],
+    portfolioLinks: [],
   };
 }
 
-function joinUrl(baseUrl: string, path: string) {
-  return `${baseUrl}${path}`;
+function createAxiosClient(baseUrl: string, withCredentials: boolean) {
+  return axios.create({
+    baseURL: baseUrl,
+    withCredentials,
+    headers: {
+      Accept: 'application/json',
+    },
+  });
 }
 
-async function parseJsonResponse<T>(response: Response, path: string): Promise<T> {
-  if (!response.ok) {
-    throw new Error(`Upstream request failed (${response.status}) for ${path}.`);
+function formatUpstreamError(error: unknown, path: string) {
+  if (axios.isAxiosError(error)) {
+    const status = error.response?.status;
+    const message = typeof error.response?.data === 'object' && error.response.data && 'message' in error.response.data
+      ? String(error.response.data.message)
+      : error.message;
+
+    return new Error(`Upstream request failed${status ? ` (${status})` : ''} for ${path}: ${message}`);
   }
 
-  return response.json() as Promise<T>;
+  return error instanceof Error ? error : new Error(`Upstream request failed for ${path}.`);
+}
+
+function isNotFoundError(error: unknown) {
+  return axios.isAxiosError(error) && error.response?.status === 404;
+}
+
+function normalizeUserIdForServer(value: string) {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue : value;
 }
 
 export function createUpstreamCareerAgentClient(
   options: UpstreamCareerAgentClientOptions,
 ): CareerAgentClient {
-  const fetcher = options.fetcher ?? globalThis.fetch?.bind(globalThis);
+  const httpClient = options.httpClient ?? createAxiosClient(options.baseUrl, Boolean(options.withCredentials));
 
-  if (!fetcher) {
-    throw new Error('Fetch API is not available in the current runtime.');
-  }
+  async function requestJson<T>(path: string, config?: AxiosRequestConfig): Promise<T> {
+    try {
+      const response = await httpClient.request<T>({
+        url: path,
+        ...config,
+      });
 
-  async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
-    const response = await fetcher(joinUrl(options.baseUrl, path), {
-      ...init,
-      headers: mergeHeaders(init),
-    });
-
-    return parseJsonResponse<T>(response, path);
-  }
-
-  async function requestOptionalJson<T>(path: string, init?: RequestInit): Promise<T | null> {
-    const response = await fetcher(joinUrl(options.baseUrl, path), {
-      ...init,
-      headers: mergeHeaders(init),
-    });
-
-    if (response.status === 404) {
-      return null;
+      return response.data;
+    } catch (error) {
+      throw formatUpstreamError(error, path);
     }
+  }
 
-    return parseJsonResponse<T>(response, path);
+  async function requestOptionalJson<T>(path: string, config?: AxiosRequestConfig): Promise<T | null> {
+    try {
+      const response = await httpClient.request<T>({
+        url: path,
+        ...config,
+      });
+
+      return response.data;
+    } catch (error) {
+      if (isNotFoundError(error)) {
+        return null;
+      }
+
+      throw formatUpstreamError(error, path);
+    }
   }
 
   return {
@@ -79,6 +121,24 @@ export function createUpstreamCareerAgentClient(
       );
       return payload.map(normalizeThreadSummary);
     },
+    async createThread(input) {
+      const now = new Date().toISOString();
+      const payload = await requestJson<UpstreamThreadSummary>(
+        CAREER_AGENT_API_ROUTES.createThread(),
+        {
+          method: 'POST',
+          data: {
+            userId: normalizeUserIdForServer(options.userId),
+            title: input?.title ?? '新对话',
+            preview: input?.preview ?? '',
+            updatedAt: now,
+            createdAt: now,
+          },
+        },
+      );
+
+      return normalizeThreadSummary(payload);
+    },
     async getThreadMessages(threadId: string) {
       const payload = await requestJson<UpstreamThreadMessage[]>(
         CAREER_AGENT_API_ROUTES.threadMessages(threadId),
@@ -87,37 +147,58 @@ export function createUpstreamCareerAgentClient(
       return payload.map((message) => normalizeThreadMessage(message, threadId));
     },
     async getProfile() {
-      const payload = await requestJson<ProfileRecord>(CAREER_AGENT_API_ROUTES.profile());
-      return sanitizeProfileRecord(payload);
+      const payload = await requestOptionalJson<ProfileRecord>(CAREER_AGENT_API_ROUTES.profile());
+      return sanitizeProfileRecord(payload ?? createDefaultProfile());
     },
     async updateProfile(profile) {
       const payload = await requestJson<ProfileRecord>(CAREER_AGENT_API_ROUTES.profile(), {
         method: 'PUT',
-        body: JSON.stringify(profile),
+        data: profile,
       });
 
       return sanitizeProfileRecord(payload);
     },
     async listProfileSuggestions() {
-      const payload = await requestJson<UpstreamProfileSuggestion[]>(
+      const payload = await requestOptionalJson<UpstreamProfileSuggestion[]>(
         CAREER_AGENT_API_ROUTES.profileSuggestions(),
       );
 
-      return payload.map(normalizeProfileSuggestion);
+      return (payload ?? []).map(normalizeProfileSuggestion);
     },
     async listArtifacts() {
       const payload = await requestJson<UpstreamArtifactRecord[]>(
-        CAREER_AGENT_API_ROUTES.listArtifacts(),
+        CAREER_AGENT_API_ROUTES.listArtifacts(options.userId),
       );
 
       return payload.map(normalizeArtifactRecord);
     },
     async getArtifact(artifactId: string) {
-      const payload = await requestOptionalJson<UpstreamArtifactRecord>(
+      const findArtifactById = async () => {
+        const artifacts = await requestJson<UpstreamArtifactRecord[]>(
+          CAREER_AGENT_API_ROUTES.listArtifacts(options.userId),
+        );
+        const matchedArtifact = artifacts.find((artifact) => String(artifact.id) === artifactId);
+        return matchedArtifact ? normalizeArtifactRecord(matchedArtifact) : null;
+      };
+
+      const payload = await requestOptionalJson<UpstreamArtifactRecord | UpstreamArtifactRecord[]>(
         CAREER_AGENT_API_ROUTES.artifact(artifactId),
       );
 
-      return payload ? normalizeArtifactRecord(payload) : null;
+      if (Array.isArray(payload)) {
+        const matchedArtifact = payload.find((artifact) => String(artifact.id) === artifactId);
+        return matchedArtifact ? normalizeArtifactRecord(matchedArtifact) : findArtifactById();
+      }
+
+      if (!payload) {
+        return findArtifactById();
+      }
+
+      if (String(payload.id) !== artifactId) {
+        return findArtifactById();
+      }
+
+      return normalizeArtifactRecord(payload);
     },
     async refreshArtifact(artifactId: string) {
       const payload = await requestOptionalJson<UpstreamArtifactRecord>(

@@ -10,6 +10,7 @@ describe('resolveRuntimeConfig', () => {
       clientMode: 'mock',
       apiBaseUrl: null,
       userId: '1',
+      upstreamWithCredentials: false,
       artifactTransport: 'mock',
       voiceInputEnabled: false,
       trustedCanvasOrigins: [],
@@ -26,6 +27,7 @@ describe('resolveRuntimeConfig', () => {
       VITE_CAREER_AGENT_CLIENT_MODE: 'upstream',
       VITE_CAREER_AGENT_API_BASE_URL: 'https://agent.example.com///',
       VITE_CAREER_AGENT_USER_ID: ' 42 ',
+      VITE_CAREER_AGENT_WITH_CREDENTIALS: 'yes',
       VITE_CAREER_AGENT_ARTIFACT_TRANSPORT: 'sse',
       VITE_CAREER_AGENT_ENABLE_VOICE_INPUT: 'true',
       VITE_CAREER_AGENT_TRUSTED_CANVAS_ORIGINS:
@@ -40,6 +42,7 @@ describe('resolveRuntimeConfig', () => {
       clientMode: 'upstream',
       apiBaseUrl: 'https://agent.example.com',
       userId: '42',
+      upstreamWithCredentials: true,
       artifactTransport: 'sse',
       voiceInputEnabled: true,
       trustedCanvasOrigins: ['https://canvas.example.com', 'http://localhost:3000'],

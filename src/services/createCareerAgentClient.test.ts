@@ -5,6 +5,13 @@ import type { CareerAgentClient } from './careerAgentClient';
 function createStubClient(): CareerAgentClient {
   return {
     listThreads: vi.fn(async () => []),
+    createThread: vi.fn(async () => ({
+      id: 'thread-new',
+      title: '新对话',
+      preview: '',
+      updatedAt: '2026-04-20T00:00:00.000Z',
+      status: 'active' as const,
+    })),
     getThreadMessages: vi.fn(async () => []),
     getProfile: vi.fn(async () => ({
       displayName: 'Fancy',
@@ -47,6 +54,7 @@ describe('createCareerAgentClient', () => {
         clientMode: 'mock',
         apiBaseUrl: null,
         userId: '1',
+        upstreamWithCredentials: false,
         artifactTransport: 'mock',
         voiceInputEnabled: false,
         trustedCanvasOrigins: [],
@@ -74,6 +82,7 @@ describe('createCareerAgentClient', () => {
         clientMode: 'upstream',
         apiBaseUrl: 'https://agent.example.com',
         userId: '42',
+        upstreamWithCredentials: true,
         artifactTransport: 'polling',
         voiceInputEnabled: false,
         trustedCanvasOrigins: [],
@@ -89,7 +98,7 @@ describe('createCareerAgentClient', () => {
     expect(upstreamFactory).toHaveBeenCalledWith({
       baseUrl: 'https://agent.example.com',
       userId: '42',
-      fetcher: undefined,
+      withCredentials: true,
     });
   });
 
@@ -100,6 +109,7 @@ describe('createCareerAgentClient', () => {
         clientMode: 'upstream',
         apiBaseUrl: null,
         userId: '1',
+        upstreamWithCredentials: false,
         artifactTransport: 'polling',
         voiceInputEnabled: false,
         trustedCanvasOrigins: [],
