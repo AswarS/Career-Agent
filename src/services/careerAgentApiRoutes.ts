@@ -1,7 +1,7 @@
 const CAREER_AGENT_API_BASE_PATH = '/api/career-agent';
 
 export const CAREER_AGENT_API_ROUTE_PATTERNS = {
-  listThreads: `${CAREER_AGENT_API_BASE_PATH}/threads`,
+  listThreads: `${CAREER_AGENT_API_BASE_PATH}/threads/:userId`,
   threadMessages: `${CAREER_AGENT_API_BASE_PATH}/threads/:threadId/messages`,
   profile: `${CAREER_AGENT_API_BASE_PATH}/profile`,
   profileSuggestions: `${CAREER_AGENT_API_BASE_PATH}/profile/suggestions`,
@@ -14,7 +14,7 @@ export const CAREER_AGENT_API_ROUTE_DESCRIPTORS = [
   {
     method: 'GET',
     path: CAREER_AGENT_API_ROUTE_PATTERNS.listThreads,
-    purpose: '填充左侧会话导航栏。',
+    purpose: '按用户填充左侧会话导航栏。',
   },
   {
     method: 'GET',
@@ -54,8 +54,8 @@ export const CAREER_AGENT_API_ROUTE_DESCRIPTORS = [
 ] as const;
 
 export const CAREER_AGENT_API_ROUTES = {
-  listThreads() {
-    return CAREER_AGENT_API_ROUTE_PATTERNS.listThreads;
+  listThreads(userId: string) {
+    return CAREER_AGENT_API_ROUTE_PATTERNS.listThreads.replace(':userId', encodeURIComponent(userId));
   },
   threadMessages(threadId: string) {
     return CAREER_AGENT_API_ROUTE_PATTERNS.threadMessages.replace(':threadId', encodeURIComponent(threadId));

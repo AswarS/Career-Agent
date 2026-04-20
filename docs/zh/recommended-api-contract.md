@@ -35,7 +35,8 @@
 ### 2.5 认证与请求上下文
 
 - mock 模式可不启用登录
-- upstream 联调模式，业务请求应携带 x-user-id
+- upstream 联调模式，当前会话列表先按路径参数携带用户 id：`GET /api/career-agent/threads/:userId`
+- 前端默认用户 id 为 `1`，可通过 `VITE_CAREER_AGENT_USER_ID` 覆盖
 - 写请求（POST/PUT/DELETE）建议携带 x-request-id 用于链路追踪
 
 ### 2.6 成功与失败返回
@@ -235,7 +236,8 @@
 ### 5.1 获取会话列表
 
 - 方法：GET
-- 路径：/api/career-agent/threads
+- 路径：/api/career-agent/threads/:userId
+- 路径参数：userId(string)，当前本地默认值为 1
 - 响应 200：ThreadSummary[]
 
 ### 5.2 获取会话消息
@@ -330,7 +332,11 @@
 - 方法：DELETE
 - 路径：/api/career-agent/threads/:threadId
 
-### 6.2 多模态上传（图片优先）
+### 6.2 多模态上传（图片和文件，待后端接口稳定后启用）
+
+当前前端已经支持 composer 选择图片和文件，并将它们作为本地附件加入本地草稿消息。该能力只用于验证 UI 和消息渲染，不代表端到端上传已接通。
+
+真实上传仍建议采用三段式上传流程。后端需要先提供 upload controller、文件大小限制、mime 类型限制和上传完成后的 asset 引用合同。
 
 采用三段式上传流程。
 

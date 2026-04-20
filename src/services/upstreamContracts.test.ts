@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeArtifactRecord, normalizeProfileSuggestion, normalizeThreadMessage } from './upstreamContracts';
+import {
+  normalizeArtifactRecord,
+  normalizeProfileSuggestion,
+  normalizeThreadMessage,
+  normalizeThreadSummary,
+} from './upstreamContracts';
 
 describe('normalizeArtifactRecord', () => {
   it('maps snake_case fields and queued status into the frontend artifact shape', () => {
@@ -73,6 +78,27 @@ describe('normalizeArtifactRecord', () => {
     }
 
     expect(artifact.payload.html).toBe('');
+  });
+});
+
+describe('normalizeThreadSummary', () => {
+  it('normalizes the current server thread list shape into frontend strings', () => {
+    const thread = normalizeThreadSummary({
+      id: 1,
+      userId: 1,
+      title: '问好',
+      preview: '你好',
+      updatedAt: 1776644879000,
+      createdAt: 1776644820000,
+    });
+
+    expect(thread).toEqual({
+      id: '1',
+      title: '问好',
+      preview: '你好',
+      updatedAt: new Date(1776644879000).toISOString(),
+      status: 'active',
+    });
   });
 });
 
@@ -283,6 +309,47 @@ describe('normalizeThreadMessage', () => {
       'image-from-media',
       'video-from-attachments',
     ]);
+  });
+
+  it('normalizes the current server message list shape into frontend strings', () => {
+    const message = normalizeThreadMessage({
+      id: 2,
+      conversationId: 1,
+      role: 'assistant',
+      kind: 'markdown',
+      content: '你好，有什么我可以帮你的',
+      reasoning: '用户打招呼',
+      agentId: '1',
+      agentName: '助手',
+      actions: null,
+      media: null,
+      createdAt: 1776645161000,
+    }, '1');
+
+    expect(message).toMatchObject({
+      id: '2',
+      threadId: '1',
+      role: 'assistant',
+      kind: 'markdown',
+      content: '你好，有什么我可以帮你的',
+      reasoning: '用户打招呼',
+      agentId: '1',
+      agentName: '助手',
+      createdAt: new Date(1776645161000).toISOString(),
+    });
+  });
+
+  it('preserves numeric zero agent ids from upstream payloads', () => {
+    const message = normalizeThreadMessage({
+      id: 3,
+      conversationId: 1,
+      role: 'assistant',
+      content: '系统 agent 返回。',
+      agentId: 0,
+      createdAt: 1776645161000,
+    }, '1');
+
+    expect(message.agentId).toBe('0');
   });
 });
 

@@ -17,6 +17,7 @@ export type ArtifactRenderMode = 'html' | 'markdown' | 'cards' | 'url';
 export type ArtifactViewMode = 'pane' | 'focus' | 'immersive';
 export type MessageActionKind = 'open-artifact';
 export type MessageMediaKind = 'image' | 'video';
+export type DraftMessageAttachmentKind = 'image' | 'file';
 
 export interface MessageAction {
   id: string;
@@ -37,6 +38,28 @@ export interface MessageMedia {
   posterUrl?: string;
 }
 
+export interface MessageFileAttachment {
+  id: string;
+  name: string;
+  url: string;
+  mimeType?: string;
+  sizeBytes?: number;
+}
+
+export interface DraftMessageAttachment {
+  id: string;
+  kind: DraftMessageAttachmentKind;
+  name: string;
+  url: string;
+  mimeType: string;
+  sizeBytes: number;
+}
+
+export interface DraftMessageSubmission {
+  content: string;
+  attachments: DraftMessageAttachment[];
+}
+
 export interface ThreadMessage {
   id: string;
   threadId: string;
@@ -49,6 +72,7 @@ export interface ThreadMessage {
   agentAccent?: AgentAccent | null;
   actions?: MessageAction[];
   media?: MessageMedia[];
+  files?: MessageFileAttachment[];
   createdAt: string;
 }
 

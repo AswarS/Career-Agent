@@ -405,7 +405,7 @@ const messagesByThread: Record<string, ThreadMessage[]> = {
       agentName: '多模态助手',
       agentAccent: 'teal',
       content:
-        '我已收到视频资源位置，并在当前消息里提供本地播放控件。\n\n这一步先解决“展示与播放”，不处理用户上传入口；上传文件建议等消息发送状态、后端对象存储和文件限制规则稳定后再做。',
+        '我已收到视频资源位置，并在当前消息里提供本地播放控件。\n\n这一步验证“展示与播放”。输入区现在支持本地图片和文件附件预览，但真实上传仍要等后端对象存储和文件限制规则稳定后再接入。',
       media: [
         {
           id: 'media-test-video',

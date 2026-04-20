@@ -126,6 +126,7 @@
 
 - `VITE_CAREER_AGENT_CLIENT_MODE`
 - `VITE_CAREER_AGENT_API_BASE_URL`
+- `VITE_CAREER_AGENT_USER_ID`
 - `VITE_CAREER_AGENT_ARTIFACT_TRANSPORT`
 - `VITE_CAREER_AGENT_ENABLE_VOICE_INPUT`
 - `VITE_CAREER_AGENT_TRUSTED_CANVAS_ORIGINS`
@@ -199,7 +200,7 @@
 
 如果上游团队准备提供真实接口，需要先确认这些路径是否接受：
 
-- `GET /api/career-agent/threads`
+- `GET /api/career-agent/threads/:userId`
 - `GET /api/career-agent/threads/:threadId/messages`
 - `GET /api/career-agent/profile`
 - `PUT /api/career-agent/profile`
@@ -331,20 +332,39 @@
 - 如果图片 / 视频是结果页的一部分，应作为 artifact HTML / URL 页面内部资源展示，而不是新增独立的“图片工件 / 视频工件”类型
 - 如果图片 / 视频只是对话上下文附件，应继续使用消息级 `media` / `attachments`
 
-上传文件建议放到下一步做，不建议现在混入：
+Composer 已先支持图片和文件的本地选择、本地 object URL 预览和本地草稿消息。这一步只验证前端交互与消息渲染，不代表真实上传已接通。
 
-- 需要先确认后端对象存储或临时文件服务
-- 需要确认文件大小、数量、mime 类型白名单
-- 需要确认上传后的资源 URL 是否绑定 `thread_id` / `message_id`
-- 需要确认失败、取消、重试和发送中状态
-- 需要确认图片 / 视频是否要做安全扫描、转码、缩略图或过期清理
+推荐上传架构：
+
+- 第一选择：三段式直传对象存储，流程为 `initiate/presign -> browser PUT binary -> complete`。
+- 本地开发如果暂时没有对象存储，server 可以先用本地磁盘或临时文件服务模拟，但仍应暴露同一套 asset 合同，避免前端以后重写。
+- 前端不保存密钥，不直接决定存储路径，不信任浏览器传来的 mime 类型作为唯一依据。
+- 消息发送只引用 `attachment_asset_ids`，不要把文件二进制或 base64 混入消息 JSON。
+
+建议后端 / server 需要实现：
+
+- `POST /api/career-agent/uploads/initiate`：接收 `file_name`、`mime_type`、`file_size_bytes`、`thread_id`、`kind`，校验用户、线程、大小、数量和 mime 白名单，返回 `upload_id`、`upload_url`、`upload_headers`、`expires_at`。
+- `PUT upload_url`：浏览器直接上传二进制；生产建议指向对象存储预签名地址，本地开发可指向 server 临时上传地址。
+- `POST /api/career-agent/uploads/complete`：接收 `upload_id` 和 `thread_id`，server 验证文件确实存在、大小和类型匹配，然后返回 `asset_id`、`kind`、`url`、`mime_type`、`size_bytes`。
+- `POST /api/career-agent/threads/:threadId/messages`：请求体支持 `attachment_asset_ids`，server 校验 asset 属于当前用户和线程，再把附件交给 agent runtime。
+- 建议新增 asset 表或等价持久化记录：`asset_id`、`user_id`、`thread_id`、`message_id`、`status`、`storage_key`、`original_name`、`mime_type`、`size_bytes`、`created_at`、`expires_at`。
+- 需要后台清理过期未完成上传、孤儿 asset 和临时文件。
+- 图片可选做缩略图、尺寸读取和安全扫描；普通文件至少要做大小限制、类型限制和下载鉴权。
+
+前端后续接真实上传时负责：
+
+- 在 composer 中维护附件队列：待上传、上传中、失败、已完成、可移除。
+- 上传成功后只把 `asset_id` 放入发送消息请求。
+- 上传失败时允许移除或重试，不影响纯文本发送。
+- 对图片继续用消息级 `media` 展示；普通文件继续用消息级 `files` 展示，不把它们升级成 artifact。
 
 推荐顺序：
 
-- 先完成对话内图片 / 视频展示
-- 再完成 composer 的发送 / pending / error / retry
-- 然后做图片上传
-- 最后再扩展视频上传、语音输入和更复杂的多模态工作流
+- 先完成对话内图片 / 视频展示。
+- 再完成 composer 本地图片 / 文件附件 UI。
+- 然后由 server 实现上传 asset 合同和真实消息发送 endpoint。
+- 前端接入真实上传队列、pending / error / retry。
+- 最后再扩展视频上传、语音输入和更复杂的多模态工作流。
 
 ### 4. Profile 写入权
 

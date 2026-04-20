@@ -26,6 +26,7 @@ describe('createUpstreamCareerAgentClient', () => {
 
     const client = createUpstreamCareerAgentClient({
       baseUrl: 'https://agent.example.com',
+      userId: '1',
       fetcher: fetcher as unknown as typeof fetch,
     });
 
@@ -46,10 +47,52 @@ describe('createUpstreamCareerAgentClient', () => {
     const fetcher = vi.fn(async () => new Response(null, { status: 404 }));
     const client = createUpstreamCareerAgentClient({
       baseUrl: 'https://agent.example.com',
+      userId: '1',
       fetcher: fetcher as unknown as typeof fetch,
     });
 
     await expect(client.getArtifact('missing-artifact')).resolves.toBeNull();
     await expect(client.refreshArtifact('missing-artifact')).resolves.toBeNull();
+  });
+
+  it('requests the user-scoped thread catalog with the configured user id', async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify([
+      {
+        id: 1,
+        userId: 7,
+        title: '问好',
+        preview: '你好',
+        updatedAt: 1776644879000,
+        createdAt: 1776644820000,
+      },
+    ]), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    }));
+    const client = createUpstreamCareerAgentClient({
+      baseUrl: 'https://agent.example.com',
+      userId: '7',
+      fetcher: fetcher as unknown as typeof fetch,
+    });
+
+    const threads = await client.listThreads();
+
+    expect(fetcher).toHaveBeenCalledWith(
+      'https://agent.example.com/api/career-agent/threads/7',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Accept: 'application/json',
+        }),
+      }),
+    );
+    expect(threads[0]).toEqual({
+      id: '1',
+      title: '问好',
+      preview: '你好',
+      updatedAt: new Date(1776644879000).toISOString(),
+      status: 'active',
+    });
   });
 });

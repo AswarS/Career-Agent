@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import MarkdownContent from '../../components/MarkdownContent.vue';
-import type { MessageAction, MessageMedia, ThreadMessage } from '../../types/entities';
+import type { MessageAction, MessageFileAttachment, MessageMedia, ThreadMessage } from '../../types/entities';
 import { getPresentedMessageContent } from './messagePresentation';
 
 const props = defineProps<{
@@ -16,6 +16,33 @@ const emit = defineEmits<{
 const presentedMessage = computed(() => getPresentedMessageContent(props.message));
 const visibleActions = computed(() => props.message.role === 'assistant' ? props.message.actions ?? [] : []);
 const visibleMedia = computed(() => props.message.media ?? []);
+const visibleFiles = computed(() => (props.message.files ?? []).map((file) => ({
+  ...file,
+  safeUrl: normalizeFileUrl(file.url),
+})));
+
+function normalizeFileUrl(value: string) {
+  const nextValue = value.trim();
+
+  if (!nextValue || nextValue.startsWith('//')) {
+    return null;
+  }
+
+  if (!/^[a-zA-Z][a-zA-Z\d+.-]*:/.test(nextValue)) {
+    return nextValue;
+  }
+
+  try {
+    const protocol = new URL(nextValue).protocol.toLowerCase();
+    if (protocol === 'blob:' || protocol === 'http:' || protocol === 'https:') {
+      return nextValue;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
 
 function formatRoleLabel(role: ThreadMessage['role']) {
   switch (role) {
@@ -68,6 +95,24 @@ function formatMediaTitle(media: MessageMedia) {
 
 function formatMediaAlt(media: MessageMedia) {
   return media.alt ?? media.title ?? (media.kind === 'image' ? '对话图片' : '对话视频');
+}
+
+function formatFileSize(file: MessageFileAttachment) {
+  const sizeBytes = file.sizeBytes;
+
+  if (sizeBytes === undefined) {
+    return file.mimeType ?? '文件';
+  }
+
+  if (sizeBytes < 1024) {
+    return `${sizeBytes} B`;
+  }
+
+  if (sizeBytes < 1024 * 1024) {
+    return `${(sizeBytes / 1024).toFixed(1)} KB`;
+  }
+
+  return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 </script>
 
@@ -128,6 +173,24 @@ function formatMediaAlt(media: MessageMedia) {
           {{ media.caption }}
         </figcaption>
       </figure>
+    </div>
+
+    <div v-if="visibleFiles.length" class="message-file-list" aria-label="文件附件">
+      <component
+        v-for="file in visibleFiles"
+        :is="file.safeUrl ? 'a' : 'div'"
+        :key="file.id"
+        class="message-file-card"
+        :class="{ disabled: !file.safeUrl }"
+        :href="file.safeUrl ?? undefined"
+        :download="file.safeUrl ? file.name : undefined"
+      >
+        <span class="file-icon">文件</span>
+        <span class="file-copy">
+          <strong>{{ file.name }}</strong>
+          <small>{{ formatFileSize(file) }}</small>
+        </span>
+      </component>
     </div>
 
     <div v-if="visibleActions.length" class="message-actions">
@@ -244,6 +307,65 @@ function formatMediaAlt(media: MessageMedia) {
   display: grid;
   gap: 14px;
   margin-top: 16px;
+}
+
+.message-file-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.message-file-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--color-border) 86%, var(--color-primary));
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--color-surface-strong) 90%, white);
+  color: inherit;
+  text-decoration: none;
+}
+
+.message-file-card:hover {
+  border-color: color-mix(in srgb, var(--color-primary) 42%, var(--color-border));
+}
+
+.message-file-card.disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.message-file-card.disabled:hover {
+  border-color: color-mix(in srgb, var(--color-border) 86%, var(--color-primary));
+}
+
+.file-icon {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 0.28rem 0.56rem;
+  background: color-mix(in srgb, var(--color-primary-soft) 72%, white);
+  color: var(--color-text);
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+.file-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.file-copy strong {
+  overflow: hidden;
+  color: var(--color-text);
+  font-size: 0.9rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-copy small {
+  color: var(--color-text-muted);
 }
 
 .message-media-card {

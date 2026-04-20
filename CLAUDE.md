@@ -91,6 +91,7 @@ Use `npm run canvas:node-fixture` plus `npm run dev:node-canvas-fixture` for the
 Copy `.env.example` to configure runtime:
 - `VITE_CAREER_AGENT_CLIENT_MODE` — 'mock' or 'upstream'
 - `VITE_CAREER_AGENT_API_BASE_URL` — backend URL
+- `VITE_CAREER_AGENT_USER_ID` — upstream user id for user-scoped thread lists; defaults to '1'
 - `VITE_CAREER_AGENT_ARTIFACT_TRANSPORT` — 'polling', 'sse', or 'websocket'
 - `VITE_CAREER_AGENT_ENABLE_VOICE_INPUT` — feature flag for voice UI
 - `VITE_CAREER_AGENT_TRUSTED_CANVAS_ORIGINS` — trusted iframe origins

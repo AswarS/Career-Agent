@@ -12,13 +12,16 @@
 
 ## 2. 结论摘要
 
-1. v1 核心 8 个接口（线程读取、画像读取/更新、工件读取/刷新）已在前端客户端层落地。
-2. 扩展接口（会话写入、多模态上传、工作画布交互回传）尚未接入前端实现。
-3. 存在可执行层面的合同差异，主要集中在请求上下文头、错误模型透传和时间格式一致性。
+1. 会话列表读取已按当前 server 形态调整为 `GET /api/career-agent/threads/:userId`，默认用户 id 为 `1`。
+2. v1 读取接口（线程读取、画像读取/更新、工件读取/刷新）大多已在前端客户端层落地，但真实 server 的部分路径仍需继续对齐。
+3. Composer 已支持图片和文件本地选择、本地预览和本地草稿消息；这不是端到端上传。
+4. 扩展接口（真实会话写入、真实多模态上传、工作画布交互回传）尚未接入前端实现。
+5. 仍存在可执行层面的合同差异，主要集中在错误模型透传、真实发送链路和真实上传链路。
 
 ## 3. 已对齐项
 
 1. 路由与基础路径对齐：`/api/career-agent/*` 已在 `src/services/careerAgentApiRoutes.ts` 定义。
+2. 会话列表用户路径已对齐当前 server：`GET /api/career-agent/threads/:userId`。
 2. 客户端接口对齐：`src/services/careerAgentClient.ts` 已覆盖 v1 核心 8 接口。
 3. 字段兼容与归一化对齐：
    - snake_case/camelCase 兼容
@@ -30,23 +33,23 @@
 
 ## 4. 冲突项（合同 vs 当前代码）
 
-### C-01 请求上下文头未落地
-
-- 合同要求：upstream 业务请求应携带 `x-user-id`；写请求建议携带 `x-request-id`。
-- 当前实现：`src/services/upstreamCareerAgentClient.ts` 的 `mergeHeaders` 仅拼接 `Accept` 和 `Content-Type`，未注入上述头。
-- 影响：联调阶段难以做用户隔离、请求追踪与问题排查。
-
-### C-02 统一错误对象未透传
+### C-01 错误模型未透传
 
 - 合同要求：错误响应返回 `{ code, message, request_id }`。
 - 当前实现：`parseJsonResponse` 仅按状态码抛出通用错误文本，未解析业务错误对象。
 - 影响：前端无法基于错误码做精细化提示、重试策略或埋点。
 
-### C-03 时间格式一致性不足
+### C-02 时间格式一致性不足
 
 - 合同要求：统一 ISO 8601 UTC。
-- 当前实现：`src/stores/workspace.ts` 中 `submitDraftMessage` 使用本地格式 `YYYY-MM-DD HH:mm` 生成时间。
+- 当前实现：`src/stores/workspace.ts` 中本地草稿消息仍使用本地格式 `YYYY-MM-DD HH:mm` 生成时间。
 - 影响：后续若本地草稿消息与上游消息合并持久化，时间排序和展示规则可能出现不一致。
+
+### C-03 当前 server 仍缺少真实上传与真实发送接口
+
+- 当前证据：`/Users/fancy/code/Career-Agent/server` 里没有 upload controller；`SendMessageDto` 存在，但 `ConversationController` 尚未暴露 `POST /api/career-agent/threads/:threadId/messages`。
+- 当前前端：只做本地附件选择、本地 object URL 预览和本地草稿消息。
+- 影响：暂时无法做真实上传、服务端资产引用和真实 agent 消息发送闭环。
 
 ## 5. 前端未实现项
 
@@ -54,7 +57,7 @@
 
 1. 会话发送链路
 - 目标：接入 `POST /api/career-agent/threads/:threadId/messages`。
-- 当前证据：`ConversationWorkspacePage` 调用的是 `workspaceStore.submitDraftMessage` 本地草稿；`ConversationComposer` 也明确为 mock 驱动。
+- 当前证据：`ConversationWorkspacePage` 调用的是 `workspaceStore.submitDraftMessage` 本地草稿；server 当前 controller 尚未暴露真实发送 endpoint。
 - 缺口：未实现 send/pending/error/retry 的真实请求状态机。
 
 2. 会话新建与删除
@@ -62,15 +65,16 @@
 - 当前证据：`CareerAgentClient` 与路由常量未定义对应方法与路径。
 - 缺口：左侧会话列表仅支持读取与切换，缺少真实生命周期操作。
 
-3. 请求头与错误模型接线
-- 目标：将 `x-user-id`、`x-request-id` 与统一错误对象接入 `upstreamCareerAgentClient`。
-- 当前证据：见 C-01/C-02。
+3. 错误模型接线
+- 目标：将统一错误对象接入 `upstreamCareerAgentClient`。
+- 当前证据：见 C-01。
 
 ## 5.2 P1（扩展能力）
 
 1. 多模态上传三段式
 - 目标：`presign -> PUT 二进制 -> complete`，并在发送消息时引用 `attachment_asset_ids`。
-- 当前证据：`ConversationComposer` 的图片/语音按钮为 disabled；客户端接口无上传方法。
+- 当前证据：`ConversationComposer` 已支持图片和文件本地附件，但客户端接口无真实上传方法，当前 server 也没有 upload controller。
+- 当前边界：本地附件只用于 UI 验证和消息渲染验证，不代表真实上传已接通。
 
 2. 工作画布交互回传
 - 目标：接入 `POST /api/career-agent/artifacts/:artifactId/interactions`。
@@ -92,11 +96,11 @@
 
 1. 先完成 P0
 - 扩展 `CareerAgentClient` 与 `careerAgentApiRoutes`
-- 在 `upstreamCareerAgentClient` 接入请求头、错误对象解析
+- 在 `upstreamCareerAgentClient` 接入错误对象解析
 - 将 `submitDraftMessage` 替换为真实发送状态机（含失败恢复）
 
 2. 再推进 P1
-- 上传链路与消息发送串联
+- 在后端 upload controller 稳定后，将当前本地附件 UI 串联真实上传链路与消息发送
 - 定义 iframe 到 host 的交互事件协议并接入 interactions API
 - 根据后端能力选择 SSE 或 WebSocket（或继续 polling）
 

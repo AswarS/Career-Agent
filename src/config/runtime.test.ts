@@ -9,6 +9,7 @@ describe('resolveRuntimeConfig', () => {
       environmentName: 'development',
       clientMode: 'mock',
       apiBaseUrl: null,
+      userId: '1',
       artifactTransport: 'mock',
       voiceInputEnabled: false,
       trustedCanvasOrigins: [],
@@ -24,6 +25,7 @@ describe('resolveRuntimeConfig', () => {
       MODE: 'production',
       VITE_CAREER_AGENT_CLIENT_MODE: 'upstream',
       VITE_CAREER_AGENT_API_BASE_URL: 'https://agent.example.com///',
+      VITE_CAREER_AGENT_USER_ID: ' 42 ',
       VITE_CAREER_AGENT_ARTIFACT_TRANSPORT: 'sse',
       VITE_CAREER_AGENT_ENABLE_VOICE_INPUT: 'true',
       VITE_CAREER_AGENT_TRUSTED_CANVAS_ORIGINS:
@@ -37,6 +39,7 @@ describe('resolveRuntimeConfig', () => {
       environmentName: 'production',
       clientMode: 'upstream',
       apiBaseUrl: 'https://agent.example.com',
+      userId: '42',
       artifactTransport: 'sse',
       voiceInputEnabled: true,
       trustedCanvasOrigins: ['https://canvas.example.com', 'http://localhost:3000'],
@@ -55,5 +58,13 @@ describe('resolveRuntimeConfig', () => {
     });
 
     expect(config.artifactTransport).toBe('polling');
+  });
+
+  it('defaults empty user id values to the local development user', () => {
+    const config = resolveRuntimeConfig({
+      VITE_CAREER_AGENT_USER_ID: ' ',
+    });
+
+    expect(config.userId).toBe('1');
   });
 });

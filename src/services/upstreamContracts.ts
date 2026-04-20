@@ -15,25 +15,31 @@ import type {
 } from '../types/entities';
 
 export interface UpstreamThreadSummary {
-  id: string;
-  title: string;
-  preview: string;
-  status: ThreadStatus;
-  updated_at?: string;
-  updatedAt?: string;
+  id: string | number;
+  user_id?: string | number;
+  userId?: string | number;
+  title?: string | null;
+  preview?: string | null;
+  status?: ThreadStatus | null;
+  updated_at?: string | number | Date;
+  updatedAt?: string | number | Date;
+  created_at?: string | number | Date;
+  createdAt?: string | number | Date;
 }
 
 export interface UpstreamThreadMessage {
-  id: string;
-  thread_id?: string;
-  threadId?: string;
+  id: string | number;
+  conversation_id?: string | number;
+  conversationId?: string | number;
+  thread_id?: string | number;
+  threadId?: string | number;
   role: ThreadMessage['role'];
   kind?: MessageKind;
   content: string;
   reasoning?: string | null;
   think?: string | null;
-  agent_id?: string | null;
-  agentId?: string | null;
+  agent_id?: string | number | null;
+  agentId?: string | number | null;
   agent_name?: string | null;
   agentName?: string | null;
   agent_accent?: AgentAccent | null;
@@ -41,8 +47,8 @@ export interface UpstreamThreadMessage {
   actions?: UpstreamMessageAction[] | null;
   media?: UpstreamMessageMedia[] | null;
   attachments?: UpstreamMessageMedia[] | null;
-  created_at?: string;
-  createdAt?: string;
+  created_at?: string | number | Date;
+  createdAt?: string | number | Date;
 }
 
 export interface UpstreamMessageAction {
@@ -116,6 +122,29 @@ function normalizeArtifactRenderMode(value: ArtifactRenderMode | undefined): Art
 
 function normalizeMessageKind(value: MessageKind | undefined): MessageKind {
   return value === 'status' ? 'status' : 'markdown';
+}
+
+function normalizeId(value: string | number | null | undefined, fallback = 'unknown'): string {
+  const nextValue = String(value ?? '').trim();
+  return nextValue || fallback;
+}
+
+function normalizeTimestamp(value: string | number | Date | null | undefined): string {
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  if (typeof value === 'number') {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? new Date(0).toISOString() : date.toISOString();
+  }
+
+  const nextValue = value?.trim();
+  if (!nextValue) {
+    return new Date(0).toISOString();
+  }
+
+  return nextValue;
 }
 
 function normalizeAgentAccent(value: AgentAccent | undefined | null): AgentAccent | null {
@@ -260,12 +289,14 @@ export function sanitizeProfileRecord(input: ProfileRecord): ProfileRecord {
 }
 
 export function normalizeThreadSummary(input: UpstreamThreadSummary): ThreadSummary {
+  const id = normalizeId(input.id, 'thread-unknown');
+
   return {
-    id: input.id,
-    title: input.title,
-    preview: input.preview,
-    updatedAt: input.updatedAt ?? input.updated_at ?? new Date(0).toISOString(),
-    status: input.status,
+    id,
+    title: normalizeOptionalText(input.title) ?? `会话 ${id}`,
+    preview: normalizeOptionalText(input.preview) ?? '',
+    updatedAt: normalizeTimestamp(input.updatedAt ?? input.updated_at ?? input.createdAt ?? input.created_at),
+    status: input.status ?? 'active',
   };
 }
 
@@ -274,20 +305,25 @@ export function normalizeThreadMessage(input: UpstreamThreadMessage, fallbackThr
   const extractedReasoning = shouldExtractInlineReasoning
     ? extractReasoningBlock(input.content)
     : { content: input.content, reasoning: null };
+  const rawAgentId = input.agentId ?? input.agent_id;
+  const normalizedAgentId = normalizeId(rawAgentId, '');
 
   return {
-    id: input.id,
-    threadId: input.threadId ?? input.thread_id ?? fallbackThreadId,
+    id: normalizeId(input.id, 'message-unknown'),
+    threadId: normalizeId(
+      input.threadId ?? input.thread_id ?? input.conversationId ?? input.conversation_id,
+      fallbackThreadId,
+    ),
     role: input.role,
     kind: normalizeMessageKind(input.kind),
     content: extractedReasoning.content,
     reasoning: input.reasoning ?? input.think ?? extractedReasoning.reasoning,
-    agentId: input.agentId ?? input.agent_id ?? null,
+    agentId: normalizedAgentId || null,
     agentName: input.agentName ?? input.agent_name ?? null,
     agentAccent: normalizeAgentAccent(input.agentAccent ?? input.agent_accent),
     actions: input.role === 'assistant' ? normalizeMessageActions(input.actions) : undefined,
     media: normalizeMessageMedia(mergeMessageMediaSources(input)),
-    createdAt: input.createdAt ?? input.created_at ?? new Date(0).toISOString(),
+    createdAt: normalizeTimestamp(input.createdAt ?? input.created_at),
   };
 }
 

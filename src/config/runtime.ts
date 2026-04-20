@@ -5,6 +5,7 @@ export interface RuntimeEnvLike {
   MODE?: string;
   VITE_CAREER_AGENT_CLIENT_MODE?: string;
   VITE_CAREER_AGENT_API_BASE_URL?: string;
+  VITE_CAREER_AGENT_USER_ID?: string;
   VITE_CAREER_AGENT_ARTIFACT_TRANSPORT?: string;
   VITE_CAREER_AGENT_ENABLE_VOICE_INPUT?: string;
   VITE_CAREER_AGENT_TRUSTED_CANVAS_ORIGINS?: string;
@@ -17,6 +18,7 @@ export interface RuntimeConfig {
   environmentName: string;
   clientMode: CareerAgentClientMode;
   apiBaseUrl: string | null;
+  userId: string;
   artifactTransport: ArtifactTransport;
   voiceInputEnabled: boolean;
   trustedCanvasOrigins: string[];
@@ -38,6 +40,11 @@ function normalizeBaseUrl(value: string | undefined): string | null {
   }
 
   return nextValue.replace(/\/+$/, '');
+}
+
+function normalizeUserId(value: string | undefined): string {
+  const nextValue = value?.trim();
+  return nextValue || '1';
 }
 
 function normalizeBoolean(value: string | undefined): boolean {
@@ -108,6 +115,7 @@ export function resolveRuntimeConfig(env: RuntimeEnvLike): RuntimeConfig {
     environmentName: env.MODE?.trim() || 'development',
     clientMode,
     apiBaseUrl,
+    userId: normalizeUserId(env.VITE_CAREER_AGENT_USER_ID),
     artifactTransport: normalizeArtifactTransport(clientMode, env.VITE_CAREER_AGENT_ARTIFACT_TRANSPORT),
     voiceInputEnabled: normalizeBoolean(env.VITE_CAREER_AGENT_ENABLE_VOICE_INPUT),
     trustedCanvasOrigins: normalizeTrustedCanvasOrigins(env.VITE_CAREER_AGENT_TRUSTED_CANVAS_ORIGINS),

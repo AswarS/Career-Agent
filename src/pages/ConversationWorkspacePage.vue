@@ -6,7 +6,7 @@ import ConversationComposer from '../modules/conversation/ConversationComposer.v
 import ConversationMessageCard from '../modules/conversation/ConversationMessageCard.vue';
 import { shouldUseMultiAgentPresentation } from '../modules/conversation/messagePresentation';
 import { useWorkspaceStore } from '../stores/workspace';
-import type { MessageAction } from '../types/entities';
+import type { DraftMessageSubmission, MessageAction } from '../types/entities';
 
 const route = useRoute();
 const workspaceStore = useWorkspaceStore();
@@ -23,8 +23,8 @@ watch(
   { immediate: true },
 );
 
-function handleSubmit(value: string) {
-  workspaceStore.submitDraftMessage(value);
+function handleSubmit(submission: DraftMessageSubmission) {
+  workspaceStore.submitDraftMessage(submission);
 }
 
 async function handleMessageAction(action: MessageAction) {

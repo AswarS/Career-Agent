@@ -44,6 +44,7 @@ export function createCareerAgentClient(
 
     return (options.upstreamFactory ?? createUpstreamCareerAgentClient)({
       baseUrl: config.apiBaseUrl,
+      userId: config.userId,
       fetcher: options.fetcher,
     });
   }

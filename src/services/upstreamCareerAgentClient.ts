@@ -17,6 +17,7 @@ import {
 
 export interface UpstreamCareerAgentClientOptions {
   baseUrl: string;
+  userId: string;
   fetcher?: typeof fetch;
 }
 
@@ -73,7 +74,9 @@ export function createUpstreamCareerAgentClient(
 
   return {
     async listThreads() {
-      const payload = await requestJson<UpstreamThreadSummary[]>(CAREER_AGENT_API_ROUTES.listThreads());
+      const payload = await requestJson<UpstreamThreadSummary[]>(
+        CAREER_AGENT_API_ROUTES.listThreads(options.userId),
+      );
       return payload.map(normalizeThreadSummary);
     },
     async getThreadMessages(threadId: string) {

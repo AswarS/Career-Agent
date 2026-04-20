@@ -46,6 +46,7 @@ describe('createCareerAgentClient', () => {
         environmentName: 'test',
         clientMode: 'mock',
         apiBaseUrl: null,
+        userId: '1',
         artifactTransport: 'mock',
         voiceInputEnabled: false,
         trustedCanvasOrigins: [],
@@ -72,6 +73,7 @@ describe('createCareerAgentClient', () => {
         environmentName: 'test',
         clientMode: 'upstream',
         apiBaseUrl: 'https://agent.example.com',
+        userId: '42',
         artifactTransport: 'polling',
         voiceInputEnabled: false,
         trustedCanvasOrigins: [],
@@ -86,6 +88,7 @@ describe('createCareerAgentClient', () => {
     expect(client).toBe(upstreamClient);
     expect(upstreamFactory).toHaveBeenCalledWith({
       baseUrl: 'https://agent.example.com',
+      userId: '42',
       fetcher: undefined,
     });
   });
@@ -96,6 +99,7 @@ describe('createCareerAgentClient', () => {
         environmentName: 'test',
         clientMode: 'upstream',
         apiBaseUrl: null,
+        userId: '1',
         artifactTransport: 'polling',
         voiceInputEnabled: false,
         trustedCanvasOrigins: [],

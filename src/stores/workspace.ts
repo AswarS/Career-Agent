@@ -6,6 +6,7 @@ import type {
   ArtifactRecord,
   ArtifactStatus,
   ArtifactViewMode,
+  DraftMessageSubmission,
   LoadState,
   ProfileRecord,
   ProfileSuggestion,
@@ -33,6 +34,25 @@ function formatLocalTimestamp(date: Date) {
   const minutes = String(date.getMinutes()).padStart(2, '0');
 
   return `${year}-${month}-${day} ${hours}:${minutes}`;
+}
+
+function revokeBlobUrl(value: string | null | undefined) {
+  if (value?.startsWith('blob:')) {
+    URL.revokeObjectURL(value);
+  }
+}
+
+function revokeLocalMessageResources(messages: ThreadMessage[]) {
+  for (const message of messages) {
+    for (const media of message.media ?? []) {
+      revokeBlobUrl(media.url);
+      revokeBlobUrl(media.posterUrl);
+    }
+
+    for (const file of message.files ?? []) {
+      revokeBlobUrl(file.url);
+    }
+  }
 }
 
 interface WorkspaceState {
@@ -186,6 +206,7 @@ export const useWorkspaceStore = defineStore('workspace', {
 
       this.messagesStatus = 'loading';
       this.errorMessage = null;
+      revokeLocalMessageResources(this.messages);
       this.messages = [];
 
       await this.initialize();
@@ -201,6 +222,7 @@ export const useWorkspaceStore = defineStore('workspace', {
           return;
         }
 
+        revokeLocalMessageResources(this.messages);
         this.messages = nextMessages;
         this.messagesStatus = 'ready';
       } catch (error) {
@@ -208,6 +230,7 @@ export const useWorkspaceStore = defineStore('workspace', {
           return;
         }
 
+        revokeLocalMessageResources(this.messages);
         this.messages = [];
         this.messagesStatus = 'error';
         this.errorMessage = error instanceof Error ? error.message : 'Unknown message loading error';
@@ -341,19 +364,47 @@ export const useWorkspaceStore = defineStore('workspace', {
         throw error;
       }
     },
-    submitDraftMessage(content: string) {
-      if (!this.activeThreadId || !content.trim()) {
+    submitDraftMessage(submission: DraftMessageSubmission | string) {
+      const nextSubmission = typeof submission === 'string'
+        ? { content: submission, attachments: [] }
+        : submission;
+      const content = nextSubmission.content.trim();
+      const attachments = nextSubmission.attachments;
+
+      if (!this.activeThreadId || (!content && attachments.length === 0)) {
         return;
       }
 
       const timestamp = formatLocalTimestamp(new Date());
+      const media = attachments
+        .filter((attachment) => attachment.kind === 'image')
+        .map((attachment) => ({
+          id: attachment.id,
+          kind: 'image' as const,
+          url: attachment.url,
+          title: attachment.name,
+          alt: `用户上传图片：${attachment.name}`,
+          mimeType: attachment.mimeType,
+          caption: '本地待上传图片；当前仅用于前端预览，尚未上传到服务端。',
+        }));
+      const files = attachments
+        .filter((attachment) => attachment.kind === 'file')
+        .map((attachment) => ({
+          id: attachment.id,
+          name: attachment.name,
+          url: attachment.url,
+          mimeType: attachment.mimeType,
+          sizeBytes: attachment.sizeBytes,
+        }));
 
       this.messages.push({
         id: createMessageId('local-user'),
         threadId: this.activeThreadId,
         role: 'user',
         kind: 'markdown',
-        content,
+        content: content || '（已添加附件）',
+        media: media.length ? media : undefined,
+        files: files.length ? files : undefined,
         createdAt: timestamp,
       });
 
@@ -362,7 +413,9 @@ export const useWorkspaceStore = defineStore('workspace', {
         threadId: this.activeThreadId,
         role: 'system',
         kind: 'status',
-        content: '上游发送链路尚未接通。当前消息仅保存在本地，用于验证前端输入区和消息渲染流程。',
+        content: attachments.length
+          ? '上游发送链路和真实上传接口尚未接通。当前消息与附件仅保存在本地，用于验证前端输入区、附件预览和消息渲染流程。'
+          : '上游发送链路尚未接通。当前消息仅保存在本地，用于验证前端输入区和消息渲染流程。',
         createdAt: timestamp,
       });
     },

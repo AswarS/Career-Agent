@@ -22,6 +22,11 @@
         <p>{{ apiBaseUrlBody }}</p>
       </article>
       <article class="status-card">
+        <p class="card-label">上游用户 ID</p>
+        <strong>{{ runtimeConfig.userId }}</strong>
+        <p>当前用于读取用户维度的会话列表，默认值为 1。</p>
+      </article>
+      <article class="status-card">
         <p class="card-label">工件传输方式</p>
         <strong>{{ artifactTransportLabel }}</strong>
         <p>{{ artifactTransportBody }}</p>
