@@ -84,14 +84,18 @@ function listSessionsRoute(): Route {
   return {
     method: 'GET',
     pattern: /^\/v1\/sessions$/,
-    handler: async (_params, _req, _config, manager?: SessionManager) => {
+    handler: async (_params, req, _config, manager?: SessionManager) => {
       if (!manager) return errorResponse('Internal error', 500)
-      const sessions = Array.from(manager.getAllSessions().entries()).map(
+      const url = new URL(req.url)
+      const userId = url.searchParams.get('userId') ?? undefined
+      const sessionsMap = userId ? manager.getSessionsByUser(userId) : manager.getAllSessions()
+      const sessions = Array.from(sessionsMap.entries()).map(
         ([id, session]) => ({
           id,
           createdAt: session.context.createdAt,
           lastActivityAt: session.lastActivityAt,
           cwd: session.context.config.cwd,
+          userId: session.context.userId,
           ...(session.context.config.model ? { model: session.context.config.model } : {}),
         }),
       )
@@ -123,6 +127,7 @@ function createSessionRoute(): Route {
           provider: body.provider as string | undefined,
           model: body.model as string | undefined,
           cwd: body.cwd as string | undefined,
+          userId: body.userId as string | undefined,
           permissions: body.permissions as any | undefined,
           mcpServers: body.mcpServers as any | undefined,
         })

@@ -103,9 +103,20 @@ export async function getAnthropicClient({
   const sessionCtx = getSessionContext()
   if (sessionCtx) {
     if (sessionCtx.anthropicClient) return sessionCtx.anthropicClient
+    // Resolve API key: session config > argument > ANTHROPIC_AUTH_TOKEN env > ANTHROPIC_API_KEY env
+    const resolvedApiKey = sessionCtx.config.apiKey
+      ?? apiKey
+      ?? process.env.ANTHROPIC_AUTH_TOKEN
+      ?? getAnthropicApiKey()
+      ?? undefined
+    // Resolve base URL: session config > env var
+    const resolvedBaseUrl = sessionCtx.config.baseUrl
+      ?? process.env.ANTHROPIC_BASE_URL
+      ?? undefined
+    console.log(`[API Client] session mode: apiKey=${resolvedApiKey ? '***' + resolvedApiKey.slice(-6) : 'NONE'}, baseURL=${resolvedBaseUrl ?? 'NONE'}, sessionApiKey=${sessionCtx.config.apiKey ? 'SET' : 'NONE'}, sessionBaseUrl=${sessionCtx.config.baseUrl ?? 'NONE'}`)
     const client = new Anthropic({
-      apiKey: sessionCtx.config.apiKey ?? apiKey,
-      baseURL: sessionCtx.config.baseUrl,
+      apiKey: resolvedApiKey,
+      baseURL: resolvedBaseUrl,
       maxRetries,
       defaultHeaders: {
         'x-app': 'cli',

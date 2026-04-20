@@ -23,6 +23,7 @@ export type CreateSessionOptions = {
   provider?: string
   model?: string
   cwd?: string
+  userId?: string
   permissions?: SessionConfig['permissions']
   mcpServers?: Record<string, SessionMcpConfig>
 }
@@ -63,15 +64,17 @@ export class SessionManager {
 
     const sessionConfig: SessionConfig = {
       apiKey: opts.apiKey,
-      baseUrl: opts.baseUrl,
+      baseUrl: opts.baseUrl ?? process.env.ANTHROPIC_BASE_URL,
       provider: opts.provider,
       model: opts.model,
       cwd: workspace,
       permissions: opts.permissions ?? { mode: 'allow_all' },
+      userId: opts.userId,
     }
 
     const context: SessionContext = {
       sessionId,
+      userId: opts.userId,
       state,
       config: sessionConfig,
       anthropicClient: null, // Will be initialized lazily when first API call is made
@@ -129,6 +132,19 @@ export class SessionManager {
    */
   getAllSessions(): ReadonlyMap<string, ManagedSession> {
     return this.sessions
+  }
+
+  /**
+   * Get sessions belonging to a specific user.
+   */
+  getSessionsByUser(userId: string): Map<string, ManagedSession> {
+    const result = new Map<string, ManagedSession>()
+    for (const [id, session] of this.sessions) {
+      if (session.context.userId === userId) {
+        result.set(id, session)
+      }
+    }
+    return result
   }
 
   /**

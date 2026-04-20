@@ -20,10 +20,12 @@ export type SessionConfig = {
   model?: string
   cwd: string
   permissions?: PermissionConfig
+  userId?: string
 }
 
 export type SessionContext = {
   sessionId: string
+  userId?: string
   state: any // State type from bootstrap/state — avoid circular import
   config: SessionConfig
   anthropicClient: any | null
