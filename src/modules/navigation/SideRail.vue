@@ -47,7 +47,6 @@ async function createThread() {
         <template v-else>
           <p class="eyebrow">职业规划助手</p>
           <h1>前端演示版</h1>
-          <p class="support-copy">展示工作台外壳、类型化适配层与工件宿主面板。</p>
         </template>
       </div>
       <button
@@ -61,6 +60,18 @@ async function createThread() {
         {{ sideRailCollapsed ? '>' : '<' }}
       </button>
     </div>
+
+    <button
+      type="button"
+      class="new-thread-button rail-primary-action"
+      :class="{ compact: sideRailCollapsed }"
+      :disabled="threadCreateStatus === 'loading'"
+      :aria-label="sideRailCollapsed ? '新建对话' : undefined"
+      @click="createThread"
+    >
+      <span aria-hidden="true">+</span>
+      <strong v-if="!sideRailCollapsed">{{ threadCreateStatus === 'loading' ? '创建中...' : '新建对话' }}</strong>
+    </button>
 
     <div :id="sideRailContentId" class="side-rail-scroll">
       <nav class="nav-block">
@@ -83,18 +94,6 @@ async function createThread() {
           <span v-if="isThreadRoute && !sideRailCollapsed">当前</span>
         </div>
         <div v-else class="section-divider" aria-hidden="true"></div>
-
-        <button
-          type="button"
-          class="new-thread-button"
-          :class="{ compact: sideRailCollapsed }"
-          :disabled="threadCreateStatus === 'loading'"
-          :aria-label="sideRailCollapsed ? '新建对话' : undefined"
-          @click="createThread"
-        >
-          <span aria-hidden="true">+</span>
-          <strong v-if="!sideRailCollapsed">{{ threadCreateStatus === 'loading' ? '创建中...' : '新建对话' }}</strong>
-        </button>
 
         <div class="thread-list">
           <RouterLink
@@ -138,7 +137,7 @@ async function createThread() {
 .side-rail-scroll {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  gap: 22px;
+  gap: 20px;
   min-height: 0;
   flex: 1;
   overflow: hidden;
@@ -187,12 +186,6 @@ async function createThread() {
 
 .eyebrow {
   margin: 0 0 8px;
-}
-
-.support-copy {
-  margin: 12px 0 0;
-  color: var(--color-text-muted);
-  line-height: 1.6;
 }
 
 .nav-block,
@@ -255,6 +248,20 @@ async function createThread() {
   cursor: pointer;
   font: inherit;
   text-align: left;
+}
+
+.rail-primary-action {
+  flex: 0 0 auto;
+  margin: 18px 0 20px;
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--color-primary) 42%, var(--color-border));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--color-primary-soft) 74%, white), rgba(255, 252, 247, 0.9));
+  box-shadow: 0 14px 34px rgba(29, 115, 109, 0.1);
+}
+
+.rail-primary-action:hover {
+  border-color: color-mix(in srgb, var(--color-primary) 62%, var(--color-border));
 }
 
 .new-thread-button span {
@@ -337,6 +344,10 @@ async function createThread() {
   gap: 14px;
 }
 
+.side-rail.collapsed .rail-primary-action {
+  margin: 16px 0 18px;
+}
+
 .side-rail.collapsed .side-rail-scroll {
   gap: 18px;
 }
@@ -355,6 +366,7 @@ async function createThread() {
   border: 0;
   padding: 0;
   background: transparent;
+  box-shadow: none;
 }
 
 .side-rail.collapsed .nav-glyph,
@@ -451,7 +463,8 @@ async function createThread() {
   .side-rail.collapsed .brand-block,
   .side-rail.collapsed .section-head,
   .side-rail.collapsed .nav-link,
-  .side-rail.collapsed .thread-link.compact {
+  .side-rail.collapsed .thread-link.compact,
+  .side-rail.collapsed .new-thread-button.compact {
     text-align: left;
   }
 }
