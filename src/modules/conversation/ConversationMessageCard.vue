@@ -114,6 +114,15 @@ function formatFileSize(file: MessageFileAttachment) {
 
   return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
 }
+
+function formatFileType(file: MessageFileAttachment) {
+  if (!file.mimeType || file.mimeType === 'application/octet-stream') {
+    return '本地文件';
+  }
+
+  const [, subtype] = file.mimeType.split('/');
+  return subtype?.toUpperCase() ?? file.mimeType;
+}
 </script>
 
 <template>
@@ -136,7 +145,7 @@ function formatFileSize(file: MessageFileAttachment) {
     <MarkdownContent v-if="props.message.kind === 'markdown'" :source="presentedMessage.content" />
     <p v-else class="status-copy">{{ presentedMessage.content }}</p>
 
-    <div v-if="visibleMedia.length" class="message-media-list" aria-label="多模态内容">
+    <div v-if="visibleMedia.length || visibleFiles.length" class="message-attachment-list" aria-label="附件内容">
       <figure
         v-for="media in visibleMedia"
         :key="media.id"
@@ -173,9 +182,7 @@ function formatFileSize(file: MessageFileAttachment) {
           {{ media.caption }}
         </figcaption>
       </figure>
-    </div>
 
-    <div v-if="visibleFiles.length" class="message-file-list" aria-label="文件附件">
       <component
         v-for="file in visibleFiles"
         :is="file.safeUrl ? 'a' : 'div'"
@@ -185,11 +192,14 @@ function formatFileSize(file: MessageFileAttachment) {
         :href="file.safeUrl ?? undefined"
         :download="file.safeUrl ? file.name : undefined"
       >
-        <span class="file-icon">文件</span>
+        <span class="file-icon" aria-hidden="true">
+          FILE
+        </span>
         <span class="file-copy">
           <strong>{{ file.name }}</strong>
-          <small>{{ formatFileSize(file) }}</small>
+          <small>{{ formatFileType(file) }} · {{ formatFileSize(file) }}</small>
         </span>
+        <span class="file-action">{{ file.safeUrl ? '打开' : '不可打开' }}</span>
       </component>
     </div>
 
@@ -303,32 +313,48 @@ function formatFileSize(file: MessageFileAttachment) {
   line-height: 1.7;
 }
 
-.message-media-list {
+.message-attachment-list {
   display: grid;
   gap: 14px;
   margin-top: 16px;
 }
 
-.message-file-list {
-  display: grid;
+.message-card.user .message-attachment-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
   gap: 10px;
-  margin-top: 16px;
 }
 
 .message-file-card {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
-  padding: 12px 14px;
+  padding: 12px;
   border: 1px solid color-mix(in srgb, var(--color-border) 86%, var(--color-primary));
-  border-radius: 18px;
-  background: color-mix(in srgb, var(--color-surface-strong) 90%, white);
+  border-radius: 20px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.44), rgba(249, 229, 207, 0.16)),
+    color-mix(in srgb, var(--color-surface-strong) 90%, white);
   color: inherit;
   text-decoration: none;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.message-card.user .message-file-card {
+  flex: 1 1 220px;
+  max-width: 340px;
+  min-height: 84px;
 }
 
 .message-file-card:hover {
   border-color: color-mix(in srgb, var(--color-primary) 42%, var(--color-border));
+  box-shadow: 0 14px 32px rgba(35, 49, 59, 0.08);
+  transform: translateY(-1px);
 }
 
 .message-file-card.disabled {
@@ -338,16 +364,23 @@ function formatFileSize(file: MessageFileAttachment) {
 
 .message-file-card.disabled:hover {
   border-color: color-mix(in srgb, var(--color-border) 86%, var(--color-primary));
+  box-shadow: none;
+  transform: none;
 }
 
 .file-icon {
-  flex: 0 0 auto;
-  border-radius: 999px;
-  padding: 0.28rem 0.56rem;
-  background: color-mix(in srgb, var(--color-primary-soft) 72%, white);
-  color: var(--color-text);
-  font-size: 0.74rem;
-  font-weight: 800;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 15px;
+  border: 1px solid color-mix(in srgb, var(--color-secondary) 30%, var(--color-border));
+  background:
+    linear-gradient(155deg, color-mix(in srgb, var(--color-secondary-soft) 78%, white), var(--color-surface-strong));
+  color: var(--color-secondary-strong);
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
 }
 
 .file-copy {
@@ -359,7 +392,8 @@ function formatFileSize(file: MessageFileAttachment) {
 .file-copy strong {
   overflow: hidden;
   color: var(--color-text);
-  font-size: 0.9rem;
+  font-size: 0.92rem;
+  line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -368,12 +402,36 @@ function formatFileSize(file: MessageFileAttachment) {
   color: var(--color-text-muted);
 }
 
+.file-action {
+  border-radius: 999px;
+  padding: 0.32rem 0.66rem;
+  background: color-mix(in srgb, var(--color-primary-soft) 64%, white);
+  color: var(--color-primary);
+  font-size: 0.76rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.message-file-card.disabled .file-action {
+  background: color-mix(in srgb, var(--color-bg-subtle) 84%, white);
+  color: var(--color-text-muted);
+}
+
 .message-media-card {
   margin: 0;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--color-border) 86%, var(--color-primary));
-  border-radius: 22px;
-  background: color-mix(in srgb, var(--color-surface-strong) 88%, white);
+  border-radius: 24px;
+  background:
+    linear-gradient(145deg, rgba(29, 115, 109, 0.08), rgba(255, 255, 255, 0.18)),
+    color-mix(in srgb, var(--color-surface-strong) 88%, white);
+  box-shadow: 0 16px 42px rgba(35, 49, 59, 0.07);
+}
+
+.message-card.user .message-media-card {
+  flex: 0 1 190px;
+  width: 190px;
+  border-radius: 20px;
 }
 
 .media-heading {
@@ -386,15 +444,18 @@ function formatFileSize(file: MessageFileAttachment) {
 
 .media-heading strong {
   min-width: 0;
+  overflow: hidden;
   color: var(--color-text);
   font-size: 0.9rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .media-heading span {
   flex: 0 0 auto;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--color-primary-soft) 72%, white);
-  color: var(--color-text-muted);
+  background: color-mix(in srgb, var(--color-primary-soft) 76%, white);
+  color: var(--color-primary);
   font-size: 0.74rem;
   font-weight: 800;
   padding: 0.28rem 0.52rem;
@@ -404,16 +465,32 @@ function formatFileSize(file: MessageFileAttachment) {
 .message-video {
   display: block;
   width: 100%;
-  max-height: min(520px, 64vh);
-  background: #0e1717;
+  max-height: min(480px, 58vh);
+  border-top: 1px solid color-mix(in srgb, var(--color-border) 72%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 72%, transparent);
+  background:
+    radial-gradient(circle at 20% 15%, rgba(217, 240, 235, 0.2), transparent 34%),
+    #0e1717;
 }
 
 .message-image {
   object-fit: contain;
 }
 
+.message-card.user .message-image {
+  height: 118px;
+  max-height: none;
+  object-fit: cover;
+}
+
 .message-video {
   aspect-ratio: 16 / 9;
+}
+
+.message-card.user .message-video {
+  height: 118px;
+  max-height: none;
+  object-fit: cover;
 }
 
 .message-media-card figcaption {
@@ -421,6 +498,34 @@ function formatFileSize(file: MessageFileAttachment) {
   color: var(--color-text-muted);
   font-size: 0.9rem;
   line-height: 1.6;
+}
+
+.message-card.user .message-media-card figcaption {
+  display: -webkit-box;
+  overflow: hidden;
+  padding: 9px 10px 10px;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+@media (max-width: 640px) {
+  .message-card.user .message-media-card,
+  .message-card.user .message-file-card {
+    flex: 1 1 100%;
+    max-width: none;
+    width: auto;
+  }
+
+  .message-file-card {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .file-action {
+    grid-column: 2;
+    justify-self: start;
+  }
 }
 
 .message-actions {

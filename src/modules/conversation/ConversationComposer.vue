@@ -69,6 +69,19 @@ function formatAttachmentSize(sizeBytes: number) {
   return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function formatAttachmentType(attachment: DraftMessageAttachment) {
+  if (attachment.kind === 'image') {
+    return attachment.mimeType.replace('image/', '').toUpperCase() || 'IMAGE';
+  }
+
+  if (attachment.mimeType === 'application/octet-stream') {
+    return '本地文件';
+  }
+
+  const [, subtype] = attachment.mimeType.split('/');
+  return subtype?.toUpperCase() ?? '本地文件';
+}
+
 function handleSubmit() {
   if (!canSubmit.value) {
     return;
@@ -130,18 +143,41 @@ onBeforeUnmount(() => {
       placeholder="输入下一步职业规划任务，或要求助手打开某个工件..."
     ></textarea>
 
-    <div v-if="attachments.length" class="attachment-list" aria-label="待发送附件">
-      <div
-        v-for="attachment in attachments"
-        :key="attachment.id"
-        class="attachment-chip"
-      >
-        <span class="attachment-kind">{{ attachment.kind === 'image' ? '图片' : '文件' }}</span>
-        <span class="attachment-name">{{ attachment.name }}</span>
-        <span class="attachment-size">{{ formatAttachmentSize(attachment.sizeBytes) }}</span>
-        <button type="button" class="remove-attachment" @click="removeAttachment(attachment.id)">
-          移除
-        </button>
+    <div v-if="attachments.length" class="attachment-tray" aria-label="待发送附件">
+      <div class="attachment-tray-head">
+        <strong>待发送附件</strong>
+        <span>{{ attachments.length }} 个，本地预览</span>
+      </div>
+
+      <div class="attachment-grid">
+        <article
+          v-for="attachment in attachments"
+          :key="attachment.id"
+          class="attachment-card"
+          :class="attachment.kind"
+        >
+          <div v-if="attachment.kind === 'image'" class="attachment-preview">
+            <img :src="attachment.url" :alt="attachment.name" loading="lazy" />
+          </div>
+          <div v-else class="attachment-file-mark" aria-hidden="true">
+            FILE
+          </div>
+
+          <div class="attachment-meta">
+            <span>{{ attachment.kind === 'image' ? '图片预览' : '文件附件' }}</span>
+            <strong>{{ attachment.name }}</strong>
+            <small>{{ formatAttachmentType(attachment) }} · {{ formatAttachmentSize(attachment.sizeBytes) }}</small>
+          </div>
+
+          <button
+            type="button"
+            class="remove-attachment"
+            :aria-label="`移除 ${attachment.name}`"
+            @click="removeAttachment(attachment.id)"
+          >
+            移除
+          </button>
+        </article>
       </div>
     </div>
 
@@ -225,54 +261,145 @@ onBeforeUnmount(() => {
   line-height: 1.55;
 }
 
-.attachment-list {
+.attachment-tray {
   display: grid;
-  gap: 8px;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--color-border) 84%, var(--color-primary));
+  border-radius: 20px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.48), rgba(255, 250, 242, 0.18)),
+    color-mix(in srgb, var(--color-primary-soft) 18%, var(--color-surface-strong));
 }
 
-.attachment-chip {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+.attachment-tray-head {
+  display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border: 1px solid var(--color-border);
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--color-surface-strong) 86%, white);
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 2px;
 }
 
-.attachment-kind {
-  border-radius: 999px;
-  padding: 0.2rem 0.48rem;
-  background: color-mix(in srgb, var(--color-primary-soft) 72%, white);
+.attachment-tray-head strong {
   color: var(--color-text);
-  font-size: 0.74rem;
+  font-size: 0.84rem;
   font-weight: 800;
 }
 
-.attachment-name {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--color-text);
-  font-size: 0.86rem;
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.attachment-size {
+.attachment-tray-head span {
   color: var(--color-text-muted);
   font-size: 0.78rem;
 }
 
-.remove-attachment {
-  border: 0;
-  background: transparent;
+.attachment-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.attachment-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  flex: 1 1 230px;
+  max-width: 360px;
+  min-width: 0;
+  padding: 10px 10px 38px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--color-border) 82%, white);
+  border-radius: 18px;
+  background: rgba(255, 252, 247, 0.88);
+  box-shadow: 0 12px 32px rgba(35, 49, 59, 0.06);
+}
+
+.attachment-card.image {
+  flex-basis: 220px;
+  background:
+    radial-gradient(circle at 14% 0%, rgba(29, 115, 109, 0.16), transparent 42%),
+    rgba(255, 252, 247, 0.9);
+}
+
+.attachment-card.file {
+  background:
+    radial-gradient(circle at 10% 0%, rgba(216, 143, 72, 0.18), transparent 44%),
+    rgba(255, 252, 247, 0.9);
+}
+
+.attachment-preview,
+.attachment-file-mark {
+  width: 58px;
+  height: 58px;
+  overflow: hidden;
+  border-radius: 15px;
+  border: 1px solid var(--color-border);
+}
+
+.attachment-preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.attachment-file-mark {
+  display: grid;
+  place-items: center;
+  background:
+    linear-gradient(155deg, color-mix(in srgb, var(--color-secondary-soft) 78%, white), var(--color-surface-strong));
+  color: var(--color-secondary-strong);
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.attachment-meta {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.attachment-meta span {
   color: var(--color-primary);
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.attachment-meta strong {
+  overflow: hidden;
+  color: var(--color-text);
+  font-size: 0.86rem;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-meta small {
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.remove-attachment {
+  position: absolute;
+  right: 10px;
+  bottom: 9px;
+  border: 1px solid color-mix(in srgb, var(--color-border) 78%, var(--color-primary));
+  border-radius: 999px;
+  padding: 0.24rem 0.58rem;
+  background: rgba(255, 252, 247, 0.8);
+  color: var(--color-text-muted);
   cursor: pointer;
   font: inherit;
-  font-size: 0.78rem;
+  font-size: 0.76rem;
   font-weight: 800;
+}
+
+.remove-attachment:hover {
+  border-color: color-mix(in srgb, var(--color-danger) 46%, var(--color-border));
+  color: var(--color-danger);
 }
 
 .support-copy {
@@ -299,6 +426,11 @@ onBeforeUnmount(() => {
   .composer-head,
   .composer-footer {
     flex-direction: column;
+  }
+
+  .attachment-grid {
+    display: grid;
+    grid-template-columns: 1fr;
   }
 }
 </style>
