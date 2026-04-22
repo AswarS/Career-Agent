@@ -2,21 +2,23 @@
  * Session-scoped environment variables set via /env.
  * Applied only to spawned child processes (via bash provider env overrides),
  * not to the REPL process itself.
+ *
+ * Now per-session via getState() for multi-user isolation.
  */
-const sessionEnvVars = new Map<string, string>()
+import { getState } from '../bootstrap/state.js'
 
 export function getSessionEnvVars(): ReadonlyMap<string, string> {
-  return sessionEnvVars
+  return getState().sessionEnvVarsMap
 }
 
 export function setSessionEnvVar(name: string, value: string): void {
-  sessionEnvVars.set(name, value)
+  getState().sessionEnvVarsMap.set(name, value)
 }
 
 export function deleteSessionEnvVar(name: string): void {
-  sessionEnvVars.delete(name)
+  getState().sessionEnvVarsMap.delete(name)
 }
 
 export function clearSessionEnvVars(): void {
-  sessionEnvVars.clear()
+  getState().sessionEnvVarsMap.clear()
 }

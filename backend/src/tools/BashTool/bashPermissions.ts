@@ -1,6 +1,7 @@
 import { feature } from 'bun:bundle'
 import { APIUserAbortError } from '@anthropic-ai/sdk'
 import type { z } from 'zod/v4'
+import { getState } from '../../bootstrap/state.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js'
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -1480,7 +1481,10 @@ function buildPendingClassifierCheck(
   }
 }
 
-const speculativeChecks = new Map<string, Promise<ClassifierResult>>()
+// Per-session speculative checks via getState() for multi-user isolation
+function _specChecks(): Map<string, Promise<ClassifierResult>> {
+  return getState().speculativeChecksMap as Map<string, Promise<ClassifierResult>>
+}
 
 /**
  * Start a speculative bash allow classifier check early, so it runs in
@@ -1491,7 +1495,7 @@ const speculativeChecks = new Map<string, Promise<ClassifierResult>>()
 export function peekSpeculativeClassifierCheck(
   command: string,
 ): Promise<ClassifierResult> | undefined {
-  return speculativeChecks.get(command)
+  return _specChecks().get(command)
 }
 
 export function startSpeculativeClassifierCheck(
@@ -1522,7 +1526,7 @@ export function startSpeculativeClassifierCheck(
   // Prevent unhandled rejection if the signal aborts before this promise is consumed.
   // The original promise (which may reject) is still stored in the Map for consumers to await.
   promise.catch(() => {})
-  speculativeChecks.set(command, promise)
+  _specChecks().set(command, promise)
   return true
 }
 
@@ -1533,15 +1537,15 @@ export function startSpeculativeClassifierCheck(
 export function consumeSpeculativeClassifierCheck(
   command: string,
 ): Promise<ClassifierResult> | undefined {
-  const promise = speculativeChecks.get(command)
+  const promise = _specChecks().get(command)
   if (promise) {
-    speculativeChecks.delete(command)
+    _specChecks().delete(command)
   }
   return promise
 }
 
 export function clearSpeculativeChecks(): void {
-  speculativeChecks.clear()
+  _specChecks().clear()
 }
 
 /**

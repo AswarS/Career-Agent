@@ -60,6 +60,7 @@ export class SessionManager {
       originalCwd: workspace,
       projectRoot: workspace,
       isInteractive: false, // Server mode is non-interactive
+      userId: opts.userId ?? null,
     })
 
     const sessionConfig: SessionConfig = {

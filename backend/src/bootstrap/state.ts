@@ -19,7 +19,8 @@ import { randomUUID } from 'src/utils/crypto.js'
 import type { ModelSetting } from 'src/utils/model/model.js'
 import type { ModelStrings } from 'src/utils/model/modelStrings.js'
 import type { SettingSource } from 'src/utils/settings/constants.js'
-import { resetSettingsCache } from 'src/utils/settings/settingsCache.js'
+// NOTE: resetSettingsCache is imported lazily below to avoid circular dependency
+// (state.ts -> settingsCache.ts -> state.ts). We inline the reset logic here instead.
 import type { PluginHookMatcher } from 'src/utils/settings/types.js'
 import { createSignal } from 'src/utils/signal.js'
 import { getSessionContext } from '../server/SessionContext.js'
@@ -218,6 +219,8 @@ type State = {
   hasDevChannels: boolean
   // Dir containing the session's `.jsonl`; null = derive from originalCwd.
   sessionProjectDir: string | null
+  // User identity for multi-user session isolation (null in CLI mode)
+  userId: string | null
   // Cached prompt cache 1h TTL allowlist from GrowthBook (session-stable)
   promptCache1hAllowlist: string[] | null
   // Cached 1h TTL user eligibility (session-stable). Latched on first
@@ -261,6 +264,55 @@ type State = {
   budgetContinuationCount: number
   // Per-session interaction time dirty flag
   interactionTimeDirty: boolean
+  // --- Per-session stores (moved from module-level singletons for multi-user isolation) ---
+  // History (history.ts)
+  historyPendingEntries: Array<unknown>
+  historyIsWriting: boolean
+  historyFlushPromise: Promise<void> | null
+  historyCleanupRegistered: boolean
+  historyLastAddedEntry: unknown | null
+  historySkippedTimestamps: Set<number>
+  // Session env vars (sessionEnvVars.ts)
+  sessionEnvVarsMap: Map<string, string>
+  // Settings cache (settingsCache.ts)
+  settingsSessionCache: unknown | null
+  settingsPerSourceCache: Map<string, unknown>
+  settingsParseFileCache: Map<string, unknown>
+  settingsPluginBase: Record<string, unknown> | undefined
+  // Agent transcript subdirs (sessionStorage.ts)
+  agentTranscriptSubdirsMap: Map<string, string>
+  // Context caches (context.ts) — per-session to avoid cross-user leakage
+  contextGitStatusCache: string | null | undefined
+  contextGitStatusPromise: Promise<string | null> | null
+  contextSystemContextCache: Record<string, string> | null | undefined
+  contextSystemContextPromise: Promise<Record<string, string>> | null
+  contextUserContextCache: Record<string, string> | null | undefined
+  contextUserContextPromise: Promise<Record<string, string>> | null
+  // Image store cache (imageStore.ts)
+  storedImagePathsMap: Map<number, string>
+  // Message UUID dedup (print.ts)
+  receivedMessageUuidsSet: Set<string>
+  receivedMessageUuidsOrder: string[]
+  // Classifier approvals (classifierApprovals.ts)
+  classifierApprovalsMap: Map<string, unknown>
+  classifierCheckingSet: Set<string>
+  // Bash speculative checks (bashPermissions.ts)
+  speculativeChecksMap: Map<string, Promise<unknown>>
+  // File suggestions index (fileSuggestions.ts)
+  fsFileIndex: unknown | null
+  fsFileListRefreshPromise: Promise<unknown> | null
+  fsCacheGeneration: number
+  fsUntrackedFetchPromise: Promise<void> | null
+  fsCachedTrackedFiles: string[]
+  fsCachedConfigFiles: string[]
+  fsCachedTrackedDirs: string[]
+  fsIgnorePatternsCache: unknown | null
+  fsIgnorePatternsCacheKey: string | null
+  fsLastRefreshMs: number
+  fsLastGitIndexMtime: number | null
+  fsLoadedTrackedSignature: string | null
+  fsLoadedMergedSignature: string | null
+  fsIndexBuildCompleteSignal: unknown | null
 }
 
 // ALSO HERE - THINK THRICE BEFORE MODIFYING
@@ -413,6 +465,8 @@ function getInitialState(): State {
     hasDevChannels: false,
     // Session project dir (null = derive from originalCwd)
     sessionProjectDir: null,
+    // User identity for multi-user isolation (null in CLI mode)
+    userId: null,
     // Prompt cache 1h allowlist (null = not yet fetched from GrowthBook)
     promptCache1hAllowlist: null,
     // Prompt cache 1h eligibility (null = not yet evaluated)
@@ -433,6 +487,51 @@ function getInitialState(): State {
     budgetContinuationCount: 0,
     // Per-session interaction time dirty flag
     interactionTimeDirty: false,
+    // Per-session stores (multi-user isolation)
+    historyPendingEntries: [],
+    historyIsWriting: false,
+    historyFlushPromise: null,
+    historyCleanupRegistered: false,
+    historyLastAddedEntry: null,
+    historySkippedTimestamps: new Set(),
+    sessionEnvVarsMap: new Map(),
+    settingsSessionCache: null,
+    settingsPerSourceCache: new Map(),
+    settingsParseFileCache: new Map(),
+    settingsPluginBase: undefined,
+    agentTranscriptSubdirsMap: new Map(),
+    // Context caches (context.ts)
+    contextGitStatusCache: undefined,
+    contextGitStatusPromise: null,
+    contextSystemContextCache: undefined,
+    contextSystemContextPromise: null,
+    contextUserContextCache: undefined,
+    contextUserContextPromise: null,
+    // Image store cache (imageStore.ts)
+    storedImagePathsMap: new Map(),
+    // Message UUID dedup (print.ts)
+    receivedMessageUuidsSet: new Set(),
+    receivedMessageUuidsOrder: [],
+    // Classifier approvals (classifierApprovals.ts)
+    classifierApprovalsMap: new Map(),
+    classifierCheckingSet: new Set(),
+    // Bash speculative checks (bashPermissions.ts)
+    speculativeChecksMap: new Map(),
+    // File suggestions index (fileSuggestions.ts)
+    fsFileIndex: null,
+    fsFileListRefreshPromise: null,
+    fsCacheGeneration: 0,
+    fsUntrackedFetchPromise: null,
+    fsCachedTrackedFiles: [],
+    fsCachedConfigFiles: [],
+    fsCachedTrackedDirs: [],
+    fsIgnorePatternsCache: null,
+    fsIgnorePatternsCacheKey: null,
+    fsLastRefreshMs: 0,
+    fsLastGitIndexMtime: null,
+    fsLoadedTrackedSignature: null,
+    fsLoadedMergedSignature: null,
+    fsIndexBuildCompleteSignal: null,
   }
 
   return state
@@ -453,7 +552,7 @@ export function createIsolatedState(overrides: Partial<State> = {}): State {
  * Every accessor function in this module should call getState() instead of
  * reading STATE directly so that multi-user server sessions get isolated state.
  */
-function getState(): State {
+export function getState(): State {
   const ctx = getSessionContext()
   return ctx ? ctx.state : STATE
 }
@@ -547,6 +646,15 @@ export function onSessionSwitch(
  */
 export function getSessionProjectDir(): string | null {
   return getState().sessionProjectDir
+}
+
+/**
+ * Get the current user identity for session isolation.
+ * Returns null in CLI mode (no user scoping).
+ * In server mode, returns the userId set during session creation.
+ */
+export function getUserId(): string | null {
+  return getState().userId
 }
 
 export function getOriginalCwd(): string {
@@ -1008,77 +1116,78 @@ export function setMeter(
   meter: Meter,
   createCounter: (name: string, options: MetricOptions) => AttributedCounter,
 ): void {
-  STATE.meter = meter
+  const s = getState()
+  s.meter = meter
 
   // Initialize all counters using the provided factory
-  STATE.sessionCounter = createCounter('claude_code.session.count', {
+  s.sessionCounter = createCounter('claude_code.session.count', {
     description: 'Count of CLI sessions started',
   })
-  STATE.locCounter = createCounter('claude_code.lines_of_code.count', {
+  s.locCounter = createCounter('claude_code.lines_of_code.count', {
     description:
       "Count of lines of code modified, with the 'type' attribute indicating whether lines were added or removed",
   })
-  STATE.prCounter = createCounter('claude_code.pull_request.count', {
+  s.prCounter = createCounter('claude_code.pull_request.count', {
     description: 'Number of pull requests created',
   })
-  STATE.commitCounter = createCounter('claude_code.commit.count', {
+  s.commitCounter = createCounter('claude_code.commit.count', {
     description: 'Number of git commits created',
   })
-  STATE.costCounter = createCounter('claude_code.cost.usage', {
+  s.costCounter = createCounter('claude_code.cost.usage', {
     description: 'Cost of the Claude Code session',
     unit: 'USD',
   })
-  STATE.tokenCounter = createCounter('claude_code.token.usage', {
+  s.tokenCounter = createCounter('claude_code.token.usage', {
     description: 'Number of tokens used',
     unit: 'tokens',
   })
-  STATE.codeEditToolDecisionCounter = createCounter(
+  s.codeEditToolDecisionCounter = createCounter(
     'claude_code.code_edit_tool.decision',
     {
       description:
         'Count of code editing tool permission decisions (accept/reject) for Edit, Write, and NotebookEdit tools',
     },
   )
-  STATE.activeTimeCounter = createCounter('claude_code.active_time.total', {
+  s.activeTimeCounter = createCounter('claude_code.active_time.total', {
     description: 'Total active time in seconds',
     unit: 's',
   })
 }
 
 export function getMeter(): Meter | null {
-  return STATE.meter
+  return getState().meter
 }
 
 export function getSessionCounter(): AttributedCounter | null {
-  return STATE.sessionCounter
+  return getState().sessionCounter
 }
 
 export function getLocCounter(): AttributedCounter | null {
-  return STATE.locCounter
+  return getState().locCounter
 }
 
 export function getPrCounter(): AttributedCounter | null {
-  return STATE.prCounter
+  return getState().prCounter
 }
 
 export function getCommitCounter(): AttributedCounter | null {
-  return STATE.commitCounter
+  return getState().commitCounter
 }
 
 export function getCostCounter(): AttributedCounter | null {
-  return STATE.costCounter
+  return getState().costCounter
 }
 
 export function getTokenCounter(): AttributedCounter | null {
-  return STATE.tokenCounter
+  return getState().tokenCounter
 }
 
 export function getCodeEditToolDecisionCounter(): AttributedCounter | null {
-  return STATE.codeEditToolDecisionCounter
+  return getState().codeEditToolDecisionCounter
 }
 
 export function getActiveTimeCounter(): AttributedCounter | null {
-  return STATE.activeTimeCounter
+  return getState().activeTimeCounter
 }
 
 export function getLoggerProvider(): LoggerProvider | null {
@@ -1323,7 +1432,11 @@ export function getChromeFlagOverride(): boolean | undefined {
 
 export function setUseCoworkPlugins(value: boolean): void {
   getState().useCoworkPlugins = value
-  resetSettingsCache()
+  // Inline resetSettingsCache to avoid circular dependency
+  const s = getState()
+  s.settingsSessionCache = null
+  s.settingsPerSourceCache.clear()
+  s.settingsParseFileCache.clear()
 }
 
 export function getUseCoworkPlugins(): boolean {

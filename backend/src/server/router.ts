@@ -199,7 +199,8 @@ function sessionHistoryRoute(): Route {
       // Parse optional cwd query param to determine project directory
       const url = new URL(req.url)
       const cwd = url.searchParams.get('cwd') ?? pwd()
-      const projectDir = getProjectDir(cwd)
+      const userId = url.searchParams.get('userId') ?? undefined
+      const projectDir = getProjectDir(cwd, userId)
 
       try {
         const entries = await listSessionHistory(projectDir)
