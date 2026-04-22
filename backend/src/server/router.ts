@@ -263,18 +263,25 @@ function messageRoute(): Route {
 
           send('session_id', { sessionId })
 
-          // Use QueryEngine if available, otherwise fall back to echo mode
+          // Use QueryEngine if available, otherwise fall back to echo mode.
+          // CRITICAL: the entire QueryEngine iteration must run inside
+          // runWithSessionContext so that getState(), getCwd(), etc. resolve
+          // to the per-session state via ALS. Without this wrapper, concurrent
+          // requests from different users all fall back to the global STATE
+          // singleton and corrupt each other's data.
           if (session.context.queryEngine) {
-            try {
-              for await (const msg of session.context.queryEngine.submitMessage(content)) {
-                send(msg.type, { ...msg, sessionId })
+            await runWithSessionContext(session.context, async () => {
+              try {
+                for await (const msg of session.context.queryEngine.submitMessage(content)) {
+                  send(msg.type, { ...msg, sessionId })
+                }
+                send('done', { sessionId })
+              } catch (err: any) {
+                if (err.name !== 'AbortError') {
+                  send('error', { message: err.message ?? String(err), sessionId })
+                }
               }
-              send('done', { sessionId })
-            } catch (err: any) {
-              if (err.name !== 'AbortError') {
-                send('error', { message: err.message ?? String(err), sessionId })
-              }
-            }
+            })
           } else {
             // Echo mode fallback — no QueryEngine available
             runWithSessionContext(session.context, () => {
