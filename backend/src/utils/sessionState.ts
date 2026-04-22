@@ -26,6 +26,7 @@ export type RequiresActionDetails = {
 import { isEnvTruthy } from './envUtils.js'
 import type { PermissionMode } from './permissions/PermissionMode.js'
 import { enqueueSdkEvent } from './sdkEventQueue.js'
+import { getState } from '../bootstrap/state.js'
 
 // CCR external_metadata keys — push in onChangeAppState, restore in
 // externalMetadataToAppState.
@@ -82,30 +83,28 @@ export function setPermissionModeChangedListener(
   permissionModeListener = cb
 }
 
-let hasPendingAction = false
-let currentState: SessionState = 'idle'
-
 export function getSessionState(): SessionState {
-  return currentState
+  return getState().ssCurrentState
 }
 
 export function notifySessionStateChanged(
   state: SessionState,
   details?: RequiresActionDetails,
 ): void {
-  currentState = state
+  const s = getState()
+  s.ssCurrentState = state
   stateListener?.(state, details)
 
   // Mirror details into external_metadata so GetSession carries the
   // pending-action context without proto changes. Cleared via RFC 7396
   // null on the next non-blocked transition.
   if (state === 'requires_action' && details) {
-    hasPendingAction = true
+    s.ssHasPendingAction = true
     metadataListener?.({
       pending_action: details,
     })
-  } else if (hasPendingAction) {
-    hasPendingAction = false
+  } else if (s.ssHasPendingAction) {
+    s.ssHasPendingAction = false
     metadataListener?.({ pending_action: null })
   }
 

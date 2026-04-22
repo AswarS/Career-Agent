@@ -313,6 +313,32 @@ type State = {
   fsLoadedTrackedSignature: string | null
   fsLoadedMergedSignature: string | null
   fsIndexBuildCompleteSignal: unknown | null
+  // --- Per-session state machine (sessionState.ts) ---
+  ssCurrentState: 'idle' | 'running' | 'requires_action'
+  ssHasPendingAction: boolean
+  // --- Per-session start (sessionStart.ts) ---
+  ssPendingInitialUserMessage: string | undefined
+  // --- Per-session memory utils (sessionMemoryUtils.ts) ---
+  smConfig: { minimumMessageTokensToInit: number; minimumTokensBetweenUpdate: number; toolCallsBetweenUpdates: number }
+  smLastSummarizedMessageId: string | undefined
+  smExtractionStartedAt: number | undefined
+  smTokensAtLastExtraction: number
+  smInitialized: boolean
+  // --- Per-session memory (sessionMemory.ts) ---
+  smLastMemoryMessageUuid: string | undefined
+  smHasLoggedGateFailure: boolean
+  // --- Per-session microcompact (microCompact.ts) ---
+  mcCachedState: unknown | null
+  mcPendingCacheEdits: unknown | null
+  // --- Per-session extract memories (extractMemories.ts) ---
+  emExtractor: unknown | null
+  emDrainer: unknown | null
+  // --- Per-session fast mode (fastMode.ts) ---
+  fmRuntimeState: unknown
+  fmOrgStatus: unknown
+  fmHasLoggedCooldownExpiry: boolean
+  fmLastPrefetchAt: number
+  fmInflightPrefetch: Promise<void> | null
 }
 
 // ALSO HERE - THINK THRICE BEFORE MODIFYING
@@ -532,6 +558,32 @@ function getInitialState(): State {
     fsLoadedTrackedSignature: null,
     fsLoadedMergedSignature: null,
     fsIndexBuildCompleteSignal: null,
+    // Per-session state machine (sessionState.ts)
+    ssCurrentState: 'idle',
+    ssHasPendingAction: false,
+    // Per-session start (sessionStart.ts)
+    ssPendingInitialUserMessage: undefined,
+    // Per-session memory utils (sessionMemoryUtils.ts)
+    smConfig: { minimumMessageTokensToInit: 10000, minimumTokensBetweenUpdate: 5000, toolCallsBetweenUpdates: 3 },
+    smLastSummarizedMessageId: undefined,
+    smExtractionStartedAt: undefined,
+    smTokensAtLastExtraction: 0,
+    smInitialized: false,
+    // Per-session memory (sessionMemory.ts)
+    smLastMemoryMessageUuid: undefined,
+    smHasLoggedGateFailure: false,
+    // Per-session microcompact (microCompact.ts)
+    mcCachedState: null,
+    mcPendingCacheEdits: null,
+    // Per-session extract memories (extractMemories.ts)
+    emExtractor: null,
+    emDrainer: null,
+    // Per-session fast mode (fastMode.ts)
+    fmRuntimeState: { status: 'active' },
+    fmOrgStatus: { status: 'pending' },
+    fmHasLoggedCooldownExpiry: false,
+    fmLastPrefetchAt: 0,
+    fmInflightPrefetch: null,
   }
 
   return state

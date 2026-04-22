@@ -15,7 +15,7 @@
 
 import { feature } from 'bun:bundle'
 import { basename } from 'path'
-import { getIsRemoteMode } from '../../bootstrap/state.js'
+import { getIsRemoteMode, getState } from '../../bootstrap/state.js'
 import type { CanUseToolFn } from '../../hooks/useCanUseTool.js'
 import { ENTRYPOINT_NAME } from '../../memdir/memdir.js'
 import {
@@ -276,16 +276,20 @@ type AppendSystemMessageFn = (
   msg: Exclude<SystemMessage, SystemLocalCommandMessage>,
 ) => void
 
-/** The active extractor function, set by initExtractMemories(). */
-let extractor:
-  | ((
-      context: REPLHookContext,
-      appendSystemMessage?: AppendSystemMessageFn,
-    ) => Promise<void>)
-  | null = null
-
-/** The active drain function, set by initExtractMemories(). No-op until init. */
-let drainer: (timeoutMs?: number) => Promise<void> = async () => {}
+/** The active extractor function — per-session via getState(). */
+function _extractor(): ((context: REPLHookContext, appendSystemMessage?: AppendSystemMessageFn) => Promise<void>) | null {
+  return getState().emExtractor as ((context: REPLHookContext, appendSystemMessage?: AppendSystemMessageFn) => Promise<void>) | null
+}
+function _setExtractor(v: ((context: REPLHookContext, appendSystemMessage?: AppendSystemMessageFn) => Promise<void>) | null): void {
+  getState().emExtractor = v
+}
+/** The active drain function — per-session via getState(). */
+function _drainer(): (timeoutMs?: number) => Promise<void> {
+  return (getState().emDrainer as (timeoutMs?: number) => Promise<void>) ?? (async () => {})
+}
+function _setDrainer(v: (timeoutMs?: number) => Promise<void>): void {
+  getState().emDrainer = v
+}
 
 /**
  * Initialize the memory extraction system.
@@ -566,7 +570,7 @@ export function initExtractMemories(): void {
     await runExtraction({ context, appendSystemMessage })
   }
 
-  extractor = async (context, appendSystemMessage) => {
+  _setExtractor(async (context, appendSystemMessage) => {
     const p = executeExtractMemoriesImpl(context, appendSystemMessage)
     inFlightExtractions.add(p)
     try {
@@ -574,16 +578,16 @@ export function initExtractMemories(): void {
     } finally {
       inFlightExtractions.delete(p)
     }
-  }
+  })
 
-  drainer = async (timeoutMs = 60_000) => {
+  _setDrainer(async (timeoutMs = 60_000) => {
     if (inFlightExtractions.size === 0) return
     await Promise.race([
       Promise.all(inFlightExtractions).catch(() => {}),
       // eslint-disable-next-line no-restricted-syntax -- sleep() has no .unref(); timer must not block exit
       new Promise<void>(r => setTimeout(r, timeoutMs).unref()),
     ])
-  }
+  })
 }
 
 // ============================================================================
@@ -599,7 +603,7 @@ export async function executeExtractMemories(
   context: REPLHookContext,
   appendSystemMessage?: AppendSystemMessageFn,
 ): Promise<void> {
-  await extractor?.(context, appendSystemMessage)
+  await _extractor()?.(context, appendSystemMessage)
 }
 
 /**
@@ -611,5 +615,5 @@ export async function executeExtractMemories(
 export async function drainPendingExtraction(
   timeoutMs?: number,
 ): Promise<void> {
-  await drainer(timeoutMs)
+  await _drainer()(timeoutMs)
 }
