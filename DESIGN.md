@@ -1,6 +1,198 @@
+---
+version: alpha
+name: Calm Workspace
+description: Visual identity and design-token source for the career-planning agent workspace.
+colors:
+  bg: "#f3efe7"
+  bg-subtle: "#fbf8f3"
+  surface: "#fffcf7"
+  surface-strong: "#fffaf2"
+  text: "#23313b"
+  text-muted: "#61707c"
+  primary: "#1d736d"
+  primary-hover: "#155851"
+  primary-soft: "#d9f0eb"
+  secondary: "#d88f48"
+  secondary-strong: "#9c6130"
+  secondary-soft: "#f9e5cf"
+  accent: "#f0b058"
+  accent-soft: "#fdebd1"
+  success: "#25876c"
+  warning: "#cc7d2a"
+  warning-strong: "#925215"
+  warning-soft: "#fbe8cf"
+  danger: "#bc5d59"
+  border: "#60727e"
+  focus-ring: "#1d736d"
+  on-primary: "#f8f5ef"
+  chart-growth: "#58b09c"
+  chart-balance: "#7f92a0"
+  chart-opportunity: "#d88f48"
+typography:
+  body-md:
+    fontFamily: Avenir Next
+    fontSize: 16px
+    fontWeight: 400
+    lineHeight: 1.55
+  body-sm:
+    fontFamily: Avenir Next
+    fontSize: 14px
+    fontWeight: 400
+    lineHeight: 1.5
+  label-caps:
+    fontFamily: Avenir Next
+    fontSize: 12px
+    fontWeight: 700
+    lineHeight: 1.2
+    letterSpacing: 0.12em
+  title-md:
+    fontFamily: Iowan Old Style
+    fontSize: 24px
+    fontWeight: 600
+    lineHeight: 1.18
+  code-md:
+    fontFamily: ui-monospace
+    fontSize: 13px
+    fontWeight: 400
+    lineHeight: 1.5
+spacing:
+  xs: 4px
+  sm: 8px
+  md: 16px
+  lg: 24px
+  xl: 32px
+  shell-gap: 20px
+  pane-padding: 24px
+rounded:
+  sm: 8px
+  md: 16px
+  lg: 20px
+  xl: 24px
+  full: 9999px
+components:
+  app-shell:
+    backgroundColor: "{colors.bg}"
+    textColor: "{colors.text}"
+    typography: "{typography.body-md}"
+    padding: "{spacing.md}"
+  side-rail:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.text}"
+    rounded: "{rounded.lg}"
+    padding: "{spacing.md}"
+  surface-card:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.text}"
+    typography: "{typography.body-md}"
+    rounded: "{rounded.xl}"
+    padding: "{spacing.lg}"
+  surface-strong:
+    backgroundColor: "{colors.surface-strong}"
+    textColor: "{colors.text}"
+    rounded: "{rounded.lg}"
+    padding: "{spacing.md}"
+  primary-action:
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.on-primary}"
+    rounded: "{rounded.full}"
+    padding: "{spacing.md}"
+  primary-action-hover:
+    backgroundColor: "{colors.primary-hover}"
+    textColor: "{colors.on-primary}"
+    rounded: "{rounded.full}"
+  secondary-highlight:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.secondary-strong}"
+    rounded: "{rounded.md}"
+    padding: "{spacing.sm}"
+  secondary-swatch:
+    backgroundColor: "{colors.secondary}"
+    rounded: "{rounded.sm}"
+    size: "{spacing.md}"
+  secondary-soft-surface:
+    backgroundColor: "{colors.secondary-soft}"
+    rounded: "{rounded.md}"
+    padding: "{spacing.sm}"
+  accent-badge:
+    backgroundColor: "{colors.accent-soft}"
+    textColor: "{colors.text}"
+    typography: "{typography.label-caps}"
+    rounded: "{rounded.full}"
+    padding: "{spacing.sm}"
+  accent-swatch:
+    backgroundColor: "{colors.accent}"
+    rounded: "{rounded.sm}"
+    size: "{spacing.md}"
+  muted-label:
+    backgroundColor: "{colors.bg-subtle}"
+    textColor: "{colors.text-muted}"
+    typography: "{typography.body-sm}"
+    rounded: "{rounded.full}"
+    padding: "{spacing.sm}"
+  focus-state:
+    backgroundColor: "{colors.primary-soft}"
+    textColor: "{colors.primary}"
+    rounded: "{rounded.md}"
+  success-state:
+    textColor: "{colors.success}"
+    rounded: "{rounded.md}"
+  success-swatch:
+    backgroundColor: "{colors.success}"
+    rounded: "{rounded.sm}"
+    size: "{spacing.md}"
+  warning-state:
+    backgroundColor: "{colors.warning-soft}"
+    textColor: "{colors.warning-strong}"
+    rounded: "{rounded.md}"
+  warning-swatch:
+    backgroundColor: "{colors.warning}"
+    rounded: "{rounded.sm}"
+    size: "{spacing.md}"
+  danger-state:
+    textColor: "{colors.danger}"
+    rounded: "{rounded.md}"
+  danger-swatch:
+    backgroundColor: "{colors.danger}"
+    rounded: "{rounded.sm}"
+    size: "{spacing.md}"
+  border-swatch:
+    backgroundColor: "{colors.border}"
+    rounded: "{rounded.sm}"
+    size: "{spacing.md}"
+  focus-ring-swatch:
+    backgroundColor: "{colors.focus-ring}"
+    rounded: "{rounded.sm}"
+    size: "{spacing.md}"
+  artifact-immersive:
+    backgroundColor: "{colors.text}"
+    textColor: "{colors.surface}"
+    typography: "{typography.body-md}"
+  chart-growth-swatch:
+    backgroundColor: "{colors.chart-growth}"
+    rounded: "{rounded.sm}"
+    size: "{spacing.md}"
+  chart-balance-swatch:
+    backgroundColor: "{colors.chart-balance}"
+    rounded: "{rounded.sm}"
+    size: "{spacing.md}"
+  chart-opportunity-swatch:
+    backgroundColor: "{colors.chart-opportunity}"
+    rounded: "{rounded.sm}"
+    size: "{spacing.md}"
+  code-block:
+    backgroundColor: "{colors.bg-subtle}"
+    textColor: "{colors.text}"
+    typography: "{typography.code-md}"
+    rounded: "{rounded.sm}"
+    padding: "{spacing.md}"
+  section-title:
+    textColor: "{colors.text}"
+    typography: "{typography.title-md}"
+---
+
 # DESIGN.md
 
-## Final Direction
+## Overview
 
 This product should use a `Notion-like shell` as the structural baseline,
 combined with the project's existing `warm slate + teal + amber` palette.
@@ -137,6 +329,27 @@ That means:
 - consistent radius scale
 - limited elevation system
 - no decorative one-off components
+
+## Colors
+
+The palette is a warm workspace system with slate text, teal growth / trust
+signals, and amber opportunity / action signals.
+
+- **Background (`#f3efe7`):** warm paper base for long reading sessions.
+- **Surface (`#fffcf7`, `#fffaf2`):** calm content layers and stronger framed
+  panels.
+- **Text (`#23313b`, `#61707c`):** deep slate for core content and muted slate
+  for metadata.
+- **Primary (`#1d736d`):** green-teal for trusted actions, progress, active
+  navigation, and focus.
+- **Secondary / accent (`#d88f48`, `#f0b058`):** warm action and opportunity
+  cues, used sparingly.
+- **State colors:** success stays close to teal; warning and danger remain
+  visibly distinct.
+
+CSS implementation lives in `src/styles/tokens.css`. The YAML front matter in
+this file is the machine-readable source for AI and CLI tooling; CSS variables
+are the runtime implementation.
 
 ## Shell Surface Guidance
 
