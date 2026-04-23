@@ -6,6 +6,7 @@
  *   GET  /v1/sessions          — List all active sessions
  *   POST /v1/sessions          — Create new session (supports resumeFrom)
  *   GET  /v1/sessions/history  — List past session files (JSONL transcripts)
+ *   GET  /v1/sessions/:id/messages — Get session message history (from JSONL transcript)
  *   GET  /v1/sessions/:id      — Get session info
  *   DELETE /v1/sessions/:id    — Destroy session
  *   POST /v1/sessions/:id/message — Send message (SSE streaming)
@@ -14,9 +15,11 @@
 import type { SessionManager } from './SessionManager.js'
 import type { ServerConfig } from './types.js'
 import { runWithSessionContext } from './SessionContext.js'
-import { createResumedQueryEngine, listSessionHistory } from './sessionResume.js'
+import { createResumedQueryEngine, listSessionHistory, loadSessionHistory } from './sessionResume.js'
 import { pwd } from '../utils/cwd.js'
 import { getProjectDir } from '../utils/sessionStoragePortable.js'
+import { loadTranscriptFromFile } from '../utils/sessionStorage.js'
+import { join } from 'path'
 
 type RouteMethod = 'GET' | 'POST' | 'DELETE' | 'PUT' | 'PATCH'
 
@@ -212,6 +215,45 @@ function sessionHistoryRoute(): Route {
   }
 }
 
+function sessionMessagesRoute(): Route {
+  return {
+    method: 'GET',
+    pattern: /^\/v1\/sessions\/([^/]+)\/messages$/,
+    handler: async (params, req, _config, manager?: SessionManager) => {
+      if (!manager) return errorResponse('Internal error', 500)
+      const sessionId = params['0']
+      const session = manager.getSession(sessionId)
+
+      // Active session: read through ALS context
+      if (session) {
+        try {
+          const messages = await loadSessionHistory(sessionId, session.context)
+          return json({ sessionId, messages: messages ?? [] })
+        } catch (err: any) {
+          return errorResponse(`Failed to load messages: ${err.message}`, 500)
+        }
+      }
+
+      // Destroyed/inactive session: read from disk using userId + cwd query params
+      const url = new URL(req.url)
+      const userId = url.searchParams.get('userId')
+      const cwd = url.searchParams.get('cwd') ?? pwd()
+
+      if (!userId) {
+        return errorResponse('Session not found. Provide ?userId= to load history from disk.', 404)
+      }
+
+      try {
+        const filePath = join(getProjectDir(cwd, userId), `${sessionId}.jsonl`)
+        const logOption = await loadTranscriptFromFile(filePath)
+        return json({ sessionId, messages: logOption.messages ?? [] })
+      } catch (err: any) {
+        return errorResponse(`Failed to load messages: ${err.message}`, 500)
+      }
+    },
+  }
+}
+
 function deleteSessionRoute(): Route {
   return {
     method: 'DELETE',
@@ -317,6 +359,7 @@ export function createRouter(manager: SessionManager, config: ServerConfig) {
     listSessionsRoute(),
     createSessionRoute(),
     sessionHistoryRoute(),
+    sessionMessagesRoute(),
     getSessionRoute(),
     deleteSessionRoute(),
     messageRoute(),
