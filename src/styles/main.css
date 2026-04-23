@@ -1,14 +1,14 @@
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/noto-sans-sc";
+
 html {
-  font-size: 16px;
+  font-size: 14px;
 }
 
 body {
   margin: 0;
   font-family: var(--font-sans);
-  background:
-    radial-gradient(circle at top left, rgba(217, 240, 235, 0.8), transparent 30%),
-    radial-gradient(circle at 80% 20%, rgba(253, 235, 209, 0.7), transparent 28%),
-    linear-gradient(180deg, #f6f1e8, var(--color-bg));
+  background: var(--color-bg);
   color: var(--color-text);
   min-width: 320px;
 }

@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia';
+import { matchesMobileLayoutViewport } from '../app/responsive';
 import { runtimeConfig } from '../config/runtime';
 import { createCareerAgentClient } from '../services/createCareerAgentClient';
 import { shouldSimulateArtifactRefreshLifecycle } from './artifactRefreshPolicy';
@@ -55,6 +56,56 @@ function revokeLocalMessageResources(messages: ThreadMessage[]) {
   }
 }
 
+function normalizeInlineText(value: string) {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+function truncateText(value: string, maxLength: number) {
+  if (value.length <= maxLength) {
+    return value;
+  }
+
+  return `${value.slice(0, maxLength - 3)}...`;
+}
+
+function cloneDraftSubmission(submission: DraftMessageSubmission): DraftMessageSubmission {
+  return {
+    content: submission.content,
+    attachments: [...submission.attachments],
+  };
+}
+
+function deriveThreadSeed(submission: DraftMessageSubmission) {
+  const normalizedContent = normalizeInlineText(submission.content);
+
+  if (normalizedContent) {
+    return {
+      title: truncateText(normalizedContent, 18),
+      preview: truncateText(normalizedContent, 72),
+    };
+  }
+
+  if (submission.attachments.length === 1) {
+    const attachmentName = submission.attachments[0]?.name.trim() || '附件';
+    return {
+      title: truncateText(attachmentName, 18),
+      preview: `包含附件：${truncateText(attachmentName, 56)}`,
+    };
+  }
+
+  if (submission.attachments.length > 1) {
+    return {
+      title: '多附件对话',
+      preview: `包含 ${submission.attachments.length} 个附件`,
+    };
+  }
+
+  return {
+    title: '新对话',
+    preview: '',
+  };
+}
+
 interface WorkspaceState {
   initialized: boolean;
   threads: ThreadSummary[];
@@ -65,6 +116,7 @@ interface WorkspaceState {
   activeThreadId: string | null;
   activeArtifactId: string | null;
   sideRailCollapsed: boolean;
+  mobileSideRailOpen: boolean;
   artifactPaneOpen: boolean;
   artifactViewMode: ArtifactViewMode;
   threadsStatus: LoadState;
@@ -74,6 +126,8 @@ interface WorkspaceState {
   profileSuggestionsStatus: LoadState;
   profileSaveStatus: LoadState;
   artifactsStatus: LoadState;
+  pendingThreadSubmission: DraftMessageSubmission | null;
+  pendingThreadId: string | null;
   errorMessage: string | null;
 }
 
@@ -88,6 +142,7 @@ export const useWorkspaceStore = defineStore('workspace', {
     activeThreadId: null,
     activeArtifactId: null,
     sideRailCollapsed: false,
+    mobileSideRailOpen: false,
     artifactPaneOpen: false,
     artifactViewMode: 'pane',
     threadsStatus: 'idle',
@@ -97,6 +152,8 @@ export const useWorkspaceStore = defineStore('workspace', {
     profileSuggestionsStatus: 'idle',
     profileSaveStatus: 'idle',
     artifactsStatus: 'idle',
+    pendingThreadSubmission: null,
+    pendingThreadId: null,
     errorMessage: null,
   }),
   getters: {
@@ -119,6 +176,32 @@ export const useWorkspaceStore = defineStore('workspace', {
     },
     toggleSideRailCollapsed() {
       this.sideRailCollapsed = !this.sideRailCollapsed;
+    },
+    setMobileSideRailOpen(open: boolean) {
+      this.mobileSideRailOpen = open;
+    },
+    openMobileSideRail() {
+      this.mobileSideRailOpen = true;
+    },
+    closeMobileSideRail() {
+      this.mobileSideRailOpen = false;
+    },
+    toggleMobileSideRail() {
+      this.mobileSideRailOpen = !this.mobileSideRailOpen;
+    },
+    syncArtifactViewForLayout(isMobileLayout: boolean) {
+      if (!this.artifactPaneOpen || !this.activeArtifactId || this.artifactViewMode === 'immersive') {
+        return;
+      }
+
+      if (isMobileLayout && this.artifactViewMode === 'pane') {
+        this.artifactViewMode = 'focus';
+        return;
+      }
+
+      if (!isMobileLayout && this.artifactViewMode === 'focus') {
+        this.artifactViewMode = 'pane';
+      }
     },
     upsertArtifactRecord(nextArtifact: ArtifactRecord) {
       const artifactIndex = this.artifacts.findIndex((artifact) => artifact.id === nextArtifact.id);
@@ -228,6 +311,7 @@ export const useWorkspaceStore = defineStore('workspace', {
       }
 
       this.activeThreadId = targetThreadId;
+      this.closeMobileSideRail();
 
       try {
         const nextMessages = await client.getThreadMessages(targetThreadId);
@@ -239,6 +323,17 @@ export const useWorkspaceStore = defineStore('workspace', {
         revokeLocalMessageResources(this.messages);
         this.messages = nextMessages;
         this.messagesStatus = 'ready';
+
+        if (this.pendingThreadId === targetThreadId) {
+          const pendingSubmission = this.pendingThreadSubmission;
+          this.pendingThreadId = null;
+          this.pendingThreadSubmission = null;
+
+          if (pendingSubmission && nextMessages.length === 0) {
+            this.submitDraftMessage(cloneDraftSubmission(pendingSubmission));
+          }
+        }
+
         return targetThreadId;
       } catch (error) {
         if (requestToken !== threadLoadRequestToken || this.activeThreadId !== targetThreadId) {
@@ -252,7 +347,7 @@ export const useWorkspaceStore = defineStore('workspace', {
         return null;
       }
     },
-    async createThread() {
+    async createThread(input?: { title?: string; preview?: string }) {
       await this.initialize();
 
       if (!this.initialized) {
@@ -264,8 +359,8 @@ export const useWorkspaceStore = defineStore('workspace', {
 
       try {
         const nextThread = await client.createThread({
-          title: '新对话',
-          preview: '',
+          title: input?.title ?? '新对话',
+          preview: input?.preview ?? '',
         });
 
         this.threads = [
@@ -273,6 +368,7 @@ export const useWorkspaceStore = defineStore('workspace', {
           ...this.threads.filter((thread) => thread.id !== nextThread.id),
         ];
         this.activeThreadId = nextThread.id;
+        this.closeMobileSideRail();
         this.closeArtifact();
         revokeLocalMessageResources(this.messages);
         this.messages = [];
@@ -283,6 +379,30 @@ export const useWorkspaceStore = defineStore('workspace', {
       } catch (error) {
         this.threadCreateStatus = 'error';
         this.errorMessage = error instanceof Error ? error.message : 'Unknown thread creation error';
+        throw error;
+      }
+    },
+    async startThreadFromDraft(submission: DraftMessageSubmission | string) {
+      const nextSubmission = typeof submission === 'string'
+        ? { content: submission, attachments: [] }
+        : submission;
+      const content = nextSubmission.content.trim();
+
+      if (!content && nextSubmission.attachments.length === 0) {
+        return null;
+      }
+
+      this.pendingThreadId = null;
+      this.pendingThreadSubmission = null;
+
+      try {
+        const nextThread = await this.createThread(deriveThreadSeed(nextSubmission));
+        this.pendingThreadId = nextThread.id;
+        this.pendingThreadSubmission = cloneDraftSubmission(nextSubmission);
+        return nextThread;
+      } catch (error) {
+        this.pendingThreadId = null;
+        this.pendingThreadSubmission = null;
         throw error;
       }
     },
@@ -299,7 +419,10 @@ export const useWorkspaceStore = defineStore('workspace', {
 
       this.activeArtifactId = artifact.id;
       this.artifactPaneOpen = true;
-      this.artifactViewMode = viewMode;
+      this.artifactViewMode = matchesMobileLayoutViewport() && viewMode === 'pane'
+        ? 'focus'
+        : viewMode;
+      this.closeMobileSideRail();
     },
     promoteArtifactFocus() {
       if (!this.activeArtifactId) {

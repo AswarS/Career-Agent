@@ -36,18 +36,51 @@ describe('useWorkspaceStore', () => {
     expect(workspaceStore.messages.length).toBeGreaterThan(0);
   });
 
-  it('creates a local mock thread and leaves messages idle for route-driven loading', async () => {
+  it('creates a local mock thread with provided summary seed and leaves messages idle for route-driven loading', async () => {
     const workspaceStore = useWorkspaceStore();
 
     await workspaceStore.initialize();
-    const thread = await workspaceStore.createThread();
+    const thread = await workspaceStore.createThread({
+      title: '测试会话',
+      preview: '用于验证首页首发起草稿。',
+    });
 
-    expect(thread.title).toBe('新对话');
+    expect(thread.title).toBe('测试会话');
+    expect(thread.preview).toBe('用于验证首页首发起草稿。');
     expect(workspaceStore.threads[0]?.id).toBe(thread.id);
     expect(workspaceStore.activeThreadId).toBe(thread.id);
     expect(workspaceStore.threadCreateStatus).toBe('ready');
     expect(workspaceStore.messages).toEqual([]);
     expect(workspaceStore.messagesStatus).toBe('idle');
+  });
+
+  it('creates a thread from the first submission and replays the local draft after route activation', async () => {
+    const workspaceStore = useWorkspaceStore();
+
+    await workspaceStore.initialize();
+    const thread = await workspaceStore.startThreadFromDraft({
+      content: '请帮我梳理本周重点工作和学习安排',
+      attachments: [],
+    });
+
+    expect(thread).not.toBeNull();
+    expect(thread?.title).toBe('请帮我梳理本周重点工作和学习安排');
+    expect(workspaceStore.messages).toEqual([]);
+    expect(workspaceStore.messagesStatus).toBe('idle');
+
+    await workspaceStore.setActiveThread(thread!.id);
+
+    expect(workspaceStore.messagesStatus).toBe('ready');
+    expect(workspaceStore.messages).toHaveLength(2);
+    expect(workspaceStore.messages[0]).toMatchObject({
+      threadId: thread!.id,
+      role: 'user',
+      content: '请帮我梳理本周重点工作和学习安排',
+    });
+    expect(workspaceStore.messages[1]).toMatchObject({
+      threadId: thread!.id,
+      role: 'system',
+    });
   });
 
   it('adds local image media and file attachments when submitting a draft message', () => {

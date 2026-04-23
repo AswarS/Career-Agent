@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue';
 import { storeToRefs } from 'pinia';
+import MobileRailTrigger from '../modules/navigation/MobileRailTrigger.vue';
 import { useWorkspaceStore } from '../stores/workspace';
 import type { ArtifactRecord } from '../types/entities';
 
@@ -28,7 +29,7 @@ function formatArtifactType(artifact: ArtifactRecord) {
     case 'visual-learning':
       return '可视化学习';
     case 'app-example':
-      return '应用示例';
+      return '应用画布';
     default:
       return artifact.type;
   }
@@ -57,13 +58,13 @@ function formatArtifactStatus(artifact: ArtifactRecord) {
 <template>
   <section class="page-section">
     <header class="page-header">
-      <div>
-        <p class="eyebrow">工件中心</p>
-        <h1>阶段成果工件总览</h1>
+      <div class="page-heading">
+        <MobileRailTrigger />
+        <div>
+          <p class="eyebrow">工件中心</p>
+          <h1>工件</h1>
+        </div>
       </div>
-      <p class="support-copy">
-        这个页面用于展示前端已经可以独立列出结构化工件，而不依赖实时后端联调。
-      </p>
     </header>
 
     <div class="artifact-list">
@@ -92,12 +93,12 @@ function formatArtifactStatus(artifact: ArtifactRecord) {
 
 .artifact-list {
   display: grid;
-  gap: 14px;
+  gap: 10px;
 }
 
 .card {
-  padding: 22px;
-  border-radius: 24px;
+  padding: 16px;
+  border-radius: 16px;
   border: 1px solid var(--color-border);
   background: var(--color-surface);
   box-shadow: var(--shadow-card);
@@ -107,15 +108,15 @@ function formatArtifactStatus(artifact: ArtifactRecord) {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 .card-meta span {
-  padding: 0.38rem 0.6rem;
+  padding: 0.28rem 0.5rem;
   border-radius: 999px;
   background: var(--color-bg-subtle);
   color: var(--color-text-muted);
-  font-size: 0.76rem;
+  font-size: 0.72rem;
   font-weight: 700;
 }
 
@@ -123,30 +124,31 @@ h2 {
   margin: 0;
   color: var(--color-text);
   font-family: var(--font-display);
-  font-size: 1.35rem;
+  font-size: 1.02rem;
+  font-weight: 700;
 }
 
 .card p {
-  margin: 12px 0 0;
+  margin: 8px 0 0;
   color: var(--color-text-muted);
-  line-height: 1.6;
+  line-height: 1.45;
 }
 
 .primary-button {
-  margin-top: 18px;
+  margin-top: 12px;
 }
 
 .action-row {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  margin-top: 18px;
+  margin-top: 12px;
 }
 
 .primary-button,
 .secondary-button {
   border-radius: 999px;
-  padding: 0.82rem 1rem;
+  padding: 0.56rem 0.76rem;
   font: inherit;
   font-weight: 700;
   cursor: pointer;

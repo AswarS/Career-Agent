@@ -56,89 +56,24 @@ const artifactIssue = computed(() => {
   return null;
 });
 
-const artifactTypeLabel = computed(() => {
-  switch (activeArtifact.value?.type) {
-    case 'weekly-plan':
-      return '周计划';
-    case 'profile-summary':
-      return '画像摘要';
-    case 'career-roadmap':
-      return '职业路线图';
-    case 'mock-interview':
-      return '模拟面试';
-    case 'coding-assessment':
-      return '代码题';
-    case 'visual-learning':
-      return '可视化学习';
-    case 'app-example':
-      return '应用示例';
-    default:
-      return activeArtifact.value?.type ?? '未分类';
-  }
-});
-
-const artifactStatusLabel = computed(() => {
-  switch (activeArtifact.value?.status) {
-    case 'loading':
-      return '加载中';
-    case 'streaming':
-      return '更新中';
-    case 'stale':
-      return '待刷新';
-    case 'error':
-      return '错误';
-    case 'ready':
-      return '就绪';
-    default:
-      return '未激活';
-  }
-});
-
-const statusTitle = computed(() => {
+const artifactNotice = computed(() => {
   if (artifactIssue.value) {
-    return '工件载荷不可用';
+    return artifactIssue.value;
   }
 
   switch (activeArtifact.value?.status) {
     case 'loading':
-      return '正在准备工件容器';
+      return '正在准备内容...';
     case 'streaming':
-      return '正在应用流式更新';
+      return '正在更新内容...';
     case 'stale':
-      return '当前工件版本已过期';
+      return '内容可能不是最新版本。';
     case 'error':
-      return '工件刷新失败';
+      return '内容暂时无法显示。';
     default:
-      return '工件已就绪';
+      return null;
   }
 });
-
-const statusBody = computed(() => {
-  if (artifactIssue.value) {
-    if (activeArtifact.value?.renderMode === 'url') {
-      return '当前前端仅允许相对路径，或来自受信任 allowlist 的 http/https URL 工作画布。';
-    }
-
-    return '请检查当前工件载荷是否与声明的渲染模式一致。';
-  }
-
-  switch (activeArtifact.value?.status) {
-    case 'loading':
-      return '宿主面板已预留显示区域，正在等待下一版载荷。';
-    case 'streaming':
-      return '模拟刷新正在进行，当前版本会在保留面板上下文的情况下被替换。';
-    case 'stale':
-      return '当前工件落后于最新上下文，建议刷新后再作为展示依据。';
-    case 'error':
-      return '上一次刷新未成功完成，可以在不丢失当前界面状态的前提下重试。';
-    default:
-      return '当前版本已经在独立宿主面板中准备完成。';
-  }
-});
-
-const artifactStateClass = computed(() => (
-  artifactIssue.value ? 'error' : activeArtifact.value?.status ?? 'idle'
-));
 </script>
 
 <template>
@@ -155,7 +90,6 @@ const artifactStateClass = computed(() => (
 
       <div v-if="!artifactImmersiveMode" class="artifact-header">
         <div>
-          <p class="eyebrow">工件宿主</p>
           <h2>{{ activeArtifact?.title ?? '当前没有打开的工件' }}</h2>
         </div>
         <div v-if="artifactPaneOpen" class="artifact-actions">
@@ -190,7 +124,7 @@ const artifactStateClass = computed(() => (
           </button>
           <button
             v-if="activeArtifact && (artifactFocusMode || artifactImmersiveMode)"
-            class="ghost-button"
+            class="ghost-button return-pane-button"
             @click="workspaceStore.restoreArtifactPane()"
           >
             返回侧栏
@@ -202,16 +136,8 @@ const artifactStateClass = computed(() => (
       </div>
 
       <template v-if="activeArtifact">
-        <div v-if="!artifactImmersiveMode" class="artifact-meta">
-          <span>{{ artifactTypeLabel }}</span>
-          <span>{{ activeArtifact.renderMode }}</span>
-          <span>{{ artifactStatusLabel }}</span>
-          <span>版本 {{ activeArtifact.revision }}</span>
-        </div>
-
-        <div v-if="!artifactImmersiveMode" class="artifact-state" :class="artifactStateClass">
-          <strong>{{ statusTitle }}</strong>
-          <p>{{ statusBody }}</p>
+        <div v-if="!artifactImmersiveMode && artifactNotice" class="artifact-notice">
+          {{ artifactNotice }}
         </div>
 
         <iframe
@@ -230,18 +156,13 @@ const artifactStateClass = computed(() => (
           title="工件应用"
         ></iframe>
 
-        <div v-else-if="artifactIssue" class="artifact-empty">
-          <p>{{ artifactIssue }}</p>
-        </div>
-
         <div v-else class="artifact-empty">
-          <p>这种工件渲染模式留待后续阶段实现。</p>
+          <p>{{ artifactNotice ?? '当前内容暂不可显示。' }}</p>
         </div>
       </template>
 
       <div v-else class="artifact-empty">
-        <p>当前没有打开工件。</p>
-        <p class="muted">可以从对话消息动作或工件中心打开周计划、模拟面试、代码题和可视化学习画布。</p>
+        <p>当前没有打开内容。</p>
       </div>
     </div>
   </aside>
@@ -282,13 +203,13 @@ const artifactStateClass = computed(() => (
 .artifact-panel {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 10px;
   width: var(--artifact-pane-width, 360px);
   min-width: 0;
   height: 100vh;
   min-height: 100vh;
   overflow-y: auto;
-  padding: 18px;
+  padding: 12px;
   border-left: 1px solid var(--color-border);
   background: color-mix(in srgb, var(--color-surface) 94%, white);
 }
@@ -298,7 +219,7 @@ const artifactStateClass = computed(() => (
   max-width: calc(100vw - var(--side-rail-width, 280px));
   min-width: 0;
   border-left: 1px solid var(--color-border);
-  box-shadow: -20px 0 40px rgba(35, 49, 59, 0.08);
+  box-shadow: -12px 0 24px rgba(32, 36, 42, 0.08);
 }
 
 .artifact-host.immersive .artifact-panel {
@@ -306,7 +227,7 @@ const artifactStateClass = computed(() => (
   max-width: 100vw;
   padding: 0;
   border-left: 0;
-  background: #0e1717;
+  background: #101417;
   box-shadow: none;
 }
 
@@ -326,20 +247,11 @@ const artifactStateClass = computed(() => (
   gap: 12px;
 }
 
-.eyebrow {
-  margin: 0 0 8px;
-  color: var(--color-text-muted);
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
-
 h2 {
   margin: 0;
   color: var(--color-text);
   font-family: var(--font-display);
-  font-size: 1.35rem;
+  font-size: 1.02rem;
   line-height: 1.1;
 }
 
@@ -350,61 +262,17 @@ h2 {
   gap: 8px;
 }
 
-.artifact-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.artifact-meta span {
-  padding: 0.35rem 0.6rem;
-  border-radius: 999px;
-  background: var(--color-bg-subtle);
+.artifact-notice {
   color: var(--color-text-muted);
-  font-size: 0.76rem;
-  font-weight: 700;
-}
-
-.artifact-state {
-  display: grid;
-  gap: 6px;
-  padding: 14px 16px;
-  border-radius: 20px;
-  border: 1px solid var(--color-border);
-  background: color-mix(in srgb, var(--color-bg-subtle) 82%, white);
-}
-
-.artifact-state strong {
-  color: var(--color-text);
-}
-
-.artifact-state p {
-  margin: 0;
-  color: var(--color-text-muted);
-  line-height: 1.6;
-}
-
-.artifact-state.loading {
-  background: color-mix(in srgb, var(--color-bg-subtle) 65%, white);
-}
-
-.artifact-state.streaming {
-  background: color-mix(in srgb, var(--color-primary-soft) 55%, white);
-}
-
-.artifact-state.stale {
-  background: color-mix(in srgb, var(--color-warning-soft) 68%, white);
-}
-
-.artifact-state.error {
-  background: color-mix(in srgb, #f4d7d2 74%, white);
+  font-size: 0.8rem;
+  line-height: 1.45;
 }
 
 .artifact-frame,
 .artifact-empty {
   width: 100%;
   flex: 1;
-  border-radius: 20px;
+  border-radius: 12px;
   border: 1px solid var(--color-border);
   background: var(--color-surface-strong);
 }
@@ -430,18 +298,16 @@ h2 {
 }
 
 .artifact-empty {
+  display: grid;
+  place-items: center;
+  min-height: 220px;
   padding: 18px;
-  color: var(--color-text);
+  color: var(--color-text-muted);
+  text-align: center;
 }
 
 .artifact-empty p {
   margin: 0;
-}
-
-.artifact-empty .muted {
-  margin-top: 10px;
-  color: var(--color-text-muted);
-  line-height: 1.6;
 }
 
 .ghost-button {
@@ -449,7 +315,7 @@ h2 {
   border-radius: 999px;
   background: var(--color-surface-strong);
   color: var(--color-text);
-  padding: 0.7rem 0.95rem;
+  padding: 0.52rem 0.72rem;
   font: inherit;
   cursor: pointer;
 }
@@ -467,28 +333,41 @@ h2 {
 }
 
 @media (max-width: 960px) {
-  .artifact-host,
+  .artifact-host {
+    position: fixed;
+    inset: 0;
+    height: 100vh;
+    width: 100vw;
+    max-width: 100vw;
+    z-index: 50;
+    transform: translateX(100%);
+    pointer-events: none;
+    transition: transform 180ms ease;
+  }
+
   .artifact-host.open,
-  .artifact-host.focus {
-    position: static;
-    inset: auto;
-    height: auto;
-    width: 100%;
-    max-width: none;
+  .artifact-host.focus,
+  .artifact-host.immersive {
+    transform: translateX(0);
+    pointer-events: auto;
   }
 
   .artifact-panel {
-    width: 100%;
-    height: auto;
-    min-height: auto;
+    width: 100vw;
+    height: 100vh;
+    min-height: 100vh;
     border-left: 0;
-    border-top: 1px solid var(--color-border);
+    border-top: 0;
     max-width: none;
-    overflow: visible;
+    overflow-y: auto;
   }
 
   .artifact-frame {
-    min-height: 360px;
+    min-height: calc(100vh - 160px);
+  }
+
+  .return-pane-button {
+    display: none;
   }
 }
 </style>

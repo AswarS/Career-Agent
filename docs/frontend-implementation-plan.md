@@ -236,6 +236,12 @@ The current stable baseline supports:
 3. HTML and trusted URL artifact host paths
 4. optional external app-example URL validation through `dev:app-examples`
 5. message-level image and video display fixtures
+6. a dedicated new-conversation landing page at `/`, where clicking `新建对话`
+   or loading the app no longer creates an empty thread up front
+7. delayed thread creation semantics: the frontend only calls
+   `POST /api/career-agent/threads` on the first submit, then replays the local
+   placeholder message into the new thread view until the upstream send API
+   exists
 
 The next slice should start from one focused contract or UX gap, not from a
 wide rewrite.

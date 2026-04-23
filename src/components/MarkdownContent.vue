@@ -16,7 +16,7 @@ const renderedHtml = computed(() => markdownRenderer.render(props.source));
 <style scoped>
 .markdown-body {
   color: inherit;
-  line-height: 1.7;
+  line-height: 1.55;
 }
 
 .markdown-body :deep(p) {
@@ -24,17 +24,17 @@ const renderedHtml = computed(() => markdownRenderer.render(props.source));
 }
 
 .markdown-body :deep(p + p) {
-  margin-top: 0.9rem;
+  margin-top: 0.62rem;
 }
 
 .markdown-body :deep(ul),
 .markdown-body :deep(ol) {
-  margin: 0.9rem 0 0;
+  margin: 0.62rem 0 0;
   padding-left: 1.25rem;
 }
 
 .markdown-body :deep(li + li) {
-  margin-top: 0.4rem;
+  margin-top: 0.25rem;
 }
 
 .markdown-body :deep(code) {
@@ -47,10 +47,10 @@ const renderedHtml = computed(() => markdownRenderer.render(props.source));
 }
 
 .markdown-body :deep(pre) {
-  margin: 1rem 0 0;
+  margin: 0.75rem 0 0;
   overflow: auto;
-  padding: 1rem;
-  border-radius: 16px;
+  padding: 0.75rem;
+  border-radius: 12px;
   background: color-mix(in srgb, var(--color-surface-strong) 88%, white);
   border: 1px solid var(--color-border);
 }

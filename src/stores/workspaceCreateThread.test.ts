@@ -81,4 +81,22 @@ describe('useWorkspaceStore createThread upstream state', () => {
     expect(workspaceStore.errorMessage).toBe('create failed');
     expect(workspaceStore.activeThreadId).toBe('1');
   });
+
+  it('passes the first draft summary into upstream thread creation', async () => {
+    const client = createClient();
+    const workspaceStore = await createStoreWithClient(client);
+
+    const nextThread = await workspaceStore.startThreadFromDraft({
+      content: '请帮我做一份新的周计划',
+      attachments: [],
+    });
+
+    expect(nextThread?.id).toBe('2');
+    expect(client.createThread).toHaveBeenCalledTimes(1);
+    expect(client.createThread).toHaveBeenCalledWith({
+      title: '请帮我做一份新的周计划',
+      preview: '请帮我做一份新的周计划',
+    });
+    expect(workspaceStore.threadCreateStatus).toBe('ready');
+  });
 });

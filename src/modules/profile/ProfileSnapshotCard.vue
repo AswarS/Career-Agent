@@ -31,38 +31,38 @@ defineProps<{
 
 <style scoped>
 .snapshot-card {
-  padding: 22px;
-  border-radius: 24px;
+  padding: 16px;
+  border-radius: 16px;
   border: 1px solid var(--color-border);
   background: var(--color-surface);
   box-shadow: var(--shadow-card);
 }
 
 .eyebrow {
-  margin: 0 0 14px;
+  margin: 0 0 10px;
   color: var(--color-text-muted);
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   font-weight: 700;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .item-list {
   display: grid;
-  gap: 16px;
+  gap: 12px;
 }
 
 .snapshot-item h2 {
-  margin: 0 0 8px;
+  margin: 0 0 6px;
   color: var(--color-text);
-  font-size: 0.9rem;
+  font-size: 0.82rem;
 }
 
 .value-copy,
 .empty-copy {
   margin: 0;
   color: var(--color-text-muted);
-  line-height: 1.7;
+  line-height: 1.45;
 }
 
 .pill-list {
@@ -75,11 +75,11 @@ defineProps<{
 }
 
 .pill-list li {
-  padding: 0.42rem 0.68rem;
+  padding: 0.28rem 0.5rem;
   border-radius: 999px;
   background: var(--color-bg-subtle);
   color: var(--color-text);
-  font-size: 0.84rem;
+  font-size: 0.78rem;
   line-height: 1.3;
 }
 </style>

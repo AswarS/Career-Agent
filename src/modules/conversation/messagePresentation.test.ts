@@ -43,6 +43,20 @@ describe('getPresentedMessageContent', () => {
     expect(presented.reasoning).toBe('这是显式 reasoning。');
     expect(presented.content).toBe('这是可见回复。');
   });
+
+  it('drops empty or placeholder reasoning values', () => {
+    const emptyPresented = getPresentedMessageContent(createMessage({
+      reasoning: '   ',
+      content: '这是可见回复。',
+    }));
+    const errorPresented = getPresentedMessageContent(createMessage({
+      reasoning: 'error',
+      content: '这是可见回复。',
+    }));
+
+    expect(emptyPresented.reasoning).toBeNull();
+    expect(errorPresented.reasoning).toBeNull();
+  });
 });
 
 describe('shouldUseMultiAgentPresentation', () => {

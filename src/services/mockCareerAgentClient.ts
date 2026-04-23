@@ -41,8 +41,8 @@ const htmlAppExampleThreads: ThreadSummary[] = htmlAppExampleUrl
   ? [
       {
         id: 'thread-009',
-        title: 'HTML 应用示例',
-        preview: '从外部静态 HTML 示例 URL 打开弹跳小球页面。',
+        title: '弹跳小球应用',
+        preview: '打开静态应用画布。',
         updatedAt: '2026-04-14T13:10:00Z',
         status: 'active',
       },
@@ -53,8 +53,8 @@ const nodeAppExampleThreads: ThreadSummary[] = nodeAppExampleUrl
   ? [
       {
         id: 'thread-010',
-        title: 'Node 应用示例',
-        preview: '从外部 Node 示例 URL 打开求导挑战页面。',
+        title: '求导挑战应用',
+        preview: '打开交互练习画布。',
         updatedAt: '2026-04-14T13:16:00Z',
         status: 'active',
       },
@@ -100,21 +100,21 @@ const threads: ThreadSummary[] = [
   {
     id: 'thread-006',
     title: '图片观察',
-    preview: '展示 AI 已拿到图片位置后的对话内预览。',
+    preview: '查看图片素材并整理观察建议。',
     updatedAt: '2026-04-14T11:18:00Z',
     status: 'active',
   },
   {
     id: 'thread-007',
     title: '视频回放',
-    preview: '展示 AI 已拿到视频位置后的本地播放入口。',
+    preview: '查看视频素材并提炼关键片段。',
     updatedAt: '2026-04-14T11:22:00Z',
     status: 'active',
   },
   {
     id: 'thread-008',
     title: '第二视频回放',
-    preview: '展示第二个本地测试视频的播放入口。',
+    preview: '打开第二段视频素材。',
     updatedAt: '2026-04-14T11:48:00Z',
     status: 'active',
   },
@@ -129,7 +129,7 @@ const htmlAppExampleMessages: ThreadMessage[] = htmlAppExampleUrl
         threadId: 'thread-009',
         role: 'user',
         kind: 'markdown',
-        content: '请打开外部静态 HTML 示例，验证前端只接收 URL 后能嵌入工作画布。',
+        content: '请打开弹跳小球应用画布。',
         createdAt: '2026-04-14 13:10',
       },
       {
@@ -141,12 +141,12 @@ const htmlAppExampleMessages: ThreadMessage[] = htmlAppExampleUrl
         agentName: '画布助手',
         agentAccent: 'amber',
         content:
-          '这个线程验证的是 **静态 HTML 应用 URL** 路径。\n\n示例应用来自前端同级目录 `../app_examples/bounce-game`。前端不会读取本机文件路径，也不会复制示例源码；本地测试时需要先把这个目录通过 HTTP 服务托管，然后只把 URL 交给工作画布。',
+          '已准备好弹跳小球应用画布。你可以在独立工作区查看运行状态，并按需要切换到聚焦视图。',
         actions: [
           {
             id: 'action-open-html-app-example',
             kind: 'open-artifact',
-            label: '打开 HTML 示例',
+            label: '打开应用画布',
             artifactId: 'artifact-html-app-example',
             viewMode: 'focus',
           },
@@ -163,7 +163,7 @@ const nodeAppExampleMessages: ThreadMessage[] = nodeAppExampleUrl
         threadId: 'thread-010',
         role: 'user',
         kind: 'markdown',
-        content: '请打开外部 Node 项目示例，验证前端只接收后端返回的应用 URL。',
+        content: '请打开求导挑战应用画布。',
         createdAt: '2026-04-14 13:16',
       },
       {
@@ -175,12 +175,12 @@ const nodeAppExampleMessages: ThreadMessage[] = nodeAppExampleUrl
         agentName: '画布助手',
         agentAccent: 'blue',
         content:
-          '这个线程验证的是 **Node / Web 应用 URL** 路径。\n\n示例应用来自 `../app_examples/derivative-game`。前端职责只到“收到受信任 URL 并嵌入 iframe”；Node 服务的启动、端口、依赖和生命周期都应由后端或外部运行流程负责。',
+          '已准备好求导挑战应用画布。它会在工作区中打开，便于边练习边回到会话继续调整。',
         actions: [
           {
             id: 'action-open-node-app-example',
             kind: 'open-artifact',
-            label: '打开 Node 示例',
+            label: '打开应用画布',
             artifactId: 'artifact-node-app-example',
             viewMode: 'focus',
           },
@@ -210,7 +210,7 @@ const messagesByThread: Record<string, ThreadMessage[]> = {
       agentAccent: 'teal',
       reasoning: '先判断用户是在做短周期计划，而不是长期路线图。\n\n再把约束拆成工作交付、学习投入和恢复节奏三类。\n\n最后优先输出一个可执行的周计划工件，而不是继续追问太多背景。',
       content:
-        '我可以把这些要求整理成一个周计划工件。\n\n- 优先保障工作台外壳交付\n- 保持画像更新必须显式确认\n- 使用工件宿主面板承载计划展示\n\n当前前端已经托管工件外壳，后续再由上游系统提供实时载荷更新。',
+        '我可以把这些要求整理成一个周计划。\n\n- 优先保障交付任务\n- 保留学习和复盘时间\n- 给恢复安排明确边界',
       actions: [
         {
           id: 'action-open-weekly-plan',
@@ -231,7 +231,7 @@ const messagesByThread: Record<string, ThreadMessage[]> = {
       agentName: '执行助手',
       agentAccent: 'amber',
       content:
-        '如果你下一步要进入更接近真实项目的工作面，我也可以把结果切到 **URL 型工作画布**，用来承载 node 应用或交互式面试界面。',
+        '如果你想进一步拆解某个任务，我可以把结果切到独立工作画布，方便持续操作。',
       createdAt: '2026-04-08 09:02',
     },
   ],
@@ -285,7 +285,7 @@ const messagesByThread: Record<string, ThreadMessage[]> = {
       reasoning:
         '模拟面试需要连续回答和计时压力，不适合被旁边信息打断。这里优先打开独立练习室，让问题、提示和记录都围绕同一个面试场景。',
       content:
-        '可以。这个场景适合进入 **沉浸式面试练习室**：计时、问题切换、提示和要点检查都集中在同一块界面里。\n\n第一版先用咖啡店店长面试做审美和交互验证。',
+        '可以。这个场景适合进入 **沉浸式面试练习室**：计时、问题切换、提示和要点检查都集中在同一块界面里。',
       actions: [
         {
           id: 'action-open-mock-interview',
@@ -360,7 +360,7 @@ const messagesByThread: Record<string, ThreadMessage[]> = {
       threadId: 'thread-006',
       role: 'user',
       kind: 'markdown',
-      content: '这是一次图片多模态回传测试：后端已经把测试图片保存到了可访问位置，请在对话中展示。',
+      content: '请查看这张图片，并给出下一步建议。',
       createdAt: '2026-04-14 11:18',
     },
     {
@@ -372,15 +372,15 @@ const messagesByThread: Record<string, ThreadMessage[]> = {
       agentName: '多模态助手',
       agentAccent: 'teal',
       content:
-        '我已收到图片资源位置，并在当前消息里以附件形式展示。\n\n当前实现只验证“AI / 后端返回媒体 URL 后，前端负责渲染”的路径；上传、存储和安全扫描需要后续与后端契约一起做。',
+        '我已收到图片，并在当前消息里展示。可以基于图片内容继续补充观察、标注或行动建议。',
       media: [
         {
           id: 'media-test-image',
           kind: 'image',
           url: '/mock-media/test_image.png',
-          title: '本地测试图片',
-          caption: '开发 fixture：从 `public/mock-media/test_image.png` 加载，用来验证对话内图片显示。',
-          alt: '本地测试图片预览',
+          title: '图片素材',
+          caption: '用于当前会话分析的图片。',
+          alt: '图片素材预览',
           mimeType: 'image/png',
         },
       ],
@@ -393,7 +393,7 @@ const messagesByThread: Record<string, ThreadMessage[]> = {
       threadId: 'thread-007',
       role: 'user',
       kind: 'markdown',
-      content: '这是一次视频多模态回传测试：后端已经把测试视频保存到了可访问位置，请在对话中直接播放。',
+      content: '请查看这段视频，并帮我提炼关键片段。',
       createdAt: '2026-04-14 11:22',
     },
     {
@@ -405,15 +405,15 @@ const messagesByThread: Record<string, ThreadMessage[]> = {
       agentName: '多模态助手',
       agentAccent: 'teal',
       content:
-        '我已收到视频资源位置，并在当前消息里提供本地播放控件。\n\n这一步验证“展示与播放”。输入区现在支持本地图片和文件附件预览，但真实上传仍要等后端对象存储和文件限制规则稳定后再接入。',
+        '我已收到视频，并在当前消息里提供播放控件。你可以继续要求我按时间点整理重点。',
       media: [
         {
           id: 'media-test-video',
           kind: 'video',
           url: '/mock-media/test_video.mp4',
-          title: '本地测试视频',
-          caption: '开发 fixture：从 `public/mock-media/test_video.mp4` 加载，用来验证对话内视频播放。',
-          alt: '本地测试视频播放器',
+          title: '视频素材',
+          caption: '用于当前会话分析的视频。',
+          alt: '视频素材播放器',
           mimeType: 'video/mp4',
         },
       ],
@@ -426,7 +426,7 @@ const messagesByThread: Record<string, ThreadMessage[]> = {
       threadId: 'thread-008',
       role: 'user',
       kind: 'markdown',
-      content: '这是第二个视频多模态回传测试：请用同一套对话媒体展示能力播放另一个测试视频。',
+      content: '请查看第二段视频，并继续整理观察结果。',
       createdAt: '2026-04-14 11:48',
     },
     {
@@ -438,15 +438,15 @@ const messagesByThread: Record<string, ThreadMessage[]> = {
       agentName: '多模态助手',
       agentAccent: 'teal',
       content:
-        '我已收到第二个视频资源位置，并复用同一套对话媒体播放器展示。\n\n这里验证的是：多个视频 fixture 可以按消息附件方式独立挂载；如果后续视频要成为结果页的一部分，则应放进 artifact HTML/URL 页面里。',
+        '我已收到第二段视频，并在当前消息里提供播放控件。可以继续按片段总结要点。',
       media: [
         {
           id: 'media-test-video-2',
           kind: 'video',
           url: '/mock-media/test_video2.mp4',
-          title: '第二个本地测试视频',
-          caption: '开发 fixture：从 `public/mock-media/test_video2.mp4` 加载，用来验证第二个对话内视频播放。',
-          alt: '第二个本地测试视频播放器',
+          title: '第二段视频素材',
+          caption: '用于当前会话分析的视频。',
+          alt: '第二段视频素材播放器',
           mimeType: 'video/mp4',
         },
       ],
@@ -1489,14 +1489,14 @@ function buildHtmlAppExampleArtifact(revision: number, updatedAt = '2026-04-14T1
   return {
     id: 'artifact-html-app-example',
     type: 'app-example',
-    title: '弹跳小球 HTML 示例',
+    title: '弹跳小球应用',
     status: url ? 'ready' : 'error',
     renderMode: 'url',
     revision,
     updatedAt,
     summary: url
-      ? '从外部静态 HTML 示例服务加载，验证前端只消费 URL 的工作画布路径。'
-      : '需要配置 VITE_CAREER_AGENT_HTML_APP_EXAMPLE_URL 后才能加载静态 HTML 示例。',
+      ? '在工作画布中打开弹跳小球应用。'
+      : '应用地址未配置，暂时无法打开。',
     payload: {
       url,
     },
@@ -1509,14 +1509,14 @@ function buildNodeAppExampleArtifact(revision: number, updatedAt = '2026-04-14T1
   return {
     id: 'artifact-node-app-example',
     type: 'app-example',
-    title: '求导挑战 Node 示例',
+    title: '求导挑战应用',
     status: url ? 'ready' : 'error',
     renderMode: 'url',
     revision,
     updatedAt,
     summary: url
-      ? '从外部 Node 项目服务加载，验证前端嵌入后端返回 URL 的工作画布路径。'
-      : '需要配置 VITE_CAREER_AGENT_NODE_APP_EXAMPLE_URL 后才能加载 Node 示例。',
+      ? '在工作画布中打开求导挑战应用。'
+      : '应用地址未配置，暂时无法打开。',
     payload: {
       url,
     },
@@ -1572,7 +1572,7 @@ function buildRefreshedArtifact(currentArtifact: ArtifactRecord): ArtifactRecord
       revision: nextRevision,
       status: 'ready',
       updatedAt: refreshedAt,
-      summary: '周计划已通过 mock 工件链路刷新。',
+      summary: '周计划已刷新。',
       payload: {
         html: `
           <html lang="zh-CN">
@@ -1581,7 +1581,7 @@ function buildRefreshedArtifact(currentArtifact: ArtifactRecord): ArtifactRecord
                 <div style="padding:18px;border:1px solid rgba(96,114,126,0.16);border-radius:18px;background:#fffcf7;">
                   <p style="margin:0 0 10px;color:#61707c;font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;">周计划</p>
                   <h1 style="margin:0;font-size:26px;line-height:1.1;">交付优先级保持不变，但计划已经刷新。</h1>
-                  <p style="margin:14px 0 0;color:#61707c;line-height:1.7;">已于 ${refreshedAt} 通过 mock 流式刷新路径更新。</p>
+                  <p style="margin:14px 0 0;color:#61707c;line-height:1.7;">已于 ${refreshedAt} 更新。</p>
                   <ul style="margin:18px 0 0;padding-left:18px;line-height:1.8;color:#61707c;">
                     <li>复查路由与面板外壳稳定性</li>
                     <li>继续保证画像保存边界显式清晰</li>
@@ -1600,7 +1600,7 @@ function buildRefreshedArtifact(currentArtifact: ArtifactRecord): ArtifactRecord
     revision: nextRevision,
     status: 'ready',
     updatedAt: refreshedAt,
-    summary: `${currentArtifact.title} 已通过 mock 工件链路刷新。`,
+    summary: `${currentArtifact.title} 已刷新。`,
   };
 }
 
@@ -1652,7 +1652,7 @@ export function createMockCareerAgentClient(): CareerAgentClient {
       const nextThread: ThreadSummary = {
         id: `thread-local-${Date.now()}`,
         title: input?.title ?? '新对话',
-        preview: input?.preview ?? '新的本地演示会话。',
+        preview: input?.preview ?? '新的会话。',
         updatedAt: new Date().toISOString(),
         status: 'active',
       };

@@ -14,10 +14,22 @@ const emit = defineEmits<{
   submit: [value: DraftMessageSubmission];
 }>();
 
+const imageFileExtensions = new Set([
+  'avif',
+  'bmp',
+  'gif',
+  'heic',
+  'heif',
+  'jpeg',
+  'jpg',
+  'png',
+  'svg',
+  'webp',
+]);
+
 const draft = ref('');
 const attachments = ref<DraftMessageAttachment[]>([]);
-const imageInput = ref<HTMLInputElement | null>(null);
-const fileInput = ref<HTMLInputElement | null>(null);
+const attachmentInput = ref<HTMLInputElement | null>(null);
 
 const canSubmit = computed(() => (
   !props.disabled && (draft.value.trim().length > 0 || attachments.value.length > 0)
@@ -36,13 +48,20 @@ function createAttachment(file: File, kind: DraftMessageAttachmentKind): DraftMe
   };
 }
 
-function handleAttachmentSelection(event: Event, kind: DraftMessageAttachmentKind) {
+function inferAttachmentKind(file: File): DraftMessageAttachmentKind {
+  if (file.type.startsWith('image/')) {
+    return 'image';
+  }
+
+  const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
+  return imageFileExtensions.has(extension) ? 'image' : 'file';
+}
+
+function handleAttachmentSelection(event: Event) {
   const input = event.target as HTMLInputElement;
   const selectedFiles = Array.from(input.files ?? []);
 
-  const nextAttachments = selectedFiles
-    .filter((file) => kind !== 'image' || file.type.startsWith('image/'))
-    .map((file) => createAttachment(file, kind));
+  const nextAttachments = selectedFiles.map((file) => createAttachment(file, inferAttachmentKind(file)));
 
   attachments.value = [...attachments.value, ...nextAttachments];
   input.value = '';
@@ -96,6 +115,15 @@ function handleSubmit() {
   attachments.value = [];
 }
 
+function handleComposerKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Enter' || event.shiftKey || event.isComposing) {
+    return;
+  }
+
+  event.preventDefault();
+  handleSubmit();
+}
+
 onBeforeUnmount(() => {
   for (const attachment of attachments.value) {
     URL.revokeObjectURL(attachment.url);
@@ -105,34 +133,13 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="composer-card">
-    <div class="composer-head">
-      <p class="eyebrow">输入区</p>
-      <div class="composer-tools">
-        <button type="button" class="tool-button" :disabled="disabled" @click="imageInput?.click()">
-          图片
-        </button>
-        <button type="button" class="tool-button" :disabled="disabled" @click="fileInput?.click()">
-          文件
-        </button>
-      </div>
-    </div>
-
     <input
-      ref="imageInput"
-      class="hidden-file-input"
-      type="file"
-      accept="image/*"
-      multiple
-      :disabled="disabled"
-      @change="handleAttachmentSelection($event, 'image')"
-    />
-    <input
-      ref="fileInput"
+      ref="attachmentInput"
       class="hidden-file-input"
       type="file"
       multiple
       :disabled="disabled"
-      @change="handleAttachmentSelection($event, 'file')"
+      @change="handleAttachmentSelection"
     />
 
     <textarea
@@ -140,13 +147,14 @@ onBeforeUnmount(() => {
       class="composer-input"
       :disabled="disabled"
       aria-label="消息输入框"
-      placeholder="输入下一步职业规划任务，或要求助手打开某个工件..."
+      placeholder="有问题，尽管问"
+      @keydown="handleComposerKeydown"
     ></textarea>
 
     <div v-if="attachments.length" class="attachment-tray" aria-label="待发送附件">
       <div class="attachment-tray-head">
         <strong>待发送附件</strong>
-        <span>{{ attachments.length }} 个，本地预览</span>
+        <span>{{ attachments.length }} 个</span>
       </div>
 
       <div class="attachment-grid">
@@ -182,11 +190,26 @@ onBeforeUnmount(() => {
     </div>
 
     <div class="composer-footer">
-      <p class="support-copy">
-        图片和文件会先作为本地附件预览；真实上传接口接通后再改为服务端资产引用。
-      </p>
-      <button type="button" class="primary-button" :disabled="!canSubmit" @click="handleSubmit">
-        发送
+      <div class="composer-tools">
+        <button
+          type="button"
+          class="tool-button"
+          :disabled="disabled"
+          aria-label="添加图片或文件"
+          title="添加图片或文件"
+          @click="attachmentInput?.click()"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 5v14" />
+            <path d="M5 12h14" />
+          </svg>
+        </button>
+      </div>
+      <button type="button" class="primary-button" :disabled="!canSubmit" aria-label="发送" @click="handleSubmit">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 19V5" />
+          <path d="M5 12l7-7 7 7" />
+        </svg>
       </button>
     </div>
   </div>
@@ -194,50 +217,59 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .composer-card {
+  position: relative;
   display: grid;
   gap: 10px;
-  padding: 14px;
-  border-radius: 24px;
-  border: 1px solid var(--color-border);
+  padding: 16px 18px 14px;
+  border-radius: 28px;
+  border: 1px solid var(--color-border-strong);
   background: var(--color-surface);
-  box-shadow: var(--shadow-card);
-}
-
-.composer-head,
-.composer-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.eyebrow {
-  margin: 0;
-  color: var(--color-text-muted);
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+  box-shadow: 0 14px 34px rgba(24, 31, 38, 0.08);
 }
 
 .composer-tools {
   display: flex;
-  gap: 8px;
+  align-items: center;
+  gap: 10px;
 }
 
 .tool-button,
 .primary-button {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 0;
   border-radius: 999px;
-  padding: 0.58rem 0.86rem;
+  padding: 0;
   font: inherit;
   font-weight: 700;
+  transition:
+    background 160ms ease,
+    color 160ms ease,
+    opacity 160ms ease,
+    transform 160ms ease;
+}
+
+.tool-button svg,
+.primary-button svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .tool-button {
-  border: 1px solid var(--color-border);
-  background: var(--color-surface-strong);
-  color: var(--color-text-muted);
+  background: transparent;
+  color: var(--color-text);
   cursor: pointer;
+}
+
+.tool-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-surface-strong) 78%, var(--color-bg));
 }
 
 .tool-button:disabled {
@@ -250,88 +282,96 @@ onBeforeUnmount(() => {
 }
 
 .composer-input {
-  min-height: 76px;
-  max-height: 180px;
-  resize: vertical;
-  border: 1px solid var(--color-border);
-  border-radius: 18px;
-  padding: 12px 14px;
-  background: var(--color-surface-strong);
+  min-height: 58px;
+  max-height: 130px;
+  resize: none;
+  border: 0;
+  border-radius: 0;
+  padding: 6px 0 0;
+  background: transparent;
   color: var(--color-text);
-  line-height: 1.55;
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1.45;
+  outline: none;
+}
+
+.composer-input::placeholder {
+  color: color-mix(in srgb, var(--color-text-muted) 72%, white);
+}
+
+.composer-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
 }
 
 .attachment-tray {
   display: grid;
-  gap: 10px;
-  padding: 10px;
-  border: 1px solid color-mix(in srgb, var(--color-border) 84%, var(--color-primary));
-  border-radius: 20px;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.48), rgba(255, 250, 242, 0.18)),
-    color-mix(in srgb, var(--color-primary-soft) 18%, var(--color-surface-strong));
+  gap: 8px;
+  padding: 9px;
+  border: 1px solid var(--color-border);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--color-surface-strong) 82%, var(--color-bg));
 }
 
 .attachment-tray-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   padding: 0 2px;
 }
 
 .attachment-tray-head strong {
   color: var(--color-text);
-  font-size: 0.84rem;
+  font-size: 0.8rem;
   font-weight: 800;
 }
 
 .attachment-tray-head span {
   color: var(--color-text-muted);
-  font-size: 0.78rem;
+  font-size: 0.72rem;
 }
 
 .attachment-grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
 }
 
 .attachment-card {
   position: relative;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  gap: 10px;
+  gap: 8px;
   flex: 1 1 230px;
   max-width: 360px;
   min-width: 0;
-  padding: 10px 10px 38px;
+  padding: 9px 9px 34px;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--color-border) 82%, white);
-  border-radius: 18px;
-  background: rgba(255, 252, 247, 0.88);
-  box-shadow: 0 12px 32px rgba(35, 49, 59, 0.06);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  background: var(--color-surface-strong);
+  box-shadow: none;
 }
 
 .attachment-card.image {
   flex-basis: 220px;
-  background:
-    radial-gradient(circle at 14% 0%, rgba(29, 115, 109, 0.16), transparent 42%),
-    rgba(255, 252, 247, 0.9);
+  background: var(--color-surface-strong);
 }
 
 .attachment-card.file {
-  background:
-    radial-gradient(circle at 10% 0%, rgba(216, 143, 72, 0.18), transparent 44%),
-    rgba(255, 252, 247, 0.9);
+  background: var(--color-surface-strong);
 }
 
 .attachment-preview,
 .attachment-file-mark {
-  width: 58px;
-  height: 58px;
+  width: 48px;
+  height: 48px;
   overflow: hidden;
-  border-radius: 15px;
+  border-radius: 12px;
   border: 1px solid var(--color-border);
 }
 
@@ -345,10 +385,9 @@ onBeforeUnmount(() => {
 .attachment-file-mark {
   display: grid;
   place-items: center;
-  background:
-    linear-gradient(155deg, color-mix(in srgb, var(--color-secondary-soft) 78%, white), var(--color-surface-strong));
-  color: var(--color-secondary-strong);
-  font-size: 0.72rem;
+  background: color-mix(in srgb, var(--color-secondary-soft) 68%, var(--color-surface-strong));
+  color: var(--color-text-muted);
+  font-size: 0.64rem;
   font-weight: 900;
   letter-spacing: 0.08em;
 }
@@ -360,15 +399,15 @@ onBeforeUnmount(() => {
 }
 
 .attachment-meta span {
-  color: var(--color-primary);
-  font-size: 0.72rem;
+  color: var(--color-text-muted);
+  font-size: 0.68rem;
   font-weight: 900;
 }
 
 .attachment-meta strong {
   overflow: hidden;
   color: var(--color-text);
-  font-size: 0.86rem;
+  font-size: 0.8rem;
   font-weight: 800;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -377,7 +416,7 @@ onBeforeUnmount(() => {
 .attachment-meta small {
   overflow: hidden;
   color: var(--color-text-muted);
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -386,14 +425,14 @@ onBeforeUnmount(() => {
   position: absolute;
   right: 10px;
   bottom: 9px;
-  border: 1px solid color-mix(in srgb, var(--color-border) 78%, var(--color-primary));
+  border: 1px solid var(--color-border);
   border-radius: 999px;
   padding: 0.24rem 0.58rem;
-  background: rgba(255, 252, 247, 0.8);
+  background: var(--color-surface-strong);
   color: var(--color-text-muted);
   cursor: pointer;
   font: inherit;
-  font-size: 0.76rem;
+  font-size: 0.72rem;
   font-weight: 800;
 }
 
@@ -402,30 +441,24 @@ onBeforeUnmount(() => {
   color: var(--color-danger);
 }
 
-.support-copy {
-  max-width: 52ch;
-  margin: 0;
-  color: var(--color-text-muted);
-  font-size: 0.84rem;
-  line-height: 1.45;
-}
-
 .primary-button {
   border: 0;
-  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-hover));
+  background: var(--color-text);
   color: var(--color-on-primary);
   cursor: pointer;
 }
 
 .primary-button:disabled {
-  opacity: 0.5;
+  background: color-mix(in srgb, var(--color-surface-strong) 82%, var(--color-bg));
+  color: var(--color-text-muted);
+  opacity: 0.76;
   cursor: not-allowed;
 }
 
 @media (max-width: 860px) {
-  .composer-head,
-  .composer-footer {
-    flex-direction: column;
+  .composer-card {
+    border-radius: 24px;
+    padding: 14px;
   }
 
   .attachment-grid {

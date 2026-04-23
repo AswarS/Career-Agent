@@ -1,6 +1,20 @@
 import type { ThreadMessage } from '../../types/entities';
 
 const inlineThinkPattern = /<think>([\s\S]*?)<\/think>/gi;
+const invalidReasoningPattern = /^(?:null|undefined|none|n\/a|error|exception|failed|unavailable|not available|暂无|无)$/i;
+
+function normalizeReasoning(reasoning: string | null | undefined) {
+  if (typeof reasoning !== 'string') {
+    return null;
+  }
+
+  const nextValue = reasoning.trim();
+  if (!nextValue || invalidReasoningPattern.test(nextValue)) {
+    return null;
+  }
+
+  return nextValue;
+}
 
 function extractInlineReasoning(content: string): { content: string; reasoning: string | null } {
   const matches = [...content.matchAll(inlineThinkPattern)];
@@ -19,7 +33,7 @@ function extractInlineReasoning(content: string): { content: string; reasoning: 
 
   return {
     content: content.replace(inlineThinkPattern, '').trim(),
-    reasoning: reasoning || null,
+    reasoning: normalizeReasoning(reasoning),
   };
 }
 
@@ -27,14 +41,14 @@ export function getPresentedMessageContent(message: ThreadMessage): { content: s
   if (message.role !== 'assistant') {
     return {
       content: message.content,
-      reasoning: message.reasoning ?? null,
+      reasoning: normalizeReasoning(message.reasoning),
     };
   }
 
   if (message.reasoning) {
     return {
       content: message.content,
-      reasoning: message.reasoning,
+      reasoning: normalizeReasoning(message.reasoning),
     };
   }
 

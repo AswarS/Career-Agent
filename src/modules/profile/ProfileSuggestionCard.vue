@@ -50,9 +50,9 @@ const previewLines = computed(() => buildPatchPreviewLines(props.suggestion));
 <style scoped>
 .suggestion-card {
   display: grid;
-  gap: 14px;
-  padding: 22px;
-  border-radius: 24px;
+  gap: 10px;
+  padding: 16px;
+  border-radius: 16px;
   border: 1px solid var(--color-border);
   background: color-mix(in srgb, var(--color-primary-soft) 34%, white);
   box-shadow: var(--shadow-card);
@@ -65,11 +65,11 @@ const previewLines = computed(() => buildPatchPreviewLines(props.suggestion));
 }
 
 .eyebrow {
-  margin: 0 0 8px;
+  margin: 0 0 6px;
   color: var(--color-text-muted);
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   font-weight: 700;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
@@ -77,48 +77,48 @@ h2 {
   margin: 0;
   color: var(--color-text);
   font-family: var(--font-display);
-  font-size: 1.18rem;
+  font-size: 0.98rem;
   line-height: 1.15;
 }
 
 .source-chip {
   align-self: flex-start;
-  padding: 0.38rem 0.62rem;
+  padding: 0.28rem 0.5rem;
   border-radius: 999px;
   background: var(--color-surface);
   color: var(--color-text-muted);
-  font-size: 0.76rem;
+  font-size: 0.72rem;
   font-weight: 700;
 }
 
 .rationale-copy {
   margin: 0;
   color: var(--color-text-muted);
-  line-height: 1.65;
+  line-height: 1.45;
 }
 
 .patch-list {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .patch-item {
   display: grid;
   gap: 4px;
-  padding: 12px 14px;
-  border-radius: 18px;
+  padding: 10px 12px;
+  border-radius: 12px;
   background: rgba(255, 255, 255, 0.72);
 }
 
 .patch-item strong {
   color: var(--color-text);
-  font-size: 0.82rem;
+  font-size: 0.76rem;
   text-transform: capitalize;
 }
 
 .patch-item span {
   color: var(--color-text-muted);
-  line-height: 1.55;
+  line-height: 1.4;
 }
 
 .secondary-button {
@@ -127,7 +127,7 @@ h2 {
   border-radius: 999px;
   background: var(--color-surface);
   color: var(--color-text);
-  padding: 0.78rem 0.98rem;
+  padding: 0.56rem 0.76rem;
   font: inherit;
   font-weight: 700;
   cursor: pointer;

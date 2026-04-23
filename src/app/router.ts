@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import AppShell from './AppShell.vue';
 import ArtifactsPage from '../pages/ArtifactsPage.vue';
+import ConversationLandingPage from '../pages/ConversationLandingPage.vue';
 import ConversationWorkspacePage from '../pages/ConversationWorkspacePage.vue';
 import ProfilePage from '../pages/ProfilePage.vue';
 import SettingsPage from '../pages/SettingsPage.vue';
@@ -14,7 +15,8 @@ export const router = createRouter({
       children: [
         {
           path: '',
-          redirect: '/threads/thread-001',
+          name: 'home',
+          component: ConversationLandingPage,
         },
         {
           path: 'threads/:threadId',

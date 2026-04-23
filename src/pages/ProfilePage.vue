@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
+import MobileRailTrigger from '../modules/navigation/MobileRailTrigger.vue';
 import ProfileSnapshotCard from '../modules/profile/ProfileSnapshotCard.vue';
 import ProfileSuggestionCard from '../modules/profile/ProfileSuggestionCard.vue';
 import {
@@ -187,14 +188,14 @@ function formatSuggestionStatus(status: typeof profileSuggestionsStatus.value) {
 <template>
   <section class="page-section">
     <header class="page-header">
-      <div>
-        <p class="eyebrow">轻量画像</p>
-        <h1>{{ profile?.displayName ?? '正在加载画像...' }}</h1>
+      <div class="page-heading">
+        <MobileRailTrigger />
+        <div>
+          <p class="eyebrow">轻量画像</p>
+          <h1>{{ profile?.displayName ?? '正在加载画像...' }}</h1>
+        </div>
       </div>
       <div class="header-actions">
-        <p class="support-copy">
-          结构化画像数据是当前唯一可信源。对话建议可以进入本地草稿，但不会静默改写正式视图。
-        </p>
         <div class="action-group">
           <button class="secondary-button" @click="workspaceStore.openArtifact('artifact-profile-summary')">
             打开画像摘要
@@ -241,17 +242,13 @@ function formatSuggestionStatus(status: typeof profileSuggestionsStatus.value) {
         <section class="editor-card">
           <div class="editor-head">
             <div>
-              <p class="eyebrow">可编辑草稿</p>
-              <h2>仅保留显式修改</h2>
+              <p class="eyebrow">画像编辑</p>
+              <h2>显式保存后生效</h2>
             </div>
             <span class="status-chip" :class="{ active: isEditing }">
               {{ isEditing ? '草稿编辑中' : '已与正式数据同步' }}
             </span>
           </div>
-
-          <p class="editor-copy">
-            建议内容可以先应用到这个草稿里，但只有点击“保存画像”后才会成为正式数据。
-          </p>
 
           <p v-if="localSaveMessage" class="notice-copy">{{ localSaveMessage }}</p>
 
@@ -294,7 +291,7 @@ function formatSuggestionStatus(status: typeof profileSuggestionsStatus.value) {
           <div class="panel-head">
             <div>
               <p class="eyebrow">对话建议</p>
-              <h2>非破坏式画像更新</h2>
+              <h2>待确认更新</h2>
             </div>
             <span class="status-chip">
               {{ formatSuggestionStatus(profileSuggestionsStatus) }}
@@ -331,20 +328,20 @@ function formatSuggestionStatus(status: typeof profileSuggestionsStatus.value) {
 .profile-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.95fr);
-  gap: 16px;
+  gap: 12px;
 }
 
 .snapshot-grid,
 .editor-stack,
 .suggestion-list {
   display: grid;
-  gap: 14px;
+  gap: 10px;
 }
 
 .editor-card,
 .state-card {
-  padding: 22px;
-  border-radius: 24px;
+  padding: 16px;
+  border-radius: 16px;
   border: 1px solid var(--color-border);
   background: var(--color-surface);
   box-shadow: var(--shadow-card);
@@ -361,7 +358,7 @@ function formatSuggestionStatus(status: typeof profileSuggestionsStatus.value) {
 .header-actions {
   display: grid;
   justify-items: end;
-  gap: 12px;
+  gap: 10px;
 }
 
 .action-group {
@@ -374,7 +371,7 @@ function formatSuggestionStatus(status: typeof profileSuggestionsStatus.value) {
 .primary-button,
 .secondary-button {
   border-radius: 999px;
-  padding: 0.82rem 1rem;
+  padding: 0.56rem 0.76rem;
   font: inherit;
   font-weight: 700;
   cursor: pointer;
@@ -403,7 +400,7 @@ function formatSuggestionStatus(status: typeof profileSuggestionsStatus.value) {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .editor-head h2,
@@ -412,16 +409,17 @@ function formatSuggestionStatus(status: typeof profileSuggestionsStatus.value) {
   margin: 0;
   color: var(--color-text);
   font-family: var(--font-display);
-  font-size: 1.28rem;
+  font-size: 1.02rem;
+  font-weight: 700;
 }
 
 .status-chip {
   align-self: flex-start;
-  padding: 0.42rem 0.68rem;
+  padding: 0.3rem 0.54rem;
   border-radius: 999px;
   background: var(--color-bg-subtle);
   color: var(--color-text-muted);
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   font-weight: 700;
 }
 
@@ -435,21 +433,21 @@ function formatSuggestionStatus(status: typeof profileSuggestionsStatus.value) {
 .state-card p:not(.eyebrow) {
   margin: 0;
   color: var(--color-text-muted);
-  line-height: 1.7;
+  line-height: 1.45;
 }
 
 .notice-copy {
   margin-top: 12px;
-  padding: 12px 14px;
-  border-radius: 18px;
+  padding: 10px 12px;
+  border-radius: 12px;
   background: color-mix(in srgb, var(--color-bg-subtle) 76%, white);
 }
 
 .form-grid,
 .list-grid {
   display: grid;
-  gap: 12px;
-  margin-top: 14px;
+  gap: 10px;
+  margin-top: 12px;
 }
 
 .form-grid {
@@ -463,7 +461,7 @@ function formatSuggestionStatus(status: typeof profileSuggestionsStatus.value) {
 
 .field-block span {
   color: var(--color-text);
-  font-size: 0.88rem;
+  font-size: 0.82rem;
   font-weight: 700;
 }
 
@@ -471,26 +469,26 @@ function formatSuggestionStatus(status: typeof profileSuggestionsStatus.value) {
 .field-block textarea {
   width: 100%;
   border: 1px solid var(--color-border);
-  border-radius: 18px;
-  padding: 12px 14px;
+  border-radius: 12px;
+  padding: 9px 11px;
   background: var(--color-surface-strong);
   color: var(--color-text);
   font: inherit;
 }
 
 .field-block textarea {
-  min-height: 112px;
+  min-height: 86px;
   resize: vertical;
 }
 
 .field-block small {
   color: var(--color-text-muted);
-  line-height: 1.5;
+  line-height: 1.4;
 }
 
 .suggestions-panel {
   display: grid;
-  gap: 14px;
+  gap: 10px;
 }
 
 @media (max-width: 860px) {

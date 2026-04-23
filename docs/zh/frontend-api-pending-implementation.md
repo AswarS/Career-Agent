@@ -1,6 +1,6 @@
 # 前端 API 联调冲突与待实现清单
 
-更新时间：2026-04-15
+更新时间：2026-04-23
 
 ## 1. 审查范围
 
@@ -14,7 +14,7 @@
 
 1. 会话列表读取已按当前 server 形态调整为 `GET /api/career-agent/threads/:userId`，默认用户 id 为 `1`。
 2. 前端 upstream client 已改为 `axios`，本地联调默认指向 `http://localhost:4000`。
-3. 新建会话已接入 `POST /api/career-agent/threads`，左侧导航已有“新建对话”入口。
+3. 前端“新建对话”已改为先进入空白落地页；只有用户首次提交后，前端才调用 `POST /api/career-agent/threads` 创建真实线程。
 4. 当前 server 的工件接口仍和接口图不完全一致：`GET /api/career-agent/artifacts/:id` 实际按 `uid` 返回列表，前端已做兼容，但仍缺真正的单工件详情。
 5. Composer 已支持图片和文件本地选择、本地预览和本地草稿消息；这不是端到端上传。
 6. 扩展接口（真实消息发送、真实多模态上传、工作画布交互回传）尚未接入前端实现。
@@ -52,6 +52,13 @@
 - 当前前端：只做本地附件选择、本地 object URL 预览和本地草稿消息。
 - 影响：暂时无法做真实上传、服务端资产引用和真实 agent 消息发送闭环。
 
+### C-03A 新对话语义已前移到前端
+
+- 当前产品语义：空白会话不应在用户进入页面或点击“新建对话”时就落库。
+- 当前前端实现：默认首页和“新建对话”按钮都会进入空白落地页；首次提交时前端先创建线程，再把本地首条消息回放到新线程界面。
+- 当前缺口：由于上游没有真实消息发送接口，首条消息仍是本地前端占位消息，而不是服务端持久化结果。
+- 后续建议：后端补 `POST /api/career-agent/threads/:threadId/messages` 或等价 `POST /api/career-agent/chat` 后，前端可直接把“创建线程 + 首条消息发送”收敛为一次真实请求链路。
+
 ### C-04 当前 server 工件接口语义不一致
 
 - 接口图：`GET /api/career-agent/artifacts` 是工件目录，`GET /api/career-agent/artifacts/:artifactId` 是单工件详情。
@@ -72,7 +79,7 @@
 
 1. 会话发送链路
 - 目标：接入 `POST /api/career-agent/threads/:threadId/messages`。
-- 当前证据：`ConversationWorkspacePage` 调用的是 `workspaceStore.submitDraftMessage` 本地草稿；server 当前 controller 尚未暴露真实发送 endpoint。
+- 当前证据：`ConversationWorkspacePage` 与 `ConversationLandingPage` 最终都走到 `workspaceStore.submitDraftMessage` 本地草稿；server 当前 controller 尚未暴露真实发送 endpoint。
 - 缺口：未实现 send/pending/error/retry 的真实请求状态机。
 
 2. 会话新建与删除

@@ -3,31 +3,31 @@ version: alpha
 name: Calm Workspace
 description: Visual identity and design-token source for the career-planning agent workspace.
 colors:
-  bg: "#f3efe7"
-  bg-subtle: "#fbf8f3"
-  surface: "#fffcf7"
-  surface-strong: "#fffaf2"
-  text: "#23313b"
-  text-muted: "#61707c"
-  primary: "#1d736d"
-  primary-hover: "#155851"
-  primary-soft: "#d9f0eb"
-  secondary: "#d88f48"
-  secondary-strong: "#9c6130"
-  secondary-soft: "#f9e5cf"
-  accent: "#f0b058"
-  accent-soft: "#fdebd1"
-  success: "#25876c"
-  warning: "#cc7d2a"
-  warning-strong: "#925215"
-  warning-soft: "#fbe8cf"
-  danger: "#bc5d59"
-  border: "#60727e"
-  focus-ring: "#1d736d"
-  on-primary: "#f8f5ef"
-  chart-growth: "#58b09c"
-  chart-balance: "#7f92a0"
-  chart-opportunity: "#d88f48"
+  bg: "#f7f7f5"
+  bg-subtle: "#f0efec"
+  surface: "#fbfbfa"
+  surface-strong: "#ffffff"
+  text: "#20242a"
+  text-muted: "#6c7076"
+  primary: "#315f58"
+  primary-hover: "#264b46"
+  primary-soft: "#e4ebe8"
+  secondary: "#8c7968"
+  secondary-strong: "#594c40"
+  secondary-soft: "#ece7e1"
+  accent: "#9a846c"
+  accent-soft: "#eee9e2"
+  success: "#34675e"
+  warning: "#8a6d43"
+  warning-strong: "#604b2e"
+  warning-soft: "#eee7da"
+  danger: "#9a4d48"
+  border: "#d9d8d4"
+  focus-ring: "#315f58"
+  on-primary: "#ffffff"
+  chart-growth: "#5f8f86"
+  chart-balance: "#80858b"
+  chart-opportunity: "#9a846c"
 typography:
   body-md:
     fontFamily: Avenir Next
@@ -125,6 +125,12 @@ components:
     size: "{spacing.md}"
   muted-label:
     backgroundColor: "{colors.bg-subtle}"
+    textColor: "{colors.text}"
+    typography: "{typography.body-sm}"
+    rounded: "{rounded.full}"
+    padding: "{spacing.sm}"
+  metadata-label:
+    backgroundColor: "{colors.surface-strong}"
     textColor: "{colors.text-muted}"
     typography: "{typography.body-sm}"
     rounded: "{rounded.full}"
@@ -195,7 +201,7 @@ components:
 ## Overview
 
 This product should use a `Notion-like shell` as the structural baseline,
-combined with the project's existing `warm slate + teal + amber` palette.
+combined with a restrained neutral palette and muted teal action color.
 
 This is the final design choice for now.
 
@@ -335,14 +341,14 @@ That means:
 The palette is a warm workspace system with slate text, teal growth / trust
 signals, and amber opportunity / action signals.
 
-- **Background (`#f3efe7`):** warm paper base for long reading sessions.
-- **Surface (`#fffcf7`, `#fffaf2`):** calm content layers and stronger framed
+- **Background (`#f7f7f5`):** quiet neutral base for long reading sessions.
+- **Surface (`#fbfbfa`, `#ffffff`):** calm content layers and stronger framed
   panels.
-- **Text (`#23313b`, `#61707c`):** deep slate for core content and muted slate
+- **Text (`#20242a`, `#6c7076`):** deep neutral for core content and muted gray
   for metadata.
-- **Primary (`#1d736d`):** green-teal for trusted actions, progress, active
+- **Primary (`#315f58`):** muted green-teal for trusted actions, progress, active
   navigation, and focus.
-- **Secondary / accent (`#d88f48`, `#f0b058`):** warm action and opportunity
+- **Secondary / accent (`#8c7968`, `#9a846c`):** muted warm emphasis and opportunity
   cues, used sparingly.
 - **State colors:** success stays close to teal; warning and danger remain
   visibly distinct.
@@ -409,21 +415,21 @@ These values are derived from the original accepted palette.
 
 ```css
 :root {
-  --color-bg: #f3efe7;
-  --color-bg-subtle: #fbf8f3;
-  --color-surface: #fffcf7;
-  --color-surface-strong: #fffaf2;
-  --color-text: #23313b;
-  --color-text-muted: #61707c;
-  --color-primary: #1d736d;
-  --color-primary-hover: #155851;
-  --color-secondary: #d88f48;
-  --color-accent: #f0b058;
-  --color-success: #25876c;
-  --color-warning: #cc7d2a;
-  --color-danger: #bc5d59;
-  --color-border: rgba(96, 114, 126, 0.16);
-  --color-focus-ring: rgba(29, 115, 109, 0.26);
+  --color-bg: #f7f7f5;
+  --color-bg-subtle: #f0efec;
+  --color-surface: #fbfbfa;
+  --color-surface-strong: #ffffff;
+  --color-text: #20242a;
+  --color-text-muted: #6c7076;
+  --color-primary: #315f58;
+  --color-primary-hover: #264b46;
+  --color-secondary: #8c7968;
+  --color-accent: #9a846c;
+  --color-success: #34675e;
+  --color-warning: #8a6d43;
+  --color-danger: #9a4d48;
+  --color-border: rgba(32, 36, 42, 0.12);
+  --color-focus-ring: rgba(49, 95, 88, 0.24);
 }
 ```
 
