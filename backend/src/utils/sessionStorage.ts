@@ -24,9 +24,11 @@ import {
 import {
   getOriginalCwd,
   getPlanSlugCache,
+  getState,
   getPromptId,
   getSessionId,
   getSessionProjectDir,
+  getUserId,
   isSessionPersistenceDisabled,
   switchSession,
 } from '../bootstrap/state.js'
@@ -200,7 +202,8 @@ export function getProjectsDir(): string {
 }
 
 export function getTranscriptPath(): string {
-  const projectDir = getSessionProjectDir() ?? getProjectDir(getOriginalCwd())
+  const userId = getUserId() ?? undefined
+  const projectDir = getSessionProjectDir() ?? getProjectDir(getOriginalCwd(), userId)
   return join(projectDir, `${getSessionId()}.jsonl`)
 }
 
@@ -220,7 +223,8 @@ export function getTranscriptPathForSession(sessionId: string): string {
   if (sessionId === getSessionId()) {
     return getTranscriptPath()
   }
-  const projectDir = getProjectDir(getOriginalCwd())
+  const userId = getUserId() ?? undefined
+  const projectDir = getProjectDir(getOriginalCwd(), userId)
   return join(projectDir, `${sessionId}.jsonl`)
 }
 
@@ -231,17 +235,17 @@ export const MAX_TRANSCRIPT_READ_BYTES = 50 * 1024 * 1024
 // In-memory map of agentId → subdirectory for grouping related subagent
 // transcripts (e.g. workflow runs write to subagents/workflows/<runId>/).
 // Populated before the agent runs; consulted by getAgentTranscriptPath.
-const agentTranscriptSubdirs = new Map<string, string>()
+// Now per-session via getState() for multi-user isolation.
 
 export function setAgentTranscriptSubdir(
   agentId: string,
   subdir: string,
 ): void {
-  agentTranscriptSubdirs.set(agentId, subdir)
+  getState().agentTranscriptSubdirsMap.set(agentId, subdir)
 }
 
 export function clearAgentTranscriptSubdir(agentId: string): void {
-  agentTranscriptSubdirs.delete(agentId)
+  getState().agentTranscriptSubdirsMap.delete(agentId)
 }
 
 export function getAgentTranscriptPath(agentId: AgentId): string {
@@ -250,7 +254,7 @@ export function getAgentTranscriptPath(agentId: AgentId): string {
   // transcript is at sessionProjectDir, subagent transcripts are too.
   const projectDir = getSessionProjectDir() ?? getProjectDir(getOriginalCwd())
   const sessionId = getSessionId()
-  const subdir = agentTranscriptSubdirs.get(agentId)
+  const subdir = getState().agentTranscriptSubdirsMap.get(agentId)
   const base = subdir
     ? join(projectDir, sessionId, 'subagents', subdir)
     : join(projectDir, sessionId, 'subagents')
@@ -429,13 +433,16 @@ export function isCustomTitleEnabled(): boolean {
 }
 
 // Memoized: called 12+ times per turn via hooks.ts createBaseHookInput
-// (PostToolUse path, 5×/turn) + various save* functions. Input is a cwd
-// string; homedir/env/regex are all session-invariant so the result is
-// stable for a given input. Worktree switches just change the key — no
-// cache clear needed.
-export const getProjectDir = memoize((projectDir: string): string => {
+// (PostToolUse path, 5×/turn) + various save* functions. Key includes both
+// projectDir and userId so that different users get different paths.
+// Worktree switches just change the key — no cache clear needed.
+export const getProjectDir = memoize((projectDir: string, userId?: string): string => {
+  const effectiveUserId = userId ?? getUserId() ?? undefined
+  if (effectiveUserId) {
+    return join(getClaudeConfigHomeDir(), 'users', sanitizePath(effectiveUserId), 'projects', sanitizePath(projectDir))
+  }
   return join(getProjectsDir(), sanitizePath(projectDir))
-})
+}, (projectDir: string, userId?: string) => `${projectDir}::${userId ?? getUserId() ?? ''}`)
 
 let project: Project | null = null
 let cleanupRegistered = false

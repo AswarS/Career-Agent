@@ -1,6 +1,6 @@
 import { appendFile, writeFile } from 'fs/promises'
 import { join } from 'path'
-import { getProjectRoot, getSessionId } from './bootstrap/state.js'
+import { getState, getProjectRoot, getSessionId } from './bootstrap/state.js'
 import { registerCleanup } from './utils/cleanupRegistry.js'
 import type { HistoryEntry, PastedContent } from './utils/config.js'
 import { logForDebugging } from './utils/debug.js'
@@ -123,7 +123,7 @@ async function* makeLogEntryReader(): AsyncGenerator<LogEntry> {
         // (ctrl+r search) skip it consistently.
         if (
           entry.sessionId === currentSession &&
-          skippedTimestamps.has(entry.timestamp)
+          _skippedTimestamps().has(entry.timestamp)
         ) {
           continue
         }
@@ -278,19 +278,47 @@ async function logEntryToHistoryEntry(entry: LogEntry): Promise<HistoryEntry> {
   }
 }
 
-let pendingEntries: LogEntry[] = []
-let isWriting = false
-let currentFlushPromise: Promise<void> | null = null
-let cleanupRegistered = false
-let lastAddedEntry: LogEntry | null = null
-// Timestamps of entries already flushed to disk that should be skipped when
-// reading. Used by removeLastFromHistory when the entry has raced past the
-// pending buffer. Session-scoped (module state resets on process restart).
-const skippedTimestamps = new Set<number>()
+// Per-session state is stored in STATE (via getState()) for multi-user isolation.
+// Module-level variables removed — all state is now per-session.
+
+// Accessors for per-session history state
+function _s() {
+  return getState()
+}
+function _pending(): LogEntry[] {
+  return _s().historyPendingEntries as LogEntry[]
+}
+function _isWriting(): boolean {
+  return _s().historyIsWriting
+}
+function _setIsWriting(v: boolean): void {
+  _s().historyIsWriting = v
+}
+function _flushPromise(): Promise<void> | null {
+  return _s().historyFlushPromise
+}
+function _setFlushPromise(v: Promise<void> | null): void {
+  _s().historyFlushPromise = v
+}
+function _cleanupRegistered(): boolean {
+  return _s().historyCleanupRegistered
+}
+function _setCleanupRegistered(v: boolean): void {
+  _s().historyCleanupRegistered = v
+}
+function _lastAddedEntry(): LogEntry | null {
+  return _s().historyLastAddedEntry as LogEntry | null
+}
+function _setLastAddedEntry(v: LogEntry | null): void {
+  _s().historyLastAddedEntry = v
+}
+function _skippedTimestamps(): Set<number> {
+  return _s().historySkippedTimestamps
+}
 
 // Core flush logic - writes pending entries to disk
 async function immediateFlushHistory(): Promise<void> {
-  if (pendingEntries.length === 0) {
+  if (_pending().length === 0) {
     return
   }
 
@@ -313,8 +341,8 @@ async function immediateFlushHistory(): Promise<void> {
       },
     })
 
-    const jsonLines = pendingEntries.map(entry => jsonStringify(entry) + '\n')
-    pendingEntries = []
+    const jsonLines = _pending().map(entry => jsonStringify(entry) + '\n')
+    _s().historyPendingEntries = []
 
     await appendFile(historyPath, jsonLines.join(''), { mode: 0o600 })
   } catch (error) {
@@ -327,7 +355,7 @@ async function immediateFlushHistory(): Promise<void> {
 }
 
 async function flushPromptHistory(retries: number): Promise<void> {
-  if (isWriting || pendingEntries.length === 0) {
+  if (_isWriting() || _pending().length === 0) {
     return
   }
 
@@ -336,14 +364,14 @@ async function flushPromptHistory(retries: number): Promise<void> {
     return
   }
 
-  isWriting = true
+  _setIsWriting(true)
 
   try {
     await immediateFlushHistory()
   } finally {
-    isWriting = false
+    _setIsWriting(false)
 
-    if (pendingEntries.length > 0) {
+    if (_pending().length > 0) {
       // Avoid trying again in a hot loop
       await sleep(500)
 
@@ -402,10 +430,10 @@ async function addToPromptHistory(
     sessionId: getSessionId(),
   }
 
-  pendingEntries.push(logEntry)
-  lastAddedEntry = logEntry
-  currentFlushPromise = flushPromptHistory(0)
-  void currentFlushPromise
+  _pending().push(logEntry)
+  _setLastAddedEntry(logEntry)
+  _setFlushPromise(flushPromptHistory(0))
+  void _flushPromise()
 }
 
 export function addToHistory(command: HistoryEntry | string): void {
@@ -416,15 +444,15 @@ export function addToHistory(command: HistoryEntry | string): void {
   }
 
   // Register cleanup on first use
-  if (!cleanupRegistered) {
-    cleanupRegistered = true
+  if (!_cleanupRegistered()) {
+    _setCleanupRegistered(true)
     registerCleanup(async () => {
       // If there's an in-progress flush, wait for it
-      if (currentFlushPromise) {
-        await currentFlushPromise
+      if (_flushPromise()) {
+        await _flushPromise()
       }
       // If there are still pending entries after the flush completed, do one final flush
-      if (pendingEntries.length > 0) {
+      if (_pending().length > 0) {
         await immediateFlushHistory()
       }
     })
@@ -434,9 +462,9 @@ export function addToHistory(command: HistoryEntry | string): void {
 }
 
 export function clearPendingHistoryEntries(): void {
-  pendingEntries = []
-  lastAddedEntry = null
-  skippedTimestamps.clear()
+  _s().historyPendingEntries = []
+  _setLastAddedEntry(null)
+  _skippedTimestamps().clear()
 }
 
 /**
@@ -451,14 +479,14 @@ export function clearPendingHistoryEntries(): void {
  * entry so a second call is a no-op.
  */
 export function removeLastFromHistory(): void {
-  if (!lastAddedEntry) return
-  const entry = lastAddedEntry
-  lastAddedEntry = null
+  if (!_lastAddedEntry()) return
+  const entry = _lastAddedEntry()!
+  _setLastAddedEntry(null)
 
-  const idx = pendingEntries.lastIndexOf(entry)
+  const idx = _pending().lastIndexOf(entry)
   if (idx !== -1) {
-    pendingEntries.splice(idx, 1)
+    _pending().splice(idx, 1)
   } else {
-    skippedTimestamps.add(entry.timestamp)
+    _skippedTimestamps().add(entry.timestamp)
   }
 }

@@ -6,7 +6,7 @@
 
 import { writeFile } from 'fs/promises'
 import memoize from 'lodash-es/memoize.js'
-import { getIsRemoteMode } from '../../bootstrap/state.js'
+import { getIsRemoteMode, getState } from '../../bootstrap/state.js'
 import { getSystemPrompt } from '../../constants/prompts.js'
 import { getSystemContext, getUserContext } from '../../context.js'
 import type { CanUseToolFn } from '../../hooks/useCanUseTool.js'
@@ -93,16 +93,14 @@ function getSessionMemoryRemoteConfig(): Partial<SessionMemoryConfig> {
 }
 
 // ============================================================================
-// Module State
+// Module State — per-session via getState()
 // ============================================================================
-
-let lastMemoryMessageUuid: string | undefined
 
 /**
  * Reset the last memory message UUID (for testing)
  */
 export function resetLastMemoryMessageUuid(): void {
-  lastMemoryMessageUuid = undefined
+  getState().smLastMemoryMessageUuid = undefined
 }
 
 function countToolCallsSince(
@@ -149,7 +147,7 @@ export function shouldExtractMemory(messages: Message[]): boolean {
   // Check if we've met the tool calls threshold
   const toolCallsSinceLastUpdate = countToolCallsSince(
     messages,
-    lastMemoryMessageUuid,
+    getState().smLastMemoryMessageUuid,
   )
   const hasMetToolCallThreshold =
     toolCallsSinceLastUpdate >= getToolCallsBetweenUpdates()
@@ -172,7 +170,7 @@ export function shouldExtractMemory(messages: Message[]): boolean {
   if (shouldExtract) {
     const lastMessage = messages[messages.length - 1]
     if (lastMessage?.uuid) {
-      lastMemoryMessageUuid = lastMessage.uuid
+      getState().smLastMemoryMessageUuid = lastMessage.uuid
     }
     return true
   }
@@ -266,8 +264,7 @@ const initSessionMemoryConfigIfNeeded = memoize((): void => {
 /**
  * Session memory post-sampling hook that extracts and updates session notes
  */
-// Track if we've logged the gate check failure this session (to avoid spam)
-let hasLoggedGateFailure = false
+// Track if we've logged the gate check failure this session (to avoid spam) — per-session via getState()
 
 const extractSessionMemory = sequential(async function (
   context: REPLHookContext,
@@ -283,8 +280,8 @@ const extractSessionMemory = sequential(async function (
   // Check gate lazily when hook runs (cached, non-blocking)
   if (!isSessionMemoryGateEnabled()) {
     // Log gate failure once per session (ant-only)
-    if (process.env.USER_TYPE === 'ant' && !hasLoggedGateFailure) {
-      hasLoggedGateFailure = true
+    if (process.env.USER_TYPE === 'ant' && !getState().smHasLoggedGateFailure) {
+      getState().smHasLoggedGateFailure = true
       logEvent('tengu_session_memory_gate_disabled', {})
     }
     return

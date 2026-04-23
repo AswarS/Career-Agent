@@ -13,6 +13,7 @@ import type { Message } from '../../types/message.js'
 import { logForDebugging } from '../../utils/debug.js'
 import { getMainLoopModel } from '../../utils/model/model.js'
 import { SHELL_TOOL_NAMES } from '../../utils/shell/shellToolUtils.js'
+import { getState } from '../../bootstrap/state.js'
 import { jsonStringify } from '../../utils/slowOperations.js'
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -54,10 +55,20 @@ const COMPACTABLE_TOOLS = new Set<string>([
 // Lazy-initialized cached MC module and state to avoid importing in external builds.
 // The imports and state live inside feature() checks for dead code elimination.
 let cachedMCModule: typeof import('./cachedMicrocompact.js') | null = null
-let cachedMCState: import('./cachedMicrocompact.js').CachedMCState | null = null
-let pendingCacheEdits:
-  | import('./cachedMicrocompact.js').CacheEditsBlock
-  | null = null
+// cachedMCState and pendingCacheEdits are per-session via getState() for multi-user isolation.
+
+function _mcState(): import('./cachedMicrocompact.js').CachedMCState | null {
+  return getState().mcCachedState as import('./cachedMicrocompact.js').CachedMCState | null
+}
+function _setMCState(v: import('./cachedMicrocompact.js').CachedMCState | null): void {
+  getState().mcCachedState = v
+}
+function _pendingEdits(): import('./cachedMicrocompact.js').CacheEditsBlock | null {
+  return getState().mcPendingCacheEdits as import('./cachedMicrocompact.js').CacheEditsBlock | null
+}
+function _setPendingEdits(v: import('./cachedMicrocompact.js').CacheEditsBlock | null): void {
+  getState().mcPendingCacheEdits = v
+}
 
 async function getCachedMCModule(): Promise<
   typeof import('./cachedMicrocompact.js')
@@ -69,15 +80,15 @@ async function getCachedMCModule(): Promise<
 }
 
 function ensureCachedMCState(): import('./cachedMicrocompact.js').CachedMCState {
-  if (!cachedMCState && cachedMCModule) {
-    cachedMCState = cachedMCModule.createCachedMCState()
+  if (!_mcState() && cachedMCModule) {
+    _setMCState(cachedMCModule.createCachedMCState())
   }
-  if (!cachedMCState) {
+  if (!_mcState()) {
     throw new Error(
       'cachedMCState not initialized — getCachedMCModule() must be called first',
     )
   }
-  return cachedMCState
+  return _mcState()!
 }
 
 /**
@@ -88,8 +99,8 @@ function ensureCachedMCState(): import('./cachedMicrocompact.js').CachedMCState 
 export function consumePendingCacheEdits():
   | import('./cachedMicrocompact.js').CacheEditsBlock
   | null {
-  const edits = pendingCacheEdits
-  pendingCacheEdits = null
+  const edits = _pendingEdits()
+  _setPendingEdits(null)
   return edits
 }
 
@@ -98,10 +109,10 @@ export function consumePendingCacheEdits():
  * original positions for cache hits.
  */
 export function getPinnedCacheEdits(): import('./cachedMicrocompact.js').PinnedCacheEdits[] {
-  if (!cachedMCState) {
+  if (!_mcState()) {
     return []
   }
-  return cachedMCState.pinnedEdits
+  return _mcState()!.pinnedEdits
 }
 
 /**
@@ -112,8 +123,8 @@ export function pinCacheEdits(
   userMessageIndex: number,
   block: import('./cachedMicrocompact.js').CacheEditsBlock,
 ): void {
-  if (cachedMCState) {
-    cachedMCState.pinnedEdits.push({ userMessageIndex, block })
+  if (_mcState()) {
+    _mcState()!.pinnedEdits.push({ userMessageIndex, block })
   }
 }
 
@@ -122,16 +133,16 @@ export function pinCacheEdits(
  * Called after a successful API response.
  */
 export function markToolsSentToAPIState(): void {
-  if (cachedMCState && cachedMCModule) {
-    cachedMCModule.markToolsSentToAPI(cachedMCState)
+  if (_mcState() && cachedMCModule) {
+    cachedMCModule.markToolsSentToAPI(_mcState()!)
   }
 }
 
 export function resetMicrocompactState(): void {
-  if (cachedMCState && cachedMCModule) {
-    cachedMCModule.resetCachedMCState(cachedMCState)
+  if (_mcState() && cachedMCModule) {
+    cachedMCModule.resetCachedMCState(_mcState()!)
   }
-  pendingCacheEdits = null
+  _setPendingEdits(null)
 }
 
 // Helper to calculate tool result tokens
@@ -335,7 +346,7 @@ async function cachedMicrocompactPath(
     // Create and queue the cache_edits block for the API layer
     const cacheEdits = mod.createCacheEditsBlock(state, toolsToDelete)
     if (cacheEdits) {
-      pendingCacheEdits = cacheEdits
+      _setPendingEdits(cacheEdits)
     }
 
     logForDebugging(

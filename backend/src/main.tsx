@@ -3895,6 +3895,31 @@ async function run(): Promise<CommanderCommand> {
     return program;
   }
 
+  // claude http-serve — Multi-user HTTP API server
+  program
+    .command('http-serve')
+    .description('Start multi-user HTTP API server')
+    .option('-p, --port <port>', 'Server port', '8080')
+    .option('-h, --host <host>', 'Server host', '0.0.0.0')
+    .option('--auth-token <token>', 'Authentication token')
+    .option('--max-sessions <n>', 'Maximum concurrent sessions', '100')
+    .option('--idle-timeout <ms>', 'Idle session timeout in ms', '1800000')
+    .option('--workspace <dir>', 'Default workspace directory')
+    .action(async (opts: {
+      port?: string; host?: string; authToken?: string;
+      maxSessions?: string; idleTimeout?: string; workspace?: string;
+    }) => {
+      const { startServer } = await import('./server/index.js')
+      await startServer({
+        port: parseInt(opts.port ?? '8080', 10),
+        host: opts.host ?? '0.0.0.0',
+        authToken: opts.authToken ?? '',
+        maxSessions: parseInt(opts.maxSessions ?? '100', 10),
+        idleTimeoutMs: parseInt(opts.idleTimeout ?? '1800000', 10),
+        workspace: opts.workspace,
+      })
+    })
+
   // claude mcp
 
   const mcp = program.command('mcp').description('Configure and manage MCP servers').configureHelp(createSortedHelpConfig()).enablePositionalOptions();

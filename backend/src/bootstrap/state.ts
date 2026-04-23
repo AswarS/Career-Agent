@@ -19,9 +19,11 @@ import { randomUUID } from 'src/utils/crypto.js'
 import type { ModelSetting } from 'src/utils/model/model.js'
 import type { ModelStrings } from 'src/utils/model/modelStrings.js'
 import type { SettingSource } from 'src/utils/settings/constants.js'
-import { resetSettingsCache } from 'src/utils/settings/settingsCache.js'
+// NOTE: resetSettingsCache is imported lazily below to avoid circular dependency
+// (state.ts -> settingsCache.ts -> state.ts). We inline the reset logic here instead.
 import type { PluginHookMatcher } from 'src/utils/settings/types.js'
 import { createSignal } from 'src/utils/signal.js'
+import { getSessionContext } from '../server/SessionContext.js'
 
 // Union type for registered hooks - can be SDK callbacks or native plugin hooks
 type RegisteredHookMatcher = HookCallbackMatcher | PluginHookMatcher
@@ -217,6 +219,8 @@ type State = {
   hasDevChannels: boolean
   // Dir containing the session's `.jsonl`; null = derive from originalCwd.
   sessionProjectDir: string | null
+  // User identity for multi-user session isolation (null in CLI mode)
+  userId: string | null
   // Cached prompt cache 1h TTL allowlist from GrowthBook (session-stable)
   promptCache1hAllowlist: string[] | null
   // Cached 1h TTL user eligibility (session-stable). Latched on first
@@ -254,6 +258,87 @@ type State = {
   // logAPISuccess to tag the first post-compaction API call so we can
   // distinguish compaction-induced cache misses from TTL expiry.
   pendingPostCompaction: boolean
+  // --- Per-session turn budget tracking (moved from module-level lets) ---
+  outputTokensAtTurnStart: number
+  currentTurnTokenBudget: number | null
+  budgetContinuationCount: number
+  // Per-session interaction time dirty flag
+  interactionTimeDirty: boolean
+  // --- Per-session stores (moved from module-level singletons for multi-user isolation) ---
+  // History (history.ts)
+  historyPendingEntries: Array<unknown>
+  historyIsWriting: boolean
+  historyFlushPromise: Promise<void> | null
+  historyCleanupRegistered: boolean
+  historyLastAddedEntry: unknown | null
+  historySkippedTimestamps: Set<number>
+  // Session env vars (sessionEnvVars.ts)
+  sessionEnvVarsMap: Map<string, string>
+  // Settings cache (settingsCache.ts)
+  settingsSessionCache: unknown | null
+  settingsPerSourceCache: Map<string, unknown>
+  settingsParseFileCache: Map<string, unknown>
+  settingsPluginBase: Record<string, unknown> | undefined
+  // Agent transcript subdirs (sessionStorage.ts)
+  agentTranscriptSubdirsMap: Map<string, string>
+  // Context caches (context.ts) — per-session to avoid cross-user leakage
+  contextGitStatusCache: string | null | undefined
+  contextGitStatusPromise: Promise<string | null> | null
+  contextSystemContextCache: Record<string, string> | null | undefined
+  contextSystemContextPromise: Promise<Record<string, string>> | null
+  contextUserContextCache: Record<string, string> | null | undefined
+  contextUserContextPromise: Promise<Record<string, string>> | null
+  // Image store cache (imageStore.ts)
+  storedImagePathsMap: Map<number, string>
+  // Message UUID dedup (print.ts)
+  receivedMessageUuidsSet: Set<string>
+  receivedMessageUuidsOrder: string[]
+  // Classifier approvals (classifierApprovals.ts)
+  classifierApprovalsMap: Map<string, unknown>
+  classifierCheckingSet: Set<string>
+  // Bash speculative checks (bashPermissions.ts)
+  speculativeChecksMap: Map<string, Promise<unknown>>
+  // File suggestions index (fileSuggestions.ts)
+  fsFileIndex: unknown | null
+  fsFileListRefreshPromise: Promise<unknown> | null
+  fsCacheGeneration: number
+  fsUntrackedFetchPromise: Promise<void> | null
+  fsCachedTrackedFiles: string[]
+  fsCachedConfigFiles: string[]
+  fsCachedTrackedDirs: string[]
+  fsIgnorePatternsCache: unknown | null
+  fsIgnorePatternsCacheKey: string | null
+  fsLastRefreshMs: number
+  fsLastGitIndexMtime: number | null
+  fsLoadedTrackedSignature: string | null
+  fsLoadedMergedSignature: string | null
+  fsIndexBuildCompleteSignal: unknown | null
+  // --- Per-session state machine (sessionState.ts) ---
+  ssCurrentState: 'idle' | 'running' | 'requires_action'
+  ssHasPendingAction: boolean
+  // --- Per-session start (sessionStart.ts) ---
+  ssPendingInitialUserMessage: string | undefined
+  // --- Per-session memory utils (sessionMemoryUtils.ts) ---
+  smConfig: { minimumMessageTokensToInit: number; minimumTokensBetweenUpdate: number; toolCallsBetweenUpdates: number }
+  smLastSummarizedMessageId: string | undefined
+  smExtractionStartedAt: number | undefined
+  smTokensAtLastExtraction: number
+  smInitialized: boolean
+  // --- Per-session memory (sessionMemory.ts) ---
+  smLastMemoryMessageUuid: string | undefined
+  smHasLoggedGateFailure: boolean
+  // --- Per-session microcompact (microCompact.ts) ---
+  mcCachedState: unknown | null
+  mcPendingCacheEdits: unknown | null
+  // --- Per-session extract memories (extractMemories.ts) ---
+  emExtractor: unknown | null
+  emDrainer: unknown | null
+  // --- Per-session fast mode (fastMode.ts) ---
+  fmRuntimeState: unknown
+  fmOrgStatus: unknown
+  fmHasLoggedCooldownExpiry: boolean
+  fmLastPrefetchAt: number
+  fmInflightPrefetch: Promise<void> | null
 }
 
 // ALSO HERE - THINK THRICE BEFORE MODIFYING
@@ -406,6 +491,8 @@ function getInitialState(): State {
     hasDevChannels: false,
     // Session project dir (null = derive from originalCwd)
     sessionProjectDir: null,
+    // User identity for multi-user isolation (null in CLI mode)
+    userId: null,
     // Prompt cache 1h allowlist (null = not yet fetched from GrowthBook)
     promptCache1hAllowlist: null,
     // Prompt cache 1h eligibility (null = not yet evaluated)
@@ -420,6 +507,83 @@ function getInitialState(): State {
     lastMainRequestId: undefined,
     lastApiCompletionTimestamp: null,
     pendingPostCompaction: false,
+    // Per-session turn budget tracking
+    outputTokensAtTurnStart: 0,
+    currentTurnTokenBudget: null,
+    budgetContinuationCount: 0,
+    // Per-session interaction time dirty flag
+    interactionTimeDirty: false,
+    // Per-session stores (multi-user isolation)
+    historyPendingEntries: [],
+    historyIsWriting: false,
+    historyFlushPromise: null,
+    historyCleanupRegistered: false,
+    historyLastAddedEntry: null,
+    historySkippedTimestamps: new Set(),
+    sessionEnvVarsMap: new Map(),
+    settingsSessionCache: null,
+    settingsPerSourceCache: new Map(),
+    settingsParseFileCache: new Map(),
+    settingsPluginBase: undefined,
+    agentTranscriptSubdirsMap: new Map(),
+    // Context caches (context.ts)
+    contextGitStatusCache: undefined,
+    contextGitStatusPromise: null,
+    contextSystemContextCache: undefined,
+    contextSystemContextPromise: null,
+    contextUserContextCache: undefined,
+    contextUserContextPromise: null,
+    // Image store cache (imageStore.ts)
+    storedImagePathsMap: new Map(),
+    // Message UUID dedup (print.ts)
+    receivedMessageUuidsSet: new Set(),
+    receivedMessageUuidsOrder: [],
+    // Classifier approvals (classifierApprovals.ts)
+    classifierApprovalsMap: new Map(),
+    classifierCheckingSet: new Set(),
+    // Bash speculative checks (bashPermissions.ts)
+    speculativeChecksMap: new Map(),
+    // File suggestions index (fileSuggestions.ts)
+    fsFileIndex: null,
+    fsFileListRefreshPromise: null,
+    fsCacheGeneration: 0,
+    fsUntrackedFetchPromise: null,
+    fsCachedTrackedFiles: [],
+    fsCachedConfigFiles: [],
+    fsCachedTrackedDirs: [],
+    fsIgnorePatternsCache: null,
+    fsIgnorePatternsCacheKey: null,
+    fsLastRefreshMs: 0,
+    fsLastGitIndexMtime: null,
+    fsLoadedTrackedSignature: null,
+    fsLoadedMergedSignature: null,
+    fsIndexBuildCompleteSignal: null,
+    // Per-session state machine (sessionState.ts)
+    ssCurrentState: 'idle',
+    ssHasPendingAction: false,
+    // Per-session start (sessionStart.ts)
+    ssPendingInitialUserMessage: undefined,
+    // Per-session memory utils (sessionMemoryUtils.ts)
+    smConfig: { minimumMessageTokensToInit: 10000, minimumTokensBetweenUpdate: 5000, toolCallsBetweenUpdates: 3 },
+    smLastSummarizedMessageId: undefined,
+    smExtractionStartedAt: undefined,
+    smTokensAtLastExtraction: 0,
+    smInitialized: false,
+    // Per-session memory (sessionMemory.ts)
+    smLastMemoryMessageUuid: undefined,
+    smHasLoggedGateFailure: false,
+    // Per-session microcompact (microCompact.ts)
+    mcCachedState: null,
+    mcPendingCacheEdits: null,
+    // Per-session extract memories (extractMemories.ts)
+    emExtractor: null,
+    emDrainer: null,
+    // Per-session fast mode (fastMode.ts)
+    fmRuntimeState: { status: 'active' },
+    fmOrgStatus: { status: 'pending' },
+    fmHasLoggedCooldownExpiry: false,
+    fmLastPrefetchAt: 0,
+    fmInflightPrefetch: null,
   }
 
   return state
@@ -428,29 +592,49 @@ function getInitialState(): State {
 // AND ESPECIALLY HERE
 const STATE: State = getInitialState()
 
+export function createIsolatedState(overrides: Partial<State> = {}): State {
+  const state = getInitialState()
+  return { ...state, ...overrides }
+}
+
+/**
+ * Returns the per-session state when running inside an ALS context (server mode),
+ * or the global STATE singleton otherwise (CLI mode).
+ *
+ * Every accessor function in this module should call getState() instead of
+ * reading STATE directly so that multi-user server sessions get isolated state.
+ */
+export function getState(): State {
+  const ctx = getSessionContext()
+  return ctx ? ctx.state : STATE
+}
+
 export function getSessionId(): SessionId {
+  const ctx = getSessionContext()
+  if (ctx) return ctx.state.sessionId
   return STATE.sessionId
 }
 
 export function regenerateSessionId(
   options: { setCurrentAsParent?: boolean } = {},
 ): SessionId {
+  const s = getState()
   if (options.setCurrentAsParent) {
-    STATE.parentSessionId = STATE.sessionId
+    s.parentSessionId = s.sessionId
   }
   // Drop the outgoing session's plan-slug entry so the Map doesn't
   // accumulate stale keys. Callers that need to carry the slug across
   // (REPL.tsx clearContext) read it before calling clearConversation.
-  STATE.planSlugCache.delete(STATE.sessionId)
+  s.planSlugCache.delete(s.sessionId)
   // Regenerated sessions live in the current project: reset projectDir to
   // null so getTranscriptPath() derives from originalCwd.
-  STATE.sessionId = randomUUID() as SessionId
-  STATE.sessionProjectDir = null
-  return STATE.sessionId
+  s.sessionId = randomUUID() as SessionId
+  s.sessionProjectDir = null
+  return s.sessionId
 }
 
 export function getParentSessionId(): SessionId | undefined {
-  return STATE.parentSessionId
+  return getState().parentSessionId
 }
 
 /**
@@ -469,15 +653,23 @@ export function switchSession(
   sessionId: SessionId,
   projectDir: string | null = null,
 ): void {
-  // Drop the outgoing session's plan-slug entry so the Map stays bounded
-  // across repeated /resume. Only the current session's slug is ever read
-  // (plans.ts getPlanSlug defaults to getSessionId()).
-  STATE.planSlugCache.delete(STATE.sessionId)
-  STATE.sessionId = sessionId
-  STATE.sessionProjectDir = projectDir
-  sessionSwitched.emit(sessionId)
+  const ctx = getSessionContext()
+  if (ctx) {
+    // Server mode: route to per-session state and signal
+    ctx.state.planSlugCache.delete(ctx.state.sessionId)
+    ctx.state.sessionId = sessionId
+    ctx.state.sessionProjectDir = projectDir
+    ctx.sessionSwitched.emit(sessionId)
+  } else {
+    // CLI mode: use global STATE and signal
+    STATE.planSlugCache.delete(STATE.sessionId)
+    STATE.sessionId = sessionId
+    STATE.sessionProjectDir = projectDir
+    sessionSwitched.emit(sessionId)
+  }
 }
 
+// Module-level signal for CLI mode (single user)
 const sessionSwitched = createSignal<[id: SessionId]>()
 
 /**
@@ -485,8 +677,19 @@ const sessionSwitched = createSignal<[id: SessionId]>()
  * sessionId. bootstrap can't import listeners directly (DAG leaf), so
  * callers register themselves. concurrentSessions.ts uses this to keep the
  * PID file's sessionId in sync with --resume.
+ *
+ * In server mode, this subscribes to the per-session signal in the current
+ * ALS context. In CLI mode, it subscribes to the global signal.
  */
-export const onSessionSwitch = sessionSwitched.subscribe
+export function onSessionSwitch(
+  listener: (id: SessionId) => void,
+): () => void {
+  const ctx = getSessionContext()
+  if (ctx) {
+    return ctx.sessionSwitched.subscribe(listener)
+  }
+  return sessionSwitched.subscribe(listener)
+}
 
 /**
  * Project directory the current session's transcript lives in, or `null` if
@@ -494,11 +697,20 @@ export const onSessionSwitch = sessionSwitched.subscribe
  * originalCwd). See `switchSession()`.
  */
 export function getSessionProjectDir(): string | null {
-  return STATE.sessionProjectDir
+  return getState().sessionProjectDir
+}
+
+/**
+ * Get the current user identity for session isolation.
+ * Returns null in CLI mode (no user scoping).
+ * In server mode, returns the userId set during session creation.
+ */
+export function getUserId(): string | null {
+  return getState().userId
 }
 
 export function getOriginalCwd(): string {
-  return STATE.originalCwd
+  return getState().originalCwd
 }
 
 /**
@@ -509,11 +721,11 @@ export function getOriginalCwd(): string {
  * Use for project identity (history, skills, sessions) not file operations.
  */
 export function getProjectRoot(): string {
-  return STATE.projectRoot
+  return getState().projectRoot
 }
 
 export function setOriginalCwd(cwd: string): void {
-  STATE.originalCwd = cwd.normalize('NFC')
+  getState().originalCwd = cwd.normalize('NFC')
 }
 
 /**
@@ -521,37 +733,39 @@ export function setOriginalCwd(cwd: string): void {
  * call this — skills/history should stay anchored to where the session started.
  */
 export function setProjectRoot(cwd: string): void {
-  STATE.projectRoot = cwd.normalize('NFC')
+  getState().projectRoot = cwd.normalize('NFC')
 }
 
 export function getCwdState(): string {
-  return STATE.cwd
+  return getState().cwd
 }
 
 export function setCwdState(cwd: string): void {
-  STATE.cwd = cwd.normalize('NFC')
+  getState().cwd = cwd.normalize('NFC')
 }
 
 export function getDirectConnectServerUrl(): string | undefined {
-  return STATE.directConnectServerUrl
+  return getState().directConnectServerUrl
 }
 
 export function setDirectConnectServerUrl(url: string): void {
-  STATE.directConnectServerUrl = url
+  getState().directConnectServerUrl = url
 }
 
 export function addToTotalDurationState(
   duration: number,
   durationWithoutRetries: number,
 ): void {
-  STATE.totalAPIDuration += duration
-  STATE.totalAPIDurationWithoutRetries += durationWithoutRetries
+  const s = getState()
+  s.totalAPIDuration += duration
+  s.totalAPIDurationWithoutRetries += durationWithoutRetries
 }
 
 export function resetTotalDurationStateAndCost_FOR_TESTS_ONLY(): void {
-  STATE.totalAPIDuration = 0
-  STATE.totalAPIDurationWithoutRetries = 0
-  STATE.totalCostUSD = 0
+  const s = getState()
+  s.totalAPIDuration = 0
+  s.totalAPIDurationWithoutRetries = 0
+  s.totalCostUSD = 0
 }
 
 export function addToTotalCostState(
@@ -559,95 +773,102 @@ export function addToTotalCostState(
   modelUsage: ModelUsage,
   model: string,
 ): void {
-  STATE.modelUsage[model] = modelUsage
-  STATE.totalCostUSD += cost
+  const s = getState()
+  s.modelUsage[model] = modelUsage
+  s.totalCostUSD += cost
 }
 
 export function getTotalCostUSD(): number {
-  return STATE.totalCostUSD
+  return getState().totalCostUSD
 }
 
 export function getTotalAPIDuration(): number {
-  return STATE.totalAPIDuration
+  return getState().totalAPIDuration
 }
 
 export function getTotalDuration(): number {
-  return Date.now() - STATE.startTime
+  return Date.now() - getState().startTime
 }
 
 export function getTotalAPIDurationWithoutRetries(): number {
-  return STATE.totalAPIDurationWithoutRetries
+  return getState().totalAPIDurationWithoutRetries
 }
 
 export function getTotalToolDuration(): number {
-  return STATE.totalToolDuration
+  return getState().totalToolDuration
 }
 
 export function addToToolDuration(duration: number): void {
-  STATE.totalToolDuration += duration
-  STATE.turnToolDurationMs += duration
-  STATE.turnToolCount++
+  const s = getState()
+  s.totalToolDuration += duration
+  s.turnToolDurationMs += duration
+  s.turnToolCount++
 }
 
 export function getTurnHookDurationMs(): number {
-  return STATE.turnHookDurationMs
+  return getState().turnHookDurationMs
 }
 
 export function addToTurnHookDuration(duration: number): void {
-  STATE.turnHookDurationMs += duration
-  STATE.turnHookCount++
+  const s = getState()
+  s.turnHookDurationMs += duration
+  s.turnHookCount++
 }
 
 export function resetTurnHookDuration(): void {
-  STATE.turnHookDurationMs = 0
-  STATE.turnHookCount = 0
+  const s = getState()
+  s.turnHookDurationMs = 0
+  s.turnHookCount = 0
 }
 
 export function getTurnHookCount(): number {
-  return STATE.turnHookCount
+  return getState().turnHookCount
 }
 
 export function getTurnToolDurationMs(): number {
-  return STATE.turnToolDurationMs
+  return getState().turnToolDurationMs
 }
 
 export function resetTurnToolDuration(): void {
-  STATE.turnToolDurationMs = 0
-  STATE.turnToolCount = 0
+  const s = getState()
+  s.turnToolDurationMs = 0
+  s.turnToolCount = 0
 }
 
 export function getTurnToolCount(): number {
-  return STATE.turnToolCount
+  return getState().turnToolCount
 }
 
 export function getTurnClassifierDurationMs(): number {
-  return STATE.turnClassifierDurationMs
+  return getState().turnClassifierDurationMs
 }
 
 export function addToTurnClassifierDuration(duration: number): void {
-  STATE.turnClassifierDurationMs += duration
-  STATE.turnClassifierCount++
+  const s = getState()
+  s.turnClassifierDurationMs += duration
+  s.turnClassifierCount++
 }
 
 export function resetTurnClassifierDuration(): void {
-  STATE.turnClassifierDurationMs = 0
-  STATE.turnClassifierCount = 0
+  const s = getState()
+  s.turnClassifierDurationMs = 0
+  s.turnClassifierCount = 0
 }
 
 export function getTurnClassifierCount(): number {
-  return STATE.turnClassifierCount
+  return getState().turnClassifierCount
 }
 
 export function getStatsStore(): {
   observe(name: string, value: number): void
 } | null {
-  return STATE.statsStore
+  return getState().statsStore
 }
 
 export function setStatsStore(
   store: { observe(name: string, value: number): void } | null,
 ): void {
-  STATE.statsStore = store
+  getState().statsStore = store
 }
 
 /**
@@ -662,13 +883,11 @@ export function setStatsStore(
  * Without it the timestamp stays stale until the next render, which may never
  * come if the user is idle (e.g. permission dialog waiting for input).
  */
-let interactionTimeDirty = false
-
 export function updateLastInteractionTime(immediate?: boolean): void {
   if (immediate) {
     flushInteractionTime_inner()
   } else {
-    interactionTimeDirty = true
+    getState().interactionTimeDirty = true
   }
 }
 
@@ -678,110 +897,111 @@ export function updateLastInteractionTime(immediate?: boolean): void {
  * a single Date.now() call.
  */
 export function flushInteractionTime(): void {
-  if (interactionTimeDirty) {
+  if (getState().interactionTimeDirty) {
     flushInteractionTime_inner()
   }
 }
 
 function flushInteractionTime_inner(): void {
-  STATE.lastInteractionTime = Date.now()
-  interactionTimeDirty = false
+  const s = getState()
+  s.lastInteractionTime = Date.now()
+  s.interactionTimeDirty = false
 }
 
 export function addToTotalLinesChanged(added: number, removed: number): void {
-  STATE.totalLinesAdded += added
-  STATE.totalLinesRemoved += removed
+  const s = getState()
+  s.totalLinesAdded += added
+  s.totalLinesRemoved += removed
 }
 
 export function getTotalLinesAdded(): number {
-  return STATE.totalLinesAdded
+  return getState().totalLinesAdded
 }
 
 export function getTotalLinesRemoved(): number {
-  return STATE.totalLinesRemoved
+  return getState().totalLinesRemoved
 }
 
 export function getTotalInputTokens(): number {
-  return sumBy(Object.values(STATE.modelUsage), 'inputTokens')
+  return sumBy(Object.values(getState().modelUsage), 'inputTokens')
 }
 
 export function getTotalOutputTokens(): number {
-  return sumBy(Object.values(STATE.modelUsage), 'outputTokens')
+  return sumBy(Object.values(getState().modelUsage), 'outputTokens')
 }
 
 export function getTotalCacheReadInputTokens(): number {
-  return sumBy(Object.values(STATE.modelUsage), 'cacheReadInputTokens')
+  return sumBy(Object.values(getState().modelUsage), 'cacheReadInputTokens')
 }
 
 export function getTotalCacheCreationInputTokens(): number {
-  return sumBy(Object.values(STATE.modelUsage), 'cacheCreationInputTokens')
+  return sumBy(Object.values(getState().modelUsage), 'cacheCreationInputTokens')
 }
 
 export function getTotalWebSearchRequests(): number {
-  return sumBy(Object.values(STATE.modelUsage), 'webSearchRequests')
+  return sumBy(Object.values(getState().modelUsage), 'webSearchRequests')
 }
 
-let outputTokensAtTurnStart = 0
-let currentTurnTokenBudget: number | null = null
 export function getTurnOutputTokens(): number {
-  return getTotalOutputTokens() - outputTokensAtTurnStart
+  return getTotalOutputTokens() - getState().outputTokensAtTurnStart
 }
 export function getCurrentTurnTokenBudget(): number | null {
-  return currentTurnTokenBudget
+  return getState().currentTurnTokenBudget
 }
-let budgetContinuationCount = 0
 export function snapshotOutputTokensForTurn(budget: number | null): void {
-  outputTokensAtTurnStart = getTotalOutputTokens()
-  currentTurnTokenBudget = budget
-  budgetContinuationCount = 0
+  const s = getState()
+  s.outputTokensAtTurnStart = getTotalOutputTokens()
+  s.currentTurnTokenBudget = budget
+  s.budgetContinuationCount = 0
 }
 export function getBudgetContinuationCount(): number {
-  return budgetContinuationCount
+  return getState().budgetContinuationCount
 }
 export function incrementBudgetContinuationCount(): void {
-  budgetContinuationCount++
+  getState().budgetContinuationCount++
 }
 
 export function setHasUnknownModelCost(): void {
-  STATE.hasUnknownModelCost = true
+  getState().hasUnknownModelCost = true
 }
 
 export function hasUnknownModelCost(): boolean {
-  return STATE.hasUnknownModelCost
+  return getState().hasUnknownModelCost
 }
 
 export function getLastMainRequestId(): string | undefined {
-  return STATE.lastMainRequestId
+  return getState().lastMainRequestId
 }
 
 export function setLastMainRequestId(requestId: string): void {
-  STATE.lastMainRequestId = requestId
+  getState().lastMainRequestId = requestId
 }
 
 export function getLastApiCompletionTimestamp(): number | null {
-  return STATE.lastApiCompletionTimestamp
+  return getState().lastApiCompletionTimestamp
 }
 
 export function setLastApiCompletionTimestamp(timestamp: number): void {
-  STATE.lastApiCompletionTimestamp = timestamp
+  getState().lastApiCompletionTimestamp = timestamp
 }
 
 /** Mark that a compaction just occurred. The next API success event will
  *  include isPostCompaction=true, then the flag auto-resets. */
 export function markPostCompaction(): void {
-  STATE.pendingPostCompaction = true
+  getState().pendingPostCompaction = true
 }
 
 /** Consume the post-compaction flag. Returns true once after compaction,
  *  then returns false until the next compaction. */
 export function consumePostCompaction(): boolean {
-  const was = STATE.pendingPostCompaction
-  STATE.pendingPostCompaction = false
+  const s = getState()
+  const was = s.pendingPostCompaction
+  s.pendingPostCompaction = false
   return was
 }
 
 export function getLastInteractionTime(): number {
-  return STATE.lastInteractionTime
+  return getState().lastInteractionTime
 }
 
 // Scroll drain suspension — background intervals check this before doing work
@@ -824,11 +1044,11 @@ export async function waitForScrollIdle(): Promise<void> {
 }
 
 export function getModelUsage(): { [modelName: string]: ModelUsage } {
-  return STATE.modelUsage
+  return getState().modelUsage
 }
 
 export function getUsageForModel(model: string): ModelUsage | undefined {
-  return STATE.modelUsage[model]
+  return getState().modelUsage[model]
 }
 
 /**
@@ -836,42 +1056,43 @@ export function getUsageForModel(model: string): ModelUsage | undefined {
  * updates their configured model.
  */
 export function getMainLoopModelOverride(): ModelSetting | undefined {
-  return STATE.mainLoopModelOverride
+  return getState().mainLoopModelOverride
 }
 
 export function getInitialMainLoopModel(): ModelSetting {
-  return STATE.initialMainLoopModel
+  return getState().initialMainLoopModel
 }
 
 export function setMainLoopModelOverride(
   model: ModelSetting | undefined,
 ): void {
-  STATE.mainLoopModelOverride = model
+  getState().mainLoopModelOverride = model
 }
 
 export function setInitialMainLoopModel(model: ModelSetting): void {
-  STATE.initialMainLoopModel = model
+  getState().initialMainLoopModel = model
 }
 
 export function getSdkBetas(): string[] | undefined {
-  return STATE.sdkBetas
+  return getState().sdkBetas
 }
 
 export function setSdkBetas(betas: string[] | undefined): void {
-  STATE.sdkBetas = betas
+  getState().sdkBetas = betas
 }
 
 export function resetCostState(): void {
-  STATE.totalCostUSD = 0
-  STATE.totalAPIDuration = 0
-  STATE.totalAPIDurationWithoutRetries = 0
-  STATE.totalToolDuration = 0
-  STATE.startTime = Date.now()
-  STATE.totalLinesAdded = 0
-  STATE.totalLinesRemoved = 0
-  STATE.hasUnknownModelCost = false
-  STATE.modelUsage = {}
-  STATE.promptId = null
+  const s = getState()
+  s.totalCostUSD = 0
+  s.totalAPIDuration = 0
+  s.totalAPIDurationWithoutRetries = 0
+  s.totalToolDuration = 0
+  s.startTime = Date.now()
+  s.totalLinesAdded = 0
+  s.totalLinesRemoved = 0
+  s.hasUnknownModelCost = false
+  s.modelUsage = {}
+  s.promptId = null
 }
 
 /**
@@ -897,21 +1118,22 @@ export function setCostStateForRestore({
   lastDuration: number | undefined
   modelUsage: { [modelName: string]: ModelUsage } | undefined
 }): void {
-  STATE.totalCostUSD = totalCostUSD
-  STATE.totalAPIDuration = totalAPIDuration
-  STATE.totalAPIDurationWithoutRetries = totalAPIDurationWithoutRetries
-  STATE.totalToolDuration = totalToolDuration
-  STATE.totalLinesAdded = totalLinesAdded
-  STATE.totalLinesRemoved = totalLinesRemoved
+  const s = getState()
+  s.totalCostUSD = totalCostUSD
+  s.totalAPIDuration = totalAPIDuration
+  s.totalAPIDurationWithoutRetries = totalAPIDurationWithoutRetries
+  s.totalToolDuration = totalToolDuration
+  s.totalLinesAdded = totalLinesAdded
+  s.totalLinesRemoved = totalLinesRemoved
 
   // Restore per-model usage breakdown
   if (modelUsage) {
-    STATE.modelUsage = modelUsage
+    s.modelUsage = modelUsage
   }
 
   // Adjust startTime to make wall duration accumulate
   if (lastDuration) {
-    STATE.startTime = Date.now() - lastDuration
+    s.startTime = Date.now() - lastDuration
   }
 }
 
@@ -923,358 +1145,370 @@ export function resetStateForTests(): void {
   Object.entries(getInitialState()).forEach(([key, value]) => {
     STATE[key as keyof State] = value as never
   })
-  outputTokensAtTurnStart = 0
-  currentTurnTokenBudget = null
-  budgetContinuationCount = 0
   sessionSwitched.clear()
 }
 
 // You shouldn't use this directly. See src/utils/model/modelStrings.ts::getModelStrings()
 export function getModelStrings(): ModelStrings | null {
-  return STATE.modelStrings
+  return getState().modelStrings
 }
 
 // You shouldn't use this directly. See src/utils/model/modelStrings.ts
 export function setModelStrings(modelStrings: ModelStrings): void {
-  STATE.modelStrings = modelStrings
+  getState().modelStrings = modelStrings
 }
 
 // Test utility function to reset model strings for re-initialization.
 // Separate from setModelStrings because we only want to accept 'null' in tests.
 export function resetModelStringsForTestingOnly() {
-  STATE.modelStrings = null
+  getState().modelStrings = null
 }
 
 export function setMeter(
   meter: Meter,
   createCounter: (name: string, options: MetricOptions) => AttributedCounter,
 ): void {
-  STATE.meter = meter
+  const s = getState()
+  s.meter = meter
 
   // Initialize all counters using the provided factory
-  STATE.sessionCounter = createCounter('claude_code.session.count', {
+  s.sessionCounter = createCounter('claude_code.session.count', {
     description: 'Count of CLI sessions started',
   })
-  STATE.locCounter = createCounter('claude_code.lines_of_code.count', {
+  s.locCounter = createCounter('claude_code.lines_of_code.count', {
     description:
       "Count of lines of code modified, with the 'type' attribute indicating whether lines were added or removed",
   })
-  STATE.prCounter = createCounter('claude_code.pull_request.count', {
+  s.prCounter = createCounter('claude_code.pull_request.count', {
     description: 'Number of pull requests created',
   })
-  STATE.commitCounter = createCounter('claude_code.commit.count', {
+  s.commitCounter = createCounter('claude_code.commit.count', {
     description: 'Number of git commits created',
   })
-  STATE.costCounter = createCounter('claude_code.cost.usage', {
+  s.costCounter = createCounter('claude_code.cost.usage', {
     description: 'Cost of the Claude Code session',
     unit: 'USD',
   })
-  STATE.tokenCounter = createCounter('claude_code.token.usage', {
+  s.tokenCounter = createCounter('claude_code.token.usage', {
     description: 'Number of tokens used',
     unit: 'tokens',
   })
-  STATE.codeEditToolDecisionCounter = createCounter(
+  s.codeEditToolDecisionCounter = createCounter(
     'claude_code.code_edit_tool.decision',
     {
       description:
         'Count of code editing tool permission decisions (accept/reject) for Edit, Write, and NotebookEdit tools',
     },
   )
-  STATE.activeTimeCounter = createCounter('claude_code.active_time.total', {
+  s.activeTimeCounter = createCounter('claude_code.active_time.total', {
     description: 'Total active time in seconds',
     unit: 's',
   })
 }
 
 export function getMeter(): Meter | null {
-  return STATE.meter
+  return getState().meter
 }
 
 export function getSessionCounter(): AttributedCounter | null {
-  return STATE.sessionCounter
+  return getState().sessionCounter
 }
 
 export function getLocCounter(): AttributedCounter | null {
-  return STATE.locCounter
+  return getState().locCounter
 }
 
 export function getPrCounter(): AttributedCounter | null {
-  return STATE.prCounter
+  return getState().prCounter
 }
 
 export function getCommitCounter(): AttributedCounter | null {
-  return STATE.commitCounter
+  return getState().commitCounter
 }
 
 export function getCostCounter(): AttributedCounter | null {
-  return STATE.costCounter
+  return getState().costCounter
 }
 
 export function getTokenCounter(): AttributedCounter | null {
-  return STATE.tokenCounter
+  return getState().tokenCounter
 }
 
 export function getCodeEditToolDecisionCounter(): AttributedCounter | null {
-  return STATE.codeEditToolDecisionCounter
+  return getState().codeEditToolDecisionCounter
 }
 
 export function getActiveTimeCounter(): AttributedCounter | null {
-  return STATE.activeTimeCounter
+  return getState().activeTimeCounter
 }
 
 export function getLoggerProvider(): LoggerProvider | null {
-  return STATE.loggerProvider
+  return getState().loggerProvider
 }
 
 export function setLoggerProvider(provider: LoggerProvider | null): void {
-  STATE.loggerProvider = provider
+  getState().loggerProvider = provider
 }
 
 export function getEventLogger(): ReturnType<typeof logs.getLogger> | null {
-  return STATE.eventLogger
+  return getState().eventLogger
 }
 
 export function setEventLogger(
   logger: ReturnType<typeof logs.getLogger> | null,
 ): void {
-  STATE.eventLogger = logger
+  getState().eventLogger = logger
 }
 
 export function getMeterProvider(): MeterProvider | null {
-  return STATE.meterProvider
+  return getState().meterProvider
 }
 
 export function setMeterProvider(provider: MeterProvider | null): void {
-  STATE.meterProvider = provider
+  getState().meterProvider = provider
 }
 export function getTracerProvider(): BasicTracerProvider | null {
-  return STATE.tracerProvider
+  return getState().tracerProvider
 }
 export function setTracerProvider(provider: BasicTracerProvider | null): void {
-  STATE.tracerProvider = provider
+  getState().tracerProvider = provider
 }
 
 export function getIsNonInteractiveSession(): boolean {
-  return !STATE.isInteractive
+  return !getState().isInteractive
 }
 
 export function getIsInteractive(): boolean {
-  return STATE.isInteractive
+  return getState().isInteractive
 }
 
 export function setIsInteractive(value: boolean): void {
-  STATE.isInteractive = value
+  getState().isInteractive = value
+}
+
+/**
+ * Check if running in headless mode (no Ink UI rendering).
+ * In server mode (when ALS context exists), SessionContext.isHeadless is always true.
+ * In CLI mode, headless when non-interactive (print/-p mode).
+ */
+export function getIsHeadless(): boolean {
+  return !getState().isInteractive
 }
 
 export function getClientType(): string {
-  return STATE.clientType
+  return getState().clientType
 }
 
 export function setClientType(type: string): void {
-  STATE.clientType = type
+  getState().clientType = type
 }
 
 export function getSdkAgentProgressSummariesEnabled(): boolean {
-  return STATE.sdkAgentProgressSummariesEnabled
+  return getState().sdkAgentProgressSummariesEnabled
 }
 
 export function setSdkAgentProgressSummariesEnabled(value: boolean): void {
-  STATE.sdkAgentProgressSummariesEnabled = value
+  getState().sdkAgentProgressSummariesEnabled = value
 }
 
 export function getKairosActive(): boolean {
-  return STATE.kairosActive
+  return getState().kairosActive
 }
 
 export function setKairosActive(value: boolean): void {
-  STATE.kairosActive = value
+  getState().kairosActive = value
 }
 
 export function getStrictToolResultPairing(): boolean {
-  return STATE.strictToolResultPairing
+  return getState().strictToolResultPairing
 }
 
 export function setStrictToolResultPairing(value: boolean): void {
-  STATE.strictToolResultPairing = value
+  getState().strictToolResultPairing = value
 }
 
 // Field name 'userMsgOptIn' avoids excluded-string substrings ('BriefTool',
 // 'SendUserMessage' — case-insensitive). All callers are inside feature()
 // guards so these accessors don't need their own (matches getKairosActive).
 export function getUserMsgOptIn(): boolean {
-  return STATE.userMsgOptIn
+  return getState().userMsgOptIn
 }
 
 export function setUserMsgOptIn(value: boolean): void {
-  STATE.userMsgOptIn = value
+  getState().userMsgOptIn = value
 }
 
 export function getSessionSource(): string | undefined {
-  return STATE.sessionSource
+  return getState().sessionSource
 }
 
 export function setSessionSource(source: string): void {
-  STATE.sessionSource = source
+  getState().sessionSource = source
 }
 
 export function getQuestionPreviewFormat(): 'markdown' | 'html' | undefined {
-  return STATE.questionPreviewFormat
+  return getState().questionPreviewFormat
 }
 
 export function setQuestionPreviewFormat(format: 'markdown' | 'html'): void {
-  STATE.questionPreviewFormat = format
+  getState().questionPreviewFormat = format
 }
 
 export function getAgentColorMap(): Map<string, AgentColorName> {
-  return STATE.agentColorMap
+  return getState().agentColorMap
 }
 
 export function getFlagSettingsPath(): string | undefined {
-  return STATE.flagSettingsPath
+  return getState().flagSettingsPath
 }
 
 export function setFlagSettingsPath(path: string | undefined): void {
-  STATE.flagSettingsPath = path
+  getState().flagSettingsPath = path
 }
 
 export function getFlagSettingsInline(): Record<string, unknown> | null {
-  return STATE.flagSettingsInline
+  return getState().flagSettingsInline
 }
 
 export function setFlagSettingsInline(
   settings: Record<string, unknown> | null,
 ): void {
-  STATE.flagSettingsInline = settings
+  getState().flagSettingsInline = settings
 }
 
 export function getSessionIngressToken(): string | null | undefined {
-  return STATE.sessionIngressToken
+  return getState().sessionIngressToken
 }
 
 export function setSessionIngressToken(token: string | null): void {
-  STATE.sessionIngressToken = token
+  getState().sessionIngressToken = token
 }
 
 export function getOauthTokenFromFd(): string | null | undefined {
-  return STATE.oauthTokenFromFd
+  return getState().oauthTokenFromFd
 }
 
 export function setOauthTokenFromFd(token: string | null): void {
-  STATE.oauthTokenFromFd = token
+  getState().oauthTokenFromFd = token
 }
 
 export function getApiKeyFromFd(): string | null | undefined {
-  return STATE.apiKeyFromFd
+  return getState().apiKeyFromFd
 }
 
 export function setApiKeyFromFd(key: string | null): void {
-  STATE.apiKeyFromFd = key
+  getState().apiKeyFromFd = key
 }
 
 export function setLastAPIRequest(
   params: Omit<BetaMessageStreamParams, 'messages'> | null,
 ): void {
-  STATE.lastAPIRequest = params
+  getState().lastAPIRequest = params
 }
 
 export function getLastAPIRequest(): Omit<
   BetaMessageStreamParams,
   'messages'
 > | null {
-  return STATE.lastAPIRequest
+  return getState().lastAPIRequest
 }
 
 export function setLastAPIRequestMessages(
   messages: BetaMessageStreamParams['messages'] | null,
 ): void {
-  STATE.lastAPIRequestMessages = messages
+  getState().lastAPIRequestMessages = messages
 }
 
 export function getLastAPIRequestMessages():
   | BetaMessageStreamParams['messages']
   | null {
-  return STATE.lastAPIRequestMessages
+  return getState().lastAPIRequestMessages
 }
 
 export function setLastClassifierRequests(requests: unknown[] | null): void {
-  STATE.lastClassifierRequests = requests
+  getState().lastClassifierRequests = requests
 }
 
 export function getLastClassifierRequests(): unknown[] | null {
-  return STATE.lastClassifierRequests
+  return getState().lastClassifierRequests
 }
 
 export function setCachedClaudeMdContent(content: string | null): void {
-  STATE.cachedClaudeMdContent = content
+  getState().cachedClaudeMdContent = content
 }
 
 export function getCachedClaudeMdContent(): string | null {
-  return STATE.cachedClaudeMdContent
+  return getState().cachedClaudeMdContent
 }
 
 export function addToInMemoryErrorLog(errorInfo: {
   error: string
   timestamp: string
 }): void {
+  const s = getState()
   const MAX_IN_MEMORY_ERRORS = 100
-  if (STATE.inMemoryErrorLog.length >= MAX_IN_MEMORY_ERRORS) {
-    STATE.inMemoryErrorLog.shift() // Remove oldest error
+  if (s.inMemoryErrorLog.length >= MAX_IN_MEMORY_ERRORS) {
+    s.inMemoryErrorLog.shift() // Remove oldest error
   }
-  STATE.inMemoryErrorLog.push(errorInfo)
+  s.inMemoryErrorLog.push(errorInfo)
 }
 
 export function getAllowedSettingSources(): SettingSource[] {
-  return STATE.allowedSettingSources
+  return getState().allowedSettingSources
 }
 
 export function setAllowedSettingSources(sources: SettingSource[]): void {
-  STATE.allowedSettingSources = sources
+  getState().allowedSettingSources = sources
 }
 
 export function preferThirdPartyAuthentication(): boolean {
   // IDE extension should behave as 1P for authentication reasons.
-  return getIsNonInteractiveSession() && STATE.clientType !== 'claude-vscode'
+  return getIsNonInteractiveSession() && getState().clientType !== 'claude-vscode'
 }
 
 export function setInlinePlugins(plugins: Array<string>): void {
-  STATE.inlinePlugins = plugins
+  getState().inlinePlugins = plugins
 }
 
 export function getInlinePlugins(): Array<string> {
-  return STATE.inlinePlugins
+  return getState().inlinePlugins
 }
 
 export function setChromeFlagOverride(value: boolean | undefined): void {
-  STATE.chromeFlagOverride = value
+  getState().chromeFlagOverride = value
 }
 
 export function getChromeFlagOverride(): boolean | undefined {
-  return STATE.chromeFlagOverride
+  return getState().chromeFlagOverride
 }
 
 export function setUseCoworkPlugins(value: boolean): void {
-  STATE.useCoworkPlugins = value
-  resetSettingsCache()
+  getState().useCoworkPlugins = value
+  // Inline resetSettingsCache to avoid circular dependency
+  const s = getState()
+  s.settingsSessionCache = null
+  s.settingsPerSourceCache.clear()
+  s.settingsParseFileCache.clear()
 }
 
 export function getUseCoworkPlugins(): boolean {
-  return STATE.useCoworkPlugins
+  return getState().useCoworkPlugins
 }
 
 export function setSessionBypassPermissionsMode(enabled: boolean): void {
-  STATE.sessionBypassPermissionsMode = enabled
+  getState().sessionBypassPermissionsMode = enabled
 }
 
 export function getSessionBypassPermissionsMode(): boolean {
-  return STATE.sessionBypassPermissionsMode
+  return getState().sessionBypassPermissionsMode
 }
 
 export function setScheduledTasksEnabled(enabled: boolean): void {
-  STATE.scheduledTasksEnabled = enabled
+  getState().scheduledTasksEnabled = enabled
 }
 
 export function getScheduledTasksEnabled(): boolean {
-  return STATE.scheduledTasksEnabled
+  return getState().scheduledTasksEnabled
 }
 
 export type SessionCronTask = {
@@ -1292,11 +1526,11 @@ export type SessionCronTask = {
 }
 
 export function getSessionCronTasks(): SessionCronTask[] {
-  return STATE.sessionCronTasks
+  return getState().sessionCronTasks
 }
 
 export function addSessionCronTask(task: SessionCronTask): void {
-  STATE.sessionCronTasks.push(task)
+  getState().sessionCronTasks.push(task)
 }
 
 /**
@@ -1306,74 +1540,77 @@ export function addSessionCronTask(task: SessionCronTask): void {
  */
 export function removeSessionCronTasks(ids: readonly string[]): number {
   if (ids.length === 0) return 0
+  const s = getState()
   const idSet = new Set(ids)
-  const remaining = STATE.sessionCronTasks.filter(t => !idSet.has(t.id))
-  const removed = STATE.sessionCronTasks.length - remaining.length
+  const remaining = s.sessionCronTasks.filter(t => !idSet.has(t.id))
+  const removed = s.sessionCronTasks.length - remaining.length
   if (removed === 0) return 0
-  STATE.sessionCronTasks = remaining
+  s.sessionCronTasks = remaining
   return removed
 }
 
 export function setSessionTrustAccepted(accepted: boolean): void {
-  STATE.sessionTrustAccepted = accepted
+  getState().sessionTrustAccepted = accepted
 }
 
 export function getSessionTrustAccepted(): boolean {
-  return STATE.sessionTrustAccepted
+  return getState().sessionTrustAccepted
 }
 
 export function setSessionPersistenceDisabled(disabled: boolean): void {
-  STATE.sessionPersistenceDisabled = disabled
+  getState().sessionPersistenceDisabled = disabled
 }
 
 export function isSessionPersistenceDisabled(): boolean {
-  return STATE.sessionPersistenceDisabled
+  return getState().sessionPersistenceDisabled
 }
 
 export function hasExitedPlanModeInSession(): boolean {
-  return STATE.hasExitedPlanMode
+  return getState().hasExitedPlanMode
 }
 
 export function setHasExitedPlanMode(value: boolean): void {
-  STATE.hasExitedPlanMode = value
+  getState().hasExitedPlanMode = value
 }
 
 export function needsPlanModeExitAttachment(): boolean {
-  return STATE.needsPlanModeExitAttachment
+  return getState().needsPlanModeExitAttachment
 }
 
 export function setNeedsPlanModeExitAttachment(value: boolean): void {
-  STATE.needsPlanModeExitAttachment = value
+  getState().needsPlanModeExitAttachment = value
 }
 
 export function handlePlanModeTransition(
   fromMode: string,
   toMode: string,
 ): void {
+  const s = getState()
   // If switching TO plan mode, clear any pending exit attachment
   // This prevents sending both plan_mode and plan_mode_exit when user toggles quickly
   if (toMode === 'plan' && fromMode !== 'plan') {
-    STATE.needsPlanModeExitAttachment = false
+    s.needsPlanModeExitAttachment = false
   }
 
   // If switching out of plan mode, trigger the plan_mode_exit attachment
   if (fromMode === 'plan' && toMode !== 'plan') {
-    STATE.needsPlanModeExitAttachment = true
+    s.needsPlanModeExitAttachment = true
   }
 }
 
 export function needsAutoModeExitAttachment(): boolean {
-  return STATE.needsAutoModeExitAttachment
+  return getState().needsAutoModeExitAttachment
 }
 
 export function setNeedsAutoModeExitAttachment(value: boolean): void {
-  STATE.needsAutoModeExitAttachment = value
+  getState().needsAutoModeExitAttachment = value
 }
 
 export function handleAutoModeTransition(
   fromMode: string,
   toMode: string,
 ): void {
+  const s = getState()
   // Auto↔plan transitions are handled by prepareContextForPlanMode (auto may
   // stay active through plan if opted in) and ExitPlanMode (restores mode).
   // Skip both directions so this function only handles direct auto transitions.
@@ -1389,67 +1626,69 @@ export function handleAutoModeTransition(
   // If switching TO auto mode, clear any pending exit attachment
   // This prevents sending both auto_mode and auto_mode_exit when user toggles quickly
   if (toIsAuto && !fromIsAuto) {
-    STATE.needsAutoModeExitAttachment = false
+    s.needsAutoModeExitAttachment = false
   }
 
   // If switching out of auto mode, trigger the auto_mode_exit attachment
   if (fromIsAuto && !toIsAuto) {
-    STATE.needsAutoModeExitAttachment = true
+    s.needsAutoModeExitAttachment = true
   }
 }
 
 // LSP plugin recommendation session tracking
 export function hasShownLspRecommendationThisSession(): boolean {
-  return STATE.lspRecommendationShownThisSession
+  return getState().lspRecommendationShownThisSession
 }
 
 export function setLspRecommendationShownThisSession(value: boolean): void {
-  STATE.lspRecommendationShownThisSession = value
+  getState().lspRecommendationShownThisSession = value
 }
 
 // SDK init event state
 export function setInitJsonSchema(schema: Record<string, unknown>): void {
-  STATE.initJsonSchema = schema
+  getState().initJsonSchema = schema
 }
 
 export function getInitJsonSchema(): Record<string, unknown> | null {
-  return STATE.initJsonSchema
+  return getState().initJsonSchema
 }
 
 export function registerHookCallbacks(
   hooks: Partial<Record<HookEvent, RegisteredHookMatcher[]>>,
 ): void {
-  if (!STATE.registeredHooks) {
-    STATE.registeredHooks = {}
+  const s = getState()
+  if (!s.registeredHooks) {
+    s.registeredHooks = {}
   }
 
   // `registerHookCallbacks` may be called multiple times, so we need to merge (not overwrite)
   for (const [event, matchers] of Object.entries(hooks)) {
     const eventKey = event as HookEvent
-    if (!STATE.registeredHooks[eventKey]) {
-      STATE.registeredHooks[eventKey] = []
+    if (!s.registeredHooks[eventKey]) {
+      s.registeredHooks[eventKey] = []
     }
-    STATE.registeredHooks[eventKey]!.push(...matchers)
+    s.registeredHooks[eventKey]!.push(...matchers)
   }
 }
 
 export function getRegisteredHooks(): Partial<
   Record<HookEvent, RegisteredHookMatcher[]>
 > | null {
-  return STATE.registeredHooks
+  return getState().registeredHooks
 }
 
 export function clearRegisteredHooks(): void {
-  STATE.registeredHooks = null
+  getState().registeredHooks = null
 }
 
 export function clearRegisteredPluginHooks(): void {
-  if (!STATE.registeredHooks) {
+  const s = getState()
+  if (!s.registeredHooks) {
     return
   }
 
   const filtered: Partial<Record<HookEvent, RegisteredHookMatcher[]>> = {}
-  for (const [event, matchers] of Object.entries(STATE.registeredHooks)) {
+  for (const [event, matchers] of Object.entries(s.registeredHooks)) {
     // Keep only callback hooks (those without pluginRoot)
     const callbackHooks = matchers.filter(m => !('pluginRoot' in m))
     if (callbackHooks.length > 0) {
@@ -1457,27 +1696,28 @@ export function clearRegisteredPluginHooks(): void {
     }
   }
 
-  STATE.registeredHooks = Object.keys(filtered).length > 0 ? filtered : null
+  s.registeredHooks = Object.keys(filtered).length > 0 ? filtered : null
 }
 
 export function resetSdkInitState(): void {
-  STATE.initJsonSchema = null
-  STATE.registeredHooks = null
+  const s = getState()
+  s.initJsonSchema = null
+  s.registeredHooks = null
 }
 
 export function getPlanSlugCache(): Map<string, string> {
-  return STATE.planSlugCache
+  return getState().planSlugCache
 }
 
 export function getSessionCreatedTeams(): Set<string> {
-  return STATE.sessionCreatedTeams
+  return getState().sessionCreatedTeams
 }
 
 // Teleported session tracking for reliability logging
 export function setTeleportedSessionInfo(info: {
   sessionId: string | null
 }): void {
-  STATE.teleportedSessionInfo = {
+  getState().teleportedSessionInfo = {
     isTeleported: true,
     hasLoggedFirstMessage: false,
     sessionId: info.sessionId,
@@ -1489,12 +1729,13 @@ export function getTeleportedSessionInfo(): {
   hasLoggedFirstMessage: boolean
   sessionId: string | null
 } | null {
-  return STATE.teleportedSessionInfo
+  return getState().teleportedSessionInfo
 }
 
 export function markFirstTeleportMessageLogged(): void {
-  if (STATE.teleportedSessionInfo) {
-    STATE.teleportedSessionInfo.hasLoggedFirstMessage = true
+  const s = getState()
+  if (s.teleportedSessionInfo) {
+    s.teleportedSessionInfo.hasLoggedFirstMessage = true
   }
 }
 
@@ -1514,7 +1755,7 @@ export function addInvokedSkill(
   agentId: string | null = null,
 ): void {
   const key = `${agentId ?? ''}:${skillName}`
-  STATE.invokedSkills.set(key, {
+  getState().invokedSkills.set(key, {
     skillName,
     skillPath,
     content,
@@ -1524,7 +1765,7 @@ export function addInvokedSkill(
 }
 
 export function getInvokedSkills(): Map<string, InvokedSkillInfo> {
-  return STATE.invokedSkills
+  return getState().invokedSkills
 }
 
 export function getInvokedSkillsForAgent(
@@ -1532,7 +1773,7 @@ export function getInvokedSkillsForAgent(
 ): Map<string, InvokedSkillInfo> {
   const normalizedId = agentId ?? null
   const filtered = new Map<string, InvokedSkillInfo>()
-  for (const [key, skill] of STATE.invokedSkills) {
+  for (const [key, skill] of getState().invokedSkills) {
     if (skill.agentId === normalizedId) {
       filtered.set(key, skill)
     }
@@ -1543,21 +1784,23 @@ export function getInvokedSkillsForAgent(
 export function clearInvokedSkills(
   preservedAgentIds?: ReadonlySet<string>,
 ): void {
+  const skills = getState().invokedSkills
   if (!preservedAgentIds || preservedAgentIds.size === 0) {
-    STATE.invokedSkills.clear()
+    skills.clear()
     return
   }
-  for (const [key, skill] of STATE.invokedSkills) {
+  for (const [key, skill] of skills) {
     if (skill.agentId === null || !preservedAgentIds.has(skill.agentId)) {
-      STATE.invokedSkills.delete(key)
+      skills.delete(key)
     }
   }
 }
 
 export function clearInvokedSkillsForAgent(agentId: string): void {
-  for (const [key, skill] of STATE.invokedSkills) {
+  const skills = getState().invokedSkills
+  for (const [key, skill] of skills) {
     if (skill.agentId === agentId) {
-      STATE.invokedSkills.delete(key)
+      skills.delete(key)
     }
   }
 }
@@ -1573,16 +1816,17 @@ export function addSlowOperation(operation: string, durationMs: number): void {
   if (operation.includes('exec') && operation.includes('claude-prompt-')) {
     return
   }
+  const s = getState()
   const now = Date.now()
   // Remove stale operations
-  STATE.slowOperations = STATE.slowOperations.filter(
+  s.slowOperations = s.slowOperations.filter(
     op => now - op.timestamp < SLOW_OPERATION_TTL_MS,
   )
   // Add new operation
-  STATE.slowOperations.push({ operation, durationMs, timestamp: now })
+  s.slowOperations.push({ operation, durationMs, timestamp: now })
   // Keep only the most recent operations
-  if (STATE.slowOperations.length > MAX_SLOW_OPERATIONS) {
-    STATE.slowOperations = STATE.slowOperations.slice(-MAX_SLOW_OPERATIONS)
+  if (s.slowOperations.length > MAX_SLOW_OPERATIONS) {
+    s.slowOperations = s.slowOperations.slice(-MAX_SLOW_OPERATIONS)
   }
 }
 
@@ -1597,144 +1841,145 @@ export function getSlowOperations(): ReadonlyArray<{
   durationMs: number
   timestamp: number
 }> {
+  const s = getState()
   // Most common case: nothing tracked. Return a stable reference so the
   // caller's setState() can bail via Object.is instead of re-rendering at 2fps.
-  if (STATE.slowOperations.length === 0) {
+  if (s.slowOperations.length === 0) {
     return EMPTY_SLOW_OPERATIONS
   }
   const now = Date.now()
   // Only allocate a new array when something actually expired; otherwise keep
   // the reference stable across polls while ops are still fresh.
   if (
-    STATE.slowOperations.some(op => now - op.timestamp >= SLOW_OPERATION_TTL_MS)
+    s.slowOperations.some(op => now - op.timestamp >= SLOW_OPERATION_TTL_MS)
   ) {
-    STATE.slowOperations = STATE.slowOperations.filter(
+    s.slowOperations = s.slowOperations.filter(
       op => now - op.timestamp < SLOW_OPERATION_TTL_MS,
     )
-    if (STATE.slowOperations.length === 0) {
+    if (s.slowOperations.length === 0) {
       return EMPTY_SLOW_OPERATIONS
     }
   }
-  // Safe to return directly: addSlowOperation() reassigns STATE.slowOperations
+  // Safe to return directly: addSlowOperation() reassigns s.slowOperations
   // before pushing, so the array held in React state is never mutated.
-  return STATE.slowOperations
+  return s.slowOperations
 }
 
 export function getMainThreadAgentType(): string | undefined {
-  return STATE.mainThreadAgentType
+  return getState().mainThreadAgentType
 }
 
 export function setMainThreadAgentType(agentType: string | undefined): void {
-  STATE.mainThreadAgentType = agentType
+  getState().mainThreadAgentType = agentType
 }
 
 export function getIsRemoteMode(): boolean {
-  return STATE.isRemoteMode
+  return getState().isRemoteMode
 }
 
 export function setIsRemoteMode(value: boolean): void {
-  STATE.isRemoteMode = value
+  getState().isRemoteMode = value
 }
 
 // System prompt section accessors
 
 export function getSystemPromptSectionCache(): Map<string, string | null> {
-  return STATE.systemPromptSectionCache
+  return getState().systemPromptSectionCache
 }
 
 export function setSystemPromptSectionCacheEntry(
   name: string,
   value: string | null,
 ): void {
-  STATE.systemPromptSectionCache.set(name, value)
+  getState().systemPromptSectionCache.set(name, value)
 }
 
 export function clearSystemPromptSectionState(): void {
-  STATE.systemPromptSectionCache.clear()
+  getState().systemPromptSectionCache.clear()
 }
 
 // Last emitted date accessors (for detecting midnight date changes)
 
 export function getLastEmittedDate(): string | null {
-  return STATE.lastEmittedDate
+  return getState().lastEmittedDate
 }
 
 export function setLastEmittedDate(date: string | null): void {
-  STATE.lastEmittedDate = date
+  getState().lastEmittedDate = date
 }
 
 export function getAdditionalDirectoriesForClaudeMd(): string[] {
-  return STATE.additionalDirectoriesForClaudeMd
+  return getState().additionalDirectoriesForClaudeMd
 }
 
 export function setAdditionalDirectoriesForClaudeMd(
   directories: string[],
 ): void {
-  STATE.additionalDirectoriesForClaudeMd = directories
+  getState().additionalDirectoriesForClaudeMd = directories
 }
 
 export function getAllowedChannels(): ChannelEntry[] {
-  return STATE.allowedChannels
+  return getState().allowedChannels
 }
 
 export function setAllowedChannels(entries: ChannelEntry[]): void {
-  STATE.allowedChannels = entries
+  getState().allowedChannels = entries
 }
 
 export function getHasDevChannels(): boolean {
-  return STATE.hasDevChannels
+  return getState().hasDevChannels
 }
 
 export function setHasDevChannels(value: boolean): void {
-  STATE.hasDevChannels = value
+  getState().hasDevChannels = value
 }
 
 export function getPromptCache1hAllowlist(): string[] | null {
-  return STATE.promptCache1hAllowlist
+  return getState().promptCache1hAllowlist
 }
 
 export function setPromptCache1hAllowlist(allowlist: string[] | null): void {
-  STATE.promptCache1hAllowlist = allowlist
+  getState().promptCache1hAllowlist = allowlist
 }
 
 export function getPromptCache1hEligible(): boolean | null {
-  return STATE.promptCache1hEligible
+  return getState().promptCache1hEligible
 }
 
 export function setPromptCache1hEligible(eligible: boolean | null): void {
-  STATE.promptCache1hEligible = eligible
+  getState().promptCache1hEligible = eligible
 }
 
 export function getAfkModeHeaderLatched(): boolean | null {
-  return STATE.afkModeHeaderLatched
+  return getState().afkModeHeaderLatched
 }
 
 export function setAfkModeHeaderLatched(v: boolean): void {
-  STATE.afkModeHeaderLatched = v
+  getState().afkModeHeaderLatched = v
 }
 
 export function getFastModeHeaderLatched(): boolean | null {
-  return STATE.fastModeHeaderLatched
+  return getState().fastModeHeaderLatched
 }
 
 export function setFastModeHeaderLatched(v: boolean): void {
-  STATE.fastModeHeaderLatched = v
+  getState().fastModeHeaderLatched = v
 }
 
 export function getCacheEditingHeaderLatched(): boolean | null {
-  return STATE.cacheEditingHeaderLatched
+  return getState().cacheEditingHeaderLatched
 }
 
 export function setCacheEditingHeaderLatched(v: boolean): void {
-  STATE.cacheEditingHeaderLatched = v
+  getState().cacheEditingHeaderLatched = v
 }
 
 export function getThinkingClearLatched(): boolean | null {
-  return STATE.thinkingClearLatched
+  return getState().thinkingClearLatched
 }
 
 export function setThinkingClearLatched(v: boolean): void {
-  STATE.thinkingClearLatched = v
+  getState().thinkingClearLatched = v
 }
 
 /**
@@ -1742,17 +1987,18 @@ export function setThinkingClearLatched(v: boolean): void {
  * fresh conversation gets fresh header evaluation.
  */
 export function clearBetaHeaderLatches(): void {
-  STATE.afkModeHeaderLatched = null
-  STATE.fastModeHeaderLatched = null
-  STATE.cacheEditingHeaderLatched = null
-  STATE.thinkingClearLatched = null
+  const s = getState()
+  s.afkModeHeaderLatched = null
+  s.fastModeHeaderLatched = null
+  s.cacheEditingHeaderLatched = null
+  s.thinkingClearLatched = null
 }
 
 export function getPromptId(): string | null {
-  return STATE.promptId
+  return getState().promptId
 }
 
 export function setPromptId(id: string | null): void {
-  STATE.promptId = id
+  getState().promptId = id
 }
 

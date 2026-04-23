@@ -391,24 +391,33 @@ The user cannot receive your response until the team is completely shut down.
 Shut down your team and prepare your final response for the user.`
 
 // Track message UUIDs received during the current session runtime
+// Per-session via getState() for multi-user isolation.
+import { getState } from '../bootstrap/state.js'
 const MAX_RECEIVED_UUIDS = 10_000
-const receivedMessageUuids = new Set<UUID>()
-const receivedMessageUuidsOrder: UUID[] = []
+
+function _uuidSet(): Set<string> {
+  return getState().receivedMessageUuidsSet
+}
+function _uuidOrder(): string[] {
+  return getState().receivedMessageUuidsOrder
+}
 
 function trackReceivedMessageUuid(uuid: UUID): boolean {
-  if (receivedMessageUuids.has(uuid)) {
+  const set = _uuidSet()
+  if (set.has(uuid)) {
     return false // duplicate
   }
-  receivedMessageUuids.add(uuid)
-  receivedMessageUuidsOrder.push(uuid)
+  set.add(uuid)
+  _uuidOrder().push(uuid)
   // Evict oldest entries when at capacity
-  if (receivedMessageUuidsOrder.length > MAX_RECEIVED_UUIDS) {
-    const toEvict = receivedMessageUuidsOrder.splice(
+  const order = _uuidOrder()
+  if (order.length > MAX_RECEIVED_UUIDS) {
+    const toEvict = order.splice(
       0,
-      receivedMessageUuidsOrder.length - MAX_RECEIVED_UUIDS,
+      order.length - MAX_RECEIVED_UUIDS,
     )
     for (const old of toEvict) {
-      receivedMessageUuids.delete(old)
+      set.delete(old)
     }
   }
   return true // new UUID

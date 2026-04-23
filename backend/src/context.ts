@@ -1,7 +1,7 @@
 import { feature } from 'bun:bundle'
-import memoize from 'lodash-es/memoize.js'
 import {
   getAdditionalDirectoriesForClaudeMd,
+  getState,
   setCachedClaudeMdContent,
 } from './bootstrap/state.js'
 import { getLocalISODate } from './constants/common.js'
@@ -28,12 +28,40 @@ export function getSystemPromptInjection(): string | null {
 
 export function setSystemPromptInjection(value: string | null): void {
   systemPromptInjection = value
-  // Clear context caches immediately when injection changes
-  getUserContext.cache.clear?.()
-  getSystemContext.cache.clear?.()
+  // Clear per-session context caches immediately when injection changes
+  const s = getState()
+  s.contextUserContextCache = undefined
+  s.contextSystemContextCache = undefined
 }
 
-export const getGitStatus = memoize(async (): Promise<string | null> => {
+/**
+ * Per-session async memoize wrapper. Caches result in STATE so different
+ * sessions (different ALS contexts) get independent caches.
+ */
+function _memoizeAsync<T>(
+  cacheKey: 'contextGitStatusCache' | 'contextSystemContextCache' | 'contextUserContextCache',
+  promiseKey: 'contextGitStatusPromise' | 'contextSystemContextPromise' | 'contextUserContextPromise',
+  fn: () => Promise<T>,
+): () => Promise<T> {
+  const result = async (): Promise<T> => {
+    const s = getState()
+    const cached = s[cacheKey] as T | undefined
+    if (cached !== undefined) return cached
+    const existing = s[promiseKey] as Promise<T> | null
+    if (existing) return existing
+    const p = fn().then(v => {
+      const s2 = getState()
+      ;(s2 as any)[cacheKey] = v
+      ;(s2 as any)[promiseKey] = null
+      return v
+    })
+    ;(s as any)[promiseKey] = p
+    return p
+  }
+  return result
+}
+
+export const getGitStatus = _memoizeAsync('contextGitStatusCache', 'contextGitStatusPromise', async (): Promise<string | null> => {
   if (process.env.NODE_ENV === 'test') {
     // Avoid cycles in tests
     return null
@@ -113,7 +141,7 @@ export const getGitStatus = memoize(async (): Promise<string | null> => {
 /**
  * This context is prepended to each conversation, and cached for the duration of the conversation.
  */
-export const getSystemContext = memoize(
+export const getSystemContext = _memoizeAsync('contextSystemContextCache', 'contextSystemContextPromise',
   async (): Promise<{
     [k: string]: string
   }> => {
@@ -152,7 +180,7 @@ export const getSystemContext = memoize(
 /**
  * This context is prepended to each conversation, and cached for the duration of the conversation.
  */
-export const getUserContext = memoize(
+export const getUserContext = _memoizeAsync('contextUserContextCache', 'contextUserContextPromise',
   async (): Promise<{
     [k: string]: string
   }> => {

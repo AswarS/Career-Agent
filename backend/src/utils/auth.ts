@@ -211,6 +211,15 @@ export type ApiKeySource =
   | '/login managed key'
   | 'none'
 
+// ---------------------------------------------------------------------------
+// Server mode ALS session context access
+// ---------------------------------------------------------------------------
+
+// Import getSessionContext at module level for the ALS fast path.
+// SessionContext.ts only imports from node:async_hooks and ./permissions.ts,
+// so there is no circular dependency concern.
+import { getSessionContext as _getSessionContext } from '../server/SessionContext.js'
+
 export function getAnthropicApiKey(): null | string {
   const { key } = getAnthropicApiKeyWithSource()
   return key
@@ -229,6 +238,15 @@ export function getAnthropicApiKeyWithSource(
   key: null | string
   source: ApiKeySource
 } {
+  // Server mode fast path: if running inside an ALS session context with a
+  // per-session API key, return it immediately.  This allows multi-user server
+  // sessions to each carry their own Anthropic API key without requiring a
+  // global ANTHROPIC_API_KEY env var.
+  const sessionCtx = _getSessionContext()
+  if (sessionCtx?.config.apiKey) {
+    return { key: sessionCtx.config.apiKey, source: 'ANTHROPIC_API_KEY' }
+  }
+
   // --bare: hermetic auth. Only ANTHROPIC_API_KEY env or apiKeyHelper from
   // the --settings flag. Never touches keychain, config file, or approval
   // lists. 3P (Bedrock/Vertex/Foundry) uses provider creds, not this path.

@@ -326,8 +326,19 @@ export function getProjectsDir(): string {
   return join(getClaudeConfigHomeDir(), 'projects')
 }
 
-export function getProjectDir(projectDir: string): string {
+export function getProjectDir(projectDir: string, userId?: string): string {
+  if (userId) {
+    return join(getClaudeConfigHomeDir(), 'users', sanitizePath(userId), 'projects', sanitizePath(projectDir))
+  }
   return join(getProjectsDir(), sanitizePath(projectDir))
+}
+
+/**
+ * Get the base projects directory for a specific user.
+ * Returns ~/.claude/users/<userId>/projects
+ */
+export function getUserProjectsDir(userId: string): string {
+  return join(getClaudeConfigHomeDir(), 'users', sanitizePath(userId), 'projects')
 }
 
 /**
