@@ -84,6 +84,45 @@ Supported env vars:
 - `VITE_CAREER_AGENT_HTML_APP_EXAMPLE_URL`
 - `VITE_CAREER_AGENT_NODE_APP_EXAMPLE_URL`
 
+## Frontend-Backend Integration
+
+After starting the backend service (typically running on `http://localhost:4000`), start the frontend with the appropriate command for your OS and shell:
+
+### Linux / macOS (bash/zsh)
+
+```bash
+npm install
+VITE_CAREER_AGENT_CLIENT_MODE=upstream \
+VITE_CAREER_AGENT_API_BASE_URL=http://localhost:4000 \
+VITE_CAREER_AGENT_USER_ID=1 \
+VITE_CAREER_AGENT_WITH_CREDENTIALS=false \
+npm run dev -- --host 127.0.0.1 --port 4173
+```
+
+### Windows (cmd)
+
+```cmd
+npm install
+set VITE_CAREER_AGENT_CLIENT_MODE=upstream
+set VITE_CAREER_AGENT_API_BASE_URL=http://localhost:4000
+set VITE_CAREER_AGENT_USER_ID=1
+set VITE_CAREER_AGENT_WITH_CREDENTIALS=false
+npm run dev -- --host 127.0.0.1 --port 4173
+```
+
+### Windows (PowerShell)
+
+```powershell
+npm install
+$env:VITE_CAREER_AGENT_CLIENT_MODE = "upstream"
+$env:VITE_CAREER_AGENT_API_BASE_URL = "http://localhost:4000"
+$env:VITE_CAREER_AGENT_USER_ID = "1"
+$env:VITE_CAREER_AGENT_WITH_CREDENTIALS = "false"
+npm run dev -- --host 127.0.0.1 --port 4173
+```
+
+After starting, open `http://127.0.0.1:4173/` in your browser for frontend-backend integration testing.
+
 Useful references:
 
 - [Chinese PR workflow](./docs/zh/pr-workflow.md)

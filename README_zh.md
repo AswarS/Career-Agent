@@ -97,6 +97,45 @@ npm run dev:app-examples -- --host 127.0.0.1 --port 4173
 
 注意：前端只负责消费 URL，不负责启动外部项目。真实后端接入后，也应由后端提供可嵌入的 HTTP URL。
 
+## 前后端联调
+
+在后端仓库启动完后端服务（通常运行在 `http://localhost:4000`）后，按照你的操作系统和 shell 选择相应命令启动前端：
+
+### Linux / macOS（bash/zsh）
+
+```bash
+npm install
+VITE_CAREER_AGENT_CLIENT_MODE=upstream \
+VITE_CAREER_AGENT_API_BASE_URL=http://localhost:4000 \
+VITE_CAREER_AGENT_USER_ID=1 \
+VITE_CAREER_AGENT_WITH_CREDENTIALS=false \
+npm run dev -- --host 127.0.0.1 --port 4173
+```
+
+### Windows（cmd）
+
+```cmd
+npm install
+set VITE_CAREER_AGENT_CLIENT_MODE=upstream
+set VITE_CAREER_AGENT_API_BASE_URL=http://localhost:4000
+set VITE_CAREER_AGENT_USER_ID=1
+set VITE_CAREER_AGENT_WITH_CREDENTIALS=false
+npm run dev -- --host 127.0.0.1 --port 4173
+```
+
+### Windows（PowerShell）
+
+```powershell
+npm install
+$env:VITE_CAREER_AGENT_CLIENT_MODE = "upstream"
+$env:VITE_CAREER_AGENT_API_BASE_URL = "http://localhost:4000"
+$env:VITE_CAREER_AGENT_USER_ID = "1"
+$env:VITE_CAREER_AGENT_WITH_CREDENTIALS = "false"
+npm run dev -- --host 127.0.0.1 --port 4173
+```
+
+启动后在浏览器打开 `http://127.0.0.1:4173/` 即可进行前后端交互测试。
+
 ## 验证命令
 
 普通改动至少运行：
