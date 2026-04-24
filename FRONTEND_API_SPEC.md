@@ -7,6 +7,70 @@
 
 ---
 
+## 0. 开发环境启动
+
+### 0.1 后端（端口 8080）
+
+```bash
+cd backend/
+bun install
+bun run http-serve --port 8080
+```
+
+后端启动后监听 `http://localhost:8080`，提供 REST API + WebSocket + SSE。
+
+### 0.2 前端（端口 5173）
+
+```bash
+cd frontend/
+npm install
+npm run dev
+```
+
+前端启动后访问 `http://localhost:5173`，Vite 开发服务器已配置代理：
+
+```typescript
+// frontend/vite.config.ts
+server: {
+  port: 5173,
+  proxy: {
+    '/v1': {
+      target: 'http://localhost:8080',  // 自动转发到后端
+      changeOrigin: true,
+    },
+  },
+}
+```
+
+前端代码中请求 `/v1/sessions`、`/v1/sessions/:id/message` 等路径会自动代理到后端 8080 端口，**无需手动配置 CORS**。
+
+### 0.3 联调启动顺序
+
+1. **先启动后端**：`cd backend && bun run http-serve --port 8080`
+2. **再启动前端**：`cd frontend && npm run dev`
+3. 浏览器打开 `http://localhost:5173`
+
+### 0.4 前端构建
+
+```bash
+cd frontend/
+npm run build      # tsc + vite build → dist/
+npm run preview    # 本地预览构建产物
+```
+
+### 0.5 前端技术栈
+
+| 依赖 | 版本 | 用途 |
+|------|------|------|
+| React | ^19.0.0 | UI 框架 |
+| React DOM | ^19.0.0 | DOM 渲染 |
+| react-markdown | ^9.0.3 | Markdown 渲染 |
+| remark-gfm | ^4.0.0 | GFM 表格/删除线等扩展 |
+| Vite | ^6.1.0 | 构建工具 + 开发服务器 |
+| TypeScript | ^5.7.0 | 类型检查 |
+
+---
+
 ## 1. 通用约定
 
 ### 1.1 认证
