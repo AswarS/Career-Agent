@@ -7,6 +7,7 @@ import {
 } from '@anthropic-ai/sdk'
 import type { QuerySource } from 'src/constants/querySource.js'
 import type { SystemAPIErrorMessage } from 'src/types/message.js'
+import { isServerMode } from 'src/server/SessionContext.js'
 import { isAwsCredentialsProviderError } from 'src/utils/aws.js'
 import { logForDebugging } from 'src/utils/debug.js'
 import { logError } from 'src/utils/log.js'
@@ -458,6 +459,10 @@ export async function* withRetry<T>(
           ),
           PERSISTENT_RESET_CAP_MS,
         )
+      } else if (isServerMode()) {
+        // Server mode: fixed 20s interval to avoid amplifying rate limits
+        // across concurrent sessions sharing the same API key.
+        delayMs = 20_000
       } else {
         delayMs = getRetryDelay(attempt, retryAfter)
       }
@@ -789,6 +794,11 @@ function shouldRetry(error: APIError): boolean {
 export function getDefaultMaxRetries(): number {
   if (process.env.CLAUDE_CODE_MAX_RETRIES) {
     return parseInt(process.env.CLAUDE_CODE_MAX_RETRIES, 10)
+  }
+  // Server mode: concurrent sessions share the same API key, so aggressive
+  // retries amplify rate limiting. Cap at 3 to avoid snowballing 429s.
+  if (isServerMode()) {
+    return 3
   }
   return DEFAULT_MAX_RETRIES
 }

@@ -132,22 +132,73 @@ function buildToolPermissionContext(
 // canUseTool — server mode permission callback
 // ---------------------------------------------------------------------------
 
-function createServerCanUseTool(permissionConfig?: PermissionConfig): CanUseToolFn {
-  return async (tool: ToolType, input: any, _ctx: any, _msg: any, _id: string): Promise<PermissionDecision<any>> => {
+const TOOL_RESPONSE_TIMEOUT_MS = 30_000
+
+function createServerCanUseTool(
+  permissionConfig?: PermissionConfig,
+  context?: SessionContext,
+): CanUseToolFn {
+  return async (tool: ToolType, input: any, _ctx: any, _msg: any, toolUseId: string): Promise<PermissionDecision<any>> => {
     const result = checkToolPermission(tool.name, permissionConfig ?? { mode: 'allow_all' })
-    if (result.allowed) {
+    if (!result.allowed) {
       return {
-        behavior: 'allow',
-        updatedInput: input,
+        behavior: 'deny',
+        message: result.reason,
         decisionReason: { type: 'config' },
       }
     }
+
+    // For tools that require user interaction (e.g. AskUserQuestion),
+    // wait for the frontend to submit a response via POST tool-response.
+    // The assistant SSE event with the tool_use block was already emitted,
+    // so the frontend can render the interactive UI while we wait here.
+    if (tool.requiresUserInteraction?.() && context) {
+      const response = await waitForToolResponse(context, toolUseId)
+      if (!response || !response.approved) {
+        return {
+          behavior: 'deny',
+          message: 'User declined to answer questions',
+          decisionReason: { type: 'user' },
+        }
+      }
+      return {
+        behavior: 'allow',
+        updatedInput: { ...input, answers: response.answers ?? {}, annotations: response.annotations },
+        decisionReason: { type: 'user' },
+      }
+    }
+
     return {
-      behavior: 'deny',
-      message: result.reason,
+      behavior: 'allow',
+      updatedInput: input,
       decisionReason: { type: 'config' },
     }
   }
+}
+
+/**
+ * Wait for a frontend tool-response submission, with a timeout.
+ * Returns undefined if the wait times out.
+ */
+function waitForToolResponse(
+  context: SessionContext,
+  toolUseId: string,
+): Promise<import('./SessionContext.js').ToolResponsePayload | undefined> {
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => {
+      context.pendingToolResponses.delete(toolUseId)
+      resolve(undefined)
+    }, TOOL_RESPONSE_TIMEOUT_MS)
+
+    context.pendingToolResponses.set(toolUseId, {
+      resolve: (payload) => {
+        clearTimeout(timeout)
+        context.pendingToolResponses.delete(toolUseId)
+        resolve(payload)
+      },
+      timeout,
+    })
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -164,7 +215,7 @@ export function createQueryEngineForSession(
   } = {},
 ): QueryEngine {
   const { getAppState, setAppState } = createServerAppState(context.config.permissions)
-  const canUseTool = createServerCanUseTool(context.config.permissions)
+  const canUseTool = createServerCanUseTool(context.config.permissions, context)
   const toolPermissionContext = getAppState().toolPermissionContext
 
   // Get the full tool set — this includes Read, Write, Edit, Bash, Glob, Grep, etc.

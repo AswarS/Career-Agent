@@ -23,6 +23,17 @@ export type SessionConfig = {
   userId?: string
 }
 
+export type ToolResponsePayload = {
+  answers?: Record<string, string>
+  annotations?: Record<string, { preview?: string; notes?: string }>
+  approved: boolean
+}
+
+export type PendingToolResponse = {
+  resolve: (payload: ToolResponsePayload) => void
+  timeout: ReturnType<typeof setTimeout>
+}
+
 export type SessionContext = {
   sessionId: string
   userId?: string
@@ -37,6 +48,8 @@ export type SessionContext = {
   lastActivityAt: number
   isHeadless: true
   sessionSwitched: { subscribe: (fn: (...args: any[]) => void) => void; emit: (...args: any[]) => void }
+  /** Interactive tools (e.g. AskUserQuestion) awaiting user responses via POST tool-response */
+  pendingToolResponses: Map<string, PendingToolResponse>
 }
 
 // ---------------------------------------------------------------------------

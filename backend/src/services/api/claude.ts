@@ -145,6 +145,7 @@ import type { QuerySource } from 'src/constants/querySource.js'
 import type { Notification } from 'src/context/notifications.js'
 import { addToTotalSessionCost } from 'src/cost-tracker.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from 'src/services/analytics/growthbook.js'
+import { isServerMode as getIsServerMode } from 'src/server/SessionContext.js'
 import type { AgentId } from 'src/types/ids.js'
 import {
   ADVISOR_TOOL_INSTRUCTIONS,
@@ -2468,6 +2469,7 @@ async function* queryModel(
       // and runs it again. See inc-4258.
       const disableFallback =
         isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK) ||
+        getIsServerMode() ||
         getFeatureValue_CACHED_MAY_BE_STALE(
           'tengu_disable_streaming_to_non_streaming_fallback',
           false,

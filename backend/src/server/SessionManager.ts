@@ -87,6 +87,7 @@ export class SessionManager {
       lastActivityAt: Date.now(),
       isHeadless: true as const,
       sessionSwitched: createSignal<[id: SessionId]>(),
+      pendingToolResponses: new Map(),
     }
 
     // Create the QueryEngine — this gives the session full LLM + tool capabilities

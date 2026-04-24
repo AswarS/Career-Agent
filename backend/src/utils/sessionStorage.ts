@@ -444,50 +444,64 @@ export const getProjectDir = memoize((projectDir: string, userId?: string): stri
   return join(getProjectsDir(), sanitizePath(projectDir))
 }, (projectDir: string, userId?: string) => `${projectDir}::${userId ?? getUserId() ?? ''}`)
 
-let project: Project | null = null
+// Per-session Project instances for multi-user isolation.
+// CLI mode: getSessionId() returns a stable ID → one Project instance.
+// Server mode: each ALS-routed session gets its own Project, preventing
+// sessionFile/pendingEntries from being shared across concurrent users.
+const projectsBySession = new Map<string, Project>()
 let cleanupRegistered = false
 
 function getProject(): Project {
-  if (!project) {
-    project = new Project()
+  const sessionId = getSessionId()
+  let p = projectsBySession.get(sessionId)
+  if (!p) {
+    p = new Project()
+    projectsBySession.set(sessionId, p)
 
-    // Register flush as a cleanup handler (only once)
+    // Register flush as a cleanup handler (only once across all projects)
     if (!cleanupRegistered) {
       registerCleanup(async () => {
-        // Flush queued writes first, then re-append session metadata
-        // (customTitle, tag) so they always appear in the last 64KB tail
-        // window. readLiteMetadata only reads the tail to extract these
-        // fields — if enough messages are appended after a /rename, the
-        // custom-title entry gets pushed outside the window and --resume
-        // shows the auto-generated firstPrompt instead.
-        await project?.flush()
-        try {
-          project?.reAppendSessionMetadata()
-        } catch {
-          // Best-effort — don't let metadata re-append crash the cleanup
+        // Flush ALL project instances so no session loses data on shutdown.
+        for (const proj of projectsBySession.values()) {
+          await proj.flush()
+          try {
+            proj.reAppendSessionMetadata()
+          } catch {
+            // Best-effort — don't let metadata re-append crash the cleanup
+          }
         }
       })
       cleanupRegistered = true
     }
   }
-  return project
+  return p
 }
 
 /**
- * Reset the Project singleton's flush state for testing.
+ * Remove a session's Project instance after the session is destroyed.
+ * Prevents memory leaks in long-running server mode.
+ */
+export function removeProjectForSession(sessionId: string): void {
+  projectsBySession.delete(sessionId)
+}
+
+/**
+ * Reset all Project instances' flush state for testing.
  * This ensures tests don't interfere with each other via shared counter state.
  */
 export function resetProjectFlushStateForTesting(): void {
-  project?._resetFlushState()
+  for (const p of projectsBySession.values()) {
+    p._resetFlushState()
+  }
 }
 
 /**
- * Reset the entire Project singleton for testing.
+ * Reset all Project instances for testing.
  * This ensures tests with different CLAUDE_CONFIG_DIR values
  * don't share stale sessionFile paths.
  */
 export function resetProjectForTesting(): void {
-  project = null
+  projectsBySession.clear()
 }
 
 export function setSessionFileForTesting(path: string): void {

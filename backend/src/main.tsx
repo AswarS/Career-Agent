@@ -3909,6 +3909,12 @@ async function run(): Promise<CommanderCommand> {
       port?: string; host?: string; authToken?: string;
       maxSessions?: string; idleTimeout?: string; workspace?: string;
     }) => {
+      // http-serve bypasses the default action (and therefore init()),
+      // so enableConfigs() must be called explicitly — without it,
+      // QueryEngine throws "Config accessed before allowed." on every
+      // request because configReadingAllowed stays false.
+      const { enableConfigs } = await import('./utils/config.js')
+      enableConfigs()
       const { startServer } = await import('./server/index.js')
       await startServer({
         port: parseInt(opts.port ?? '8080', 10),

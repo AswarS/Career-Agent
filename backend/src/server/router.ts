@@ -349,6 +349,44 @@ function messageRoute(): Route {
   }
 }
 
+function toolResponseRoute(): Route {
+  return {
+    method: 'POST',
+    pattern: /^\/v1\/sessions\/([^/]+)\/tool-response$/,
+    handler: async (params, req, _config, manager?: SessionManager) => {
+      if (!manager) return errorResponse('Internal error', 500)
+      const sessionId = params['0']
+      const session = manager.getSession(sessionId)
+      if (!session) return errorResponse('Session not found', 404)
+
+      let body: Record<string, unknown>
+      try {
+        const text = await req.text()
+        if (!text) return errorResponse('Invalid JSON body', 400)
+        body = JSON.parse(text)
+      } catch {
+        return errorResponse('Invalid JSON body', 400)
+      }
+
+      const toolUseId = body.toolUseId as string | undefined
+      if (!toolUseId) return errorResponse('"toolUseId" is required', 400)
+
+      const pending = session.context.pendingToolResponses.get(toolUseId)
+      if (!pending) {
+        return errorResponse('No pending tool response found for this toolUseId (may have timed out)', 404)
+      }
+
+      pending.resolve({
+        answers: body.answers as Record<string, string> | undefined,
+        annotations: body.annotations as Record<string, { preview?: string; notes?: string }> | undefined,
+        approved: body.approved !== false,
+      })
+
+      return json({ accepted: true })
+    },
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Router factory
 // ---------------------------------------------------------------------------
@@ -363,6 +401,7 @@ export function createRouter(manager: SessionManager, config: ServerConfig) {
     getSessionRoute(),
     deleteSessionRoute(),
     messageRoute(),
+    toolResponseRoute(),
   ]
 
   async function handleRequest(req: Request): Promise<Response> {
