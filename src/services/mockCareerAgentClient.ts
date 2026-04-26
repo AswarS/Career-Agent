@@ -462,24 +462,24 @@ const messagesByThread: Record<string, ThreadMessage[]> = {
 const uploadedFilesByAssetId = new Map<string, UploadedConversationFile>();
 
 let profile: ProfileRecord = {
-  displayName: 'Fancy',
+  displayName: 'Biter',
   locale: 'zh-CN',
-  timezone: 'Asia/Singapore',
-  currentRole: '偏前端实现的产品构建者',
-  employmentStatus: '在持续推进副项目的同时探索下一份角色机会',
-  experienceSummary: '擅长前端实现、API 协调和 AI 辅助交付。',
-  educationSummary: '以产品驱动实践为核心的结构化自学。',
-  locationRegion: '新加坡 / 可远程协作',
-  targetRole: 'AI 产品前端工程师',
-  targetIndustries: ['AI 工具', '开发者产品', '职业规划工具'],
-  shortTermGoal: '交付首个具备稳定契约的智能体工作台前端切片。',
-  longTermGoal: '成长为 AI 原生产品方向的前端负责人。',
+  timezone: 'Asia/Shanghai',
+  currentRole: 'LLM Engineer',
+  employmentStatus: 'employed',
+  experienceSummary: '专注大模型底层架构和应用开发，具备丰富的项目交付经验。',
+  educationSummary: '计算机科学硕士，曾就职于多家知名科技公司，主导过多个 AI 产品的前端架构设计和实现。',
+  locationRegion: '北京，中国',
+  targetRole: 'LLM base model engineer',
+  targetIndustries: [],
+  shortTermGoal: '',
+  longTermGoal: '',
   weeklyTimeBudget: '固定工作之外每周可投入 10-12 小时',
   constraints: ['需要可持续推进节奏', '不能依赖不稳定的后端契约'],
-  workPreferences: ['低干扰工作环境', '契约清晰', '产品结果可见'],
-  learningPreferences: ['通过交付来学习', '偏好一次推进一个切片'],
-  keyStrengths: ['前端实现', 'API 协调', '面向产品的迭代能力'],
-  riskSignals: ['过早铺得太大', '并行方向过多'],
+  workPreferences: ['低干扰工作环境'],
+  learningPreferences: [],
+  keyStrengths: [],
+  riskSignals: [],
   portfolioLinks: ['https://example.com/portfolio'],
 };
 
@@ -564,6 +564,15 @@ function cloneArtifactRecord(input: ArtifactRecord): ArtifactRecord {
         },
       };
   }
+}
+
+function cloneThreadMessage(input: ThreadMessage): ThreadMessage {
+  return {
+    ...input,
+    actions: input.actions?.map((action) => ({ ...action })),
+    media: input.media?.map((media) => ({ ...media })),
+    files: input.files?.map((file) => ({ ...file })),
+  };
 }
 
 function buildProfileSummaryArtifact(nextProfile: ProfileRecord, revision: number): ArtifactRecord {
@@ -1667,7 +1676,7 @@ export function createMockCareerAgentClient(): CareerAgentClient {
       return { ...nextThread };
     },
     async getThreadMessages(threadId: string) {
-      return messagesByThread[threadId] ?? [];
+      return (messagesByThread[threadId] ?? []).map(cloneThreadMessage);
     },
     async uploadThreadFile(threadId, attachment) {
       const isFile = typeof File !== 'undefined' && attachment instanceof File;

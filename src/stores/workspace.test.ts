@@ -138,6 +138,29 @@ describe('useWorkspaceStore', () => {
     expect(workspaceStore.messages[workspaceStore.messages.length - 1]?.role).toBe('assistant');
   });
 
+  it('does not duplicate mock user messages after loading a thread before submitting', async () => {
+    const workspaceStore = useWorkspaceStore();
+
+    await workspaceStore.initialize();
+    const thread = await workspaceStore.createThread({
+      title: '重复检查',
+      preview: '验证 mock 发送不会重复用户消息。',
+    });
+    await workspaceStore.setActiveThread(thread.id);
+
+    await workspaceStore.submitDraftMessage({
+      content: '事实上是啥',
+      attachments: [],
+    });
+
+    expect(workspaceStore.messages.filter((message) => (
+      message.role === 'user' && message.content === '事实上是啥'
+    ))).toHaveLength(1);
+    expect(workspaceStore.messages.filter((message) => (
+      message.role === 'assistant' && message.content === '已收到你的消息。mock 模式下不会调用真实后端。'
+    ))).toHaveLength(1);
+  });
+
   it('revokes local blob attachment urls before clearing messages on thread switch', async () => {
     const revokeSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
     const workspaceStore = useWorkspaceStore();

@@ -32,9 +32,9 @@ function createStubClient(): CareerAgentClient {
       status: 'done',
     })),
     getProfile: vi.fn(async () => ({
-      displayName: 'Fancy',
+      displayName: 'Biter',
       locale: 'zh-CN',
-      timezone: 'Asia/Singapore',
+      timezone: 'Asia/Shanghai',
       currentRole: '',
       employmentStatus: '',
       experienceSummary: '',
