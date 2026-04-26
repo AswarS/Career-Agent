@@ -6,12 +6,14 @@ import type {
   ArtifactViewMode,
   MessageAction,
   MessageMedia,
+  MessageFileAttachment,
   MessageKind,
   ProfileRecord,
   ProfileSuggestion,
   ThreadMessage,
   ThreadStatus,
   ThreadSummary,
+  UploadedConversationFile,
 } from '../types/entities';
 
 export interface UpstreamThreadSummary {
@@ -62,7 +64,7 @@ export interface UpstreamMessageAction {
 }
 
 export interface UpstreamMessageMedia {
-  id?: string;
+  id?: string | number;
   kind?: string;
   type?: string;
   url?: string | null;
@@ -74,6 +76,42 @@ export interface UpstreamMessageMedia {
   mimeType?: string | null;
   poster_url?: string | null;
   posterUrl?: string | null;
+  storage_path?: string | null;
+  storagePath?: string | null;
+  size_bytes?: number | string | null;
+  sizeBytes?: number | string | null;
+  created_at?: string | number | Date | null;
+  createdAt?: string | number | Date | null;
+}
+
+export interface UpstreamUploadedConversationFile {
+  asset_id?: string | number | null;
+  assetId?: string | number | null;
+  id?: string | number | null;
+  kind?: string | null;
+  url?: string | null;
+  title?: string | null;
+  mime_type?: string | null;
+  mimeType?: string | null;
+  size_bytes?: number | string | null;
+  sizeBytes?: number | string | null;
+  created_at?: string | number | Date | null;
+  createdAt?: string | number | Date | null;
+  storage_path?: string | null;
+  storagePath?: string | null;
+  stored_file_name?: string | null;
+  storedFileName?: string | null;
+  original_name?: string | null;
+  originalName?: string | null;
+}
+
+export interface UpstreamSendThreadMessageResult {
+  accepted?: boolean | null;
+  message_id?: string | number | null;
+  messageId?: string | number | null;
+  assistant_message_id?: string | number | null;
+  assistantMessageId?: string | number | null;
+  status?: string | null;
 }
 
 export interface UpstreamProfileSuggestion {
@@ -264,7 +302,7 @@ function normalizeMessageMedia(media: UpstreamMessageMedia[] | null | undefined)
     }
 
     nextMedia.push({
-      id: item.id?.trim() || `media-${nextMedia.length + 1}`,
+      id: normalizeId(item.id, `media-${nextMedia.length + 1}`),
       kind,
       url,
       title: normalizeOptionalText(item.title),
@@ -280,6 +318,42 @@ function normalizeMessageMedia(media: UpstreamMessageMedia[] | null | undefined)
 
 function mergeMessageMediaSources(input: UpstreamThreadMessage): UpstreamMessageMedia[] {
   return [...input.media ?? [], ...input.attachments ?? []];
+}
+
+function normalizeSizeBytes(value: number | string | null | undefined): number | undefined {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : undefined;
+  }
+
+  if (typeof value === 'string') {
+    const numericValue = Number(value);
+    return Number.isFinite(numericValue) ? numericValue : undefined;
+  }
+
+  return undefined;
+}
+
+function normalizeMessageFiles(media: UpstreamMessageMedia[] | null | undefined): MessageFileAttachment[] | undefined {
+  const nextFiles: MessageFileAttachment[] = [];
+
+  for (const item of media ?? []) {
+    const kind = item.kind ?? item.type;
+    const url = normalizeMediaUrl(item.url ?? item.src ?? item.storagePath ?? item.storage_path);
+
+    if (kind !== 'file' || !url) {
+      continue;
+    }
+
+    nextFiles.push({
+      id: normalizeId(item.id, `file-${nextFiles.length + 1}`),
+      name: normalizeOptionalText(item.title) ?? `文件 ${nextFiles.length + 1}`,
+      url,
+      mimeType: normalizeOptionalText(item.mimeType ?? item.mime_type),
+      sizeBytes: normalizeSizeBytes(item.sizeBytes ?? item.size_bytes),
+    });
+  }
+
+  return nextFiles.length ? nextFiles : undefined;
 }
 
 function extractReasoningBlock(content: string): { content: string; reasoning: string | null } {
@@ -337,6 +411,7 @@ export function normalizeThreadMessage(input: UpstreamThreadMessage, fallbackThr
     : { content: input.content, reasoning: null };
   const rawAgentId = input.agentId ?? input.agent_id;
   const normalizedAgentId = normalizeId(rawAgentId, '');
+  const mergedMedia = mergeMessageMediaSources(input);
 
   return {
     id: normalizeId(input.id, 'message-unknown'),
@@ -352,8 +427,38 @@ export function normalizeThreadMessage(input: UpstreamThreadMessage, fallbackThr
     agentName: input.agentName ?? input.agent_name ?? null,
     agentAccent: normalizeAgentAccent(input.agentAccent ?? input.agent_accent),
     actions: input.role === 'assistant' ? normalizeMessageActions(input.actions) : undefined,
-    media: normalizeMessageMedia(mergeMessageMediaSources(input)),
+    media: normalizeMessageMedia(mergedMedia),
+    files: normalizeMessageFiles(mergedMedia),
     createdAt: normalizeTimestamp(input.createdAt ?? input.created_at),
+  };
+}
+
+export function normalizeUploadedConversationFile(input: UpstreamUploadedConversationFile): UploadedConversationFile {
+  const assetId = normalizeId(input.assetId ?? input.asset_id ?? input.id, 'asset-unknown');
+  const kind = input.kind === 'image' || input.kind === 'video' ? input.kind : 'file';
+  const url = normalizeMediaUrl(input.url ?? input.storagePath ?? input.storage_path) ?? '';
+  const title = normalizeOptionalText(input.title ?? input.originalName ?? input.original_name) ?? assetId;
+
+  return {
+    assetId,
+    kind,
+    url,
+    title,
+    mimeType: normalizeOptionalText(input.mimeType ?? input.mime_type) ?? 'application/octet-stream',
+    sizeBytes: normalizeSizeBytes(input.sizeBytes ?? input.size_bytes) ?? 0,
+    createdAt: normalizeTimestamp(input.createdAt ?? input.created_at),
+    storagePath: normalizeMediaUrl(input.storagePath ?? input.storage_path) ?? url,
+    storedFileName: normalizeOptionalText(input.storedFileName ?? input.stored_file_name) ?? '',
+    originalName: normalizeOptionalText(input.originalName ?? input.original_name) ?? title,
+  };
+}
+
+export function normalizeSendThreadMessageResult(input: UpstreamSendThreadMessageResult) {
+  return {
+    accepted: input.accepted ?? false,
+    messageId: normalizeId(input.messageId ?? input.message_id, ''),
+    assistantMessageId: normalizeId(input.assistantMessageId ?? input.assistant_message_id, ''),
+    status: normalizeOptionalText(input.status) ?? 'done',
   };
 }
 

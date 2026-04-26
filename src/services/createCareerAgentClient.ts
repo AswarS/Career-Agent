@@ -21,6 +21,8 @@ function createUnavailableCareerAgentClient(message: string): CareerAgentClient 
     listThreads: unavailable,
     createThread: unavailable,
     getThreadMessages: unavailable,
+    uploadThreadFile: unavailable,
+    sendMessage: unavailable,
     getProfile: unavailable,
     updateProfile: unavailable,
     listProfileSuggestions: unavailable,
