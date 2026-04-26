@@ -43,8 +43,8 @@ watch(
   },
 );
 
-function handleSubmit(submission: DraftMessageSubmission) {
-  workspaceStore.submitDraftMessage(submission);
+async function handleSubmit(submission: DraftMessageSubmission) {
+  await workspaceStore.submitDraftMessage(submission);
 }
 
 async function handleMessageAction(action: MessageAction) {

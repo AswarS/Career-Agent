@@ -54,7 +54,7 @@ describe('useWorkspaceStore', () => {
     expect(workspaceStore.messagesStatus).toBe('idle');
   });
 
-  it('creates a thread from the first submission and replays the local draft after route activation', async () => {
+  it('creates a thread from the first submission and sends the draft immediately', async () => {
     const workspaceStore = useWorkspaceStore();
 
     await workspaceStore.initialize();
@@ -65,8 +65,13 @@ describe('useWorkspaceStore', () => {
 
     expect(thread).not.toBeNull();
     expect(thread?.title).toBe('请帮我梳理本周重点工作和学习安排');
-    expect(workspaceStore.messages).toEqual([]);
-    expect(workspaceStore.messagesStatus).toBe('idle');
+    expect(workspaceStore.messagesStatus).toBe('ready');
+    expect(workspaceStore.messages).toHaveLength(2);
+    expect(workspaceStore.messages[0]).toMatchObject({
+      threadId: thread!.id,
+      role: 'user',
+      content: '请帮我梳理本周重点工作和学习安排',
+    });
 
     await workspaceStore.setActiveThread(thread!.id);
 
@@ -77,17 +82,14 @@ describe('useWorkspaceStore', () => {
       role: 'user',
       content: '请帮我梳理本周重点工作和学习安排',
     });
-    expect(workspaceStore.messages[1]).toMatchObject({
-      threadId: thread!.id,
-      role: 'system',
-    });
+    expect(workspaceStore.messages[1]?.role).toBe('assistant');
   });
 
-  it('adds local image media and file attachments when submitting a draft message', () => {
+  it('uploads local image media and file attachments when submitting a draft message', async () => {
     const workspaceStore = useWorkspaceStore();
     workspaceStore.activeThreadId = 'thread-001';
 
-    workspaceStore.submitDraftMessage({
+    await workspaceStore.submitDraftMessage({
       content: '',
       attachments: [
         {
@@ -109,12 +111,14 @@ describe('useWorkspaceStore', () => {
       ],
     });
 
-    expect(workspaceStore.messages[0]).toMatchObject({
+    const sentMessage = workspaceStore.messages.find((message) => message.content === '（已添加附件）');
+
+    expect(sentMessage).toMatchObject({
       role: 'user',
       content: '（已添加附件）',
       media: [
         {
-          id: 'local-image-001',
+          id: expect.any(String),
           kind: 'image',
           url: 'blob:http://localhost/image',
           title: 'diagram.png',
@@ -123,7 +127,7 @@ describe('useWorkspaceStore', () => {
       ],
       files: [
         {
-          id: 'local-file-001',
+          id: expect.any(String),
           name: 'resume.pdf',
           url: 'blob:http://localhost/file',
           mimeType: 'application/pdf',
@@ -131,7 +135,7 @@ describe('useWorkspaceStore', () => {
         },
       ],
     });
-    expect(workspaceStore.messages[1]?.content).toContain('真实上传接口尚未接通');
+    expect(workspaceStore.messages[workspaceStore.messages.length - 1]?.role).toBe('assistant');
   });
 
   it('revokes local blob attachment urls before clearing messages on thread switch', async () => {

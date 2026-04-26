@@ -57,6 +57,7 @@ Primary product and implementation documents:
 - the Vue shell, conversation workspace, profile page, artifact host, mock adapter, and upstream adapter boundary are implemented
 - conversation actions can open work canvases through explicit `open-artifact` actions
 - assistant reasoning, minimal multi-agent presentation, message media, and trusted URL artifacts are represented in the frontend contract
+- upstream mode can create threads, upload conversation files through the backend direct-upload endpoint, send messages, and refresh server-owned message history
 - `dev:app-examples` can validate external HTML / Node app URL artifacts when sibling examples are running
 - phase 5+ validation is active: run `npm run test` and `npm run build` before PRs
 

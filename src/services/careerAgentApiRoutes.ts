@@ -4,6 +4,8 @@ export const CAREER_AGENT_API_ROUTE_PATTERNS = {
   createThread: `${CAREER_AGENT_API_BASE_PATH}/threads`,
   listThreads: `${CAREER_AGENT_API_BASE_PATH}/threads/:userId`,
   threadMessages: `${CAREER_AGENT_API_BASE_PATH}/threads/:threadId/messages`,
+  threadFiles: `${CAREER_AGENT_API_BASE_PATH}/threads/:threadId/files`,
+  threadFile: `${CAREER_AGENT_API_BASE_PATH}/threads/:threadId/files/:fileName`,
   profile: `${CAREER_AGENT_API_BASE_PATH}/profile`,
   profileSuggestions: `${CAREER_AGENT_API_BASE_PATH}/profile/suggestions`,
   listArtifacts: `${CAREER_AGENT_API_BASE_PATH}/artifacts/:userId`,
@@ -26,6 +28,21 @@ export const CAREER_AGENT_API_ROUTE_DESCRIPTORS = [
     method: 'GET',
     path: CAREER_AGENT_API_ROUTE_PATTERNS.threadMessages,
     purpose: '加载当前会话的消息时间线。',
+  },
+  {
+    method: 'POST',
+    path: CAREER_AGENT_API_ROUTE_PATTERNS.threadMessages,
+    purpose: '向当前会话发送文本或带附件引用的消息。',
+  },
+  {
+    method: 'POST',
+    path: CAREER_AGENT_API_ROUTE_PATTERNS.threadFiles,
+    purpose: '向当前会话直传单个文件，并返回发送消息可引用的 asset id。',
+  },
+  {
+    method: 'GET',
+    path: CAREER_AGENT_API_ROUTE_PATTERNS.threadFile,
+    purpose: '读取当前会话已经上传的文件流。',
   },
   {
     method: 'GET',
@@ -68,6 +85,17 @@ export const CAREER_AGENT_API_ROUTES = {
   },
   threadMessages(threadId: string) {
     return CAREER_AGENT_API_ROUTE_PATTERNS.threadMessages.replace(':threadId', encodeURIComponent(threadId));
+  },
+  sendThreadMessage(threadId: string) {
+    return CAREER_AGENT_API_ROUTE_PATTERNS.threadMessages.replace(':threadId', encodeURIComponent(threadId));
+  },
+  threadFiles(threadId: string) {
+    return CAREER_AGENT_API_ROUTE_PATTERNS.threadFiles.replace(':threadId', encodeURIComponent(threadId));
+  },
+  threadFile(threadId: string, fileName: string) {
+    return CAREER_AGENT_API_ROUTE_PATTERNS.threadFile
+      .replace(':threadId', encodeURIComponent(threadId))
+      .replace(':fileName', encodeURIComponent(fileName));
   },
   profile() {
     return CAREER_AGENT_API_ROUTE_PATTERNS.profile;

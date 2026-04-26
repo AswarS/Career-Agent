@@ -60,6 +60,34 @@ export interface DraftMessageSubmission {
   attachments: DraftMessageAttachment[];
 }
 
+export interface UploadedConversationFile {
+  assetId: string;
+  kind: 'image' | 'video' | 'file';
+  url: string;
+  title: string;
+  mimeType: string;
+  sizeBytes: number;
+  createdAt: string;
+  storagePath: string;
+  storedFileName: string;
+  originalName: string;
+}
+
+export interface SendThreadMessageInput {
+  kind?: MessageKind;
+  content: string;
+  attachmentAssetIds?: string[];
+  clientRequestId?: string;
+  context?: Record<string, unknown>;
+}
+
+export interface SendThreadMessageResult {
+  accepted: boolean;
+  messageId: string;
+  assistantMessageId: string;
+  status: 'queued' | 'processing' | 'done' | 'failed' | string;
+}
+
 export interface ThreadMessage {
   id: string;
   threadId: string;

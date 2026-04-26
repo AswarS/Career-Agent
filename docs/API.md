@@ -332,15 +332,55 @@
 - 方法：DELETE
 - 路径：/api/career-agent/threads/:threadId
 
-### 6.2 多模态上传（图片和文件，待后端接口稳定后启用）
+### 6.2 多模态上传（当前后端直传方案）
 
-当前前端已经支持 composer 选择图片和文件，并将它们作为本地附件加入本地草稿消息。该能力只用于验证 UI 和消息渲染，不代表端到端上传已接通。
+当前前端已经支持 composer 选择图片和文件。upstream 模式下，前端会先调用后端当前实现的会话文件直传接口，拿到 `asset_id` 后再发送消息。
 
-真实上传仍建议采用三段式上传流程。后端需要先提供 upload controller、文件大小限制、mime 类型限制和上传完成后的 asset 引用合同。
+#### 6.2.1 上传文件
 
-采用三段式上传流程。
+- 方法：POST
+- 路径：/api/career-agent/threads/:threadId/files
+- 请求格式：multipart/form-data
+- 表单字段：`file`
+- 响应 200：UploadedConversationFile
 
-#### 6.2.1 申请上传
+响应示例：
+
+```json
+{
+  "asset_id": "asset-123",
+  "assetId": "asset-123",
+  "kind": "file",
+  "url": "/api/career-agent/threads/12/files/1714123456789-uuid.pdf",
+  "title": "resume.pdf",
+  "mime_type": "application/pdf",
+  "mimeType": "application/pdf",
+  "size_bytes": 245991,
+  "sizeBytes": 245991,
+  "created_at": "2026-04-26T10:05:00.000Z",
+  "createdAt": "2026-04-26T10:05:00.000Z",
+  "storage_path": "/api/career-agent/threads/12/files/1714123456789-uuid.pdf",
+  "storagePath": "/api/career-agent/threads/12/files/1714123456789-uuid.pdf",
+  "stored_file_name": "1714123456789-uuid.pdf",
+  "storedFileName": "1714123456789-uuid.pdf",
+  "original_name": "resume.pdf",
+  "originalName": "resume.pdf"
+}
+```
+
+#### 6.2.2 读取已上传文件
+
+- 方法：GET
+- 路径：/api/career-agent/threads/:threadId/files/:fileName
+- 响应 200：文件流
+
+说明：发送消息时通过 `attachment_asset_ids` 引用上传返回的 `asset_id`。后端返回的 `kind: "file"` 附件会在前端归一化为消息文件附件；`image` / `video` 继续按消息媒体展示。
+
+### 6.2A 未来上传方案（三段式，暂未启用）
+
+生产对象存储接入后，仍可演进为三段式上传流程。
+
+#### 6.2A.1 申请上传
 
 - 方法：POST
 - 路径：/api/career-agent/uploads/image/presign
@@ -370,12 +410,12 @@
 }
 ```
 
-#### 6.2.2 上传二进制
+#### 6.2A.2 上传二进制
 
 - 方法：PUT
 - 路径：upload_url（由 presign 返回）
 
-#### 6.2.3 完成上传
+#### 6.2A.3 完成上传
 
 - 方法：POST
 - 路径：/api/career-agent/uploads/complete

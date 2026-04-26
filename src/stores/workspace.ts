@@ -28,13 +28,7 @@ function createMessageId(prefix: string) {
 }
 
 function formatLocalTimestamp(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-
-  return `${year}-${month}-${day} ${hours}:${minutes}`;
+  return date.toISOString();
 }
 
 function revokeBlobUrl(value: string | null | undefined) {
@@ -66,13 +60,6 @@ function truncateText(value: string, maxLength: number) {
   }
 
   return `${value.slice(0, maxLength - 3)}...`;
-}
-
-function cloneDraftSubmission(submission: DraftMessageSubmission): DraftMessageSubmission {
-  return {
-    content: submission.content,
-    attachments: [...submission.attachments],
-  };
 }
 
 function deriveThreadSeed(submission: DraftMessageSubmission) {
@@ -126,8 +113,6 @@ interface WorkspaceState {
   profileSuggestionsStatus: LoadState;
   profileSaveStatus: LoadState;
   artifactsStatus: LoadState;
-  pendingThreadSubmission: DraftMessageSubmission | null;
-  pendingThreadId: string | null;
   errorMessage: string | null;
 }
 
@@ -152,8 +137,6 @@ export const useWorkspaceStore = defineStore('workspace', {
     profileSuggestionsStatus: 'idle',
     profileSaveStatus: 'idle',
     artifactsStatus: 'idle',
-    pendingThreadSubmission: null,
-    pendingThreadId: null,
     errorMessage: null,
   }),
   getters: {
@@ -324,16 +307,6 @@ export const useWorkspaceStore = defineStore('workspace', {
         this.messages = nextMessages;
         this.messagesStatus = 'ready';
 
-        if (this.pendingThreadId === targetThreadId) {
-          const pendingSubmission = this.pendingThreadSubmission;
-          this.pendingThreadId = null;
-          this.pendingThreadSubmission = null;
-
-          if (pendingSubmission && nextMessages.length === 0) {
-            this.submitDraftMessage(cloneDraftSubmission(pendingSubmission));
-          }
-        }
-
         return targetThreadId;
       } catch (error) {
         if (requestToken !== threadLoadRequestToken || this.activeThreadId !== targetThreadId) {
@@ -392,17 +365,14 @@ export const useWorkspaceStore = defineStore('workspace', {
         return null;
       }
 
-      this.pendingThreadId = null;
-      this.pendingThreadSubmission = null;
-
       try {
         const nextThread = await this.createThread(deriveThreadSeed(nextSubmission));
-        this.pendingThreadId = nextThread.id;
-        this.pendingThreadSubmission = cloneDraftSubmission(nextSubmission);
+        await this.submitDraftMessage({
+          content: nextSubmission.content,
+          attachments: [...nextSubmission.attachments],
+        });
         return nextThread;
       } catch (error) {
-        this.pendingThreadId = null;
-        this.pendingThreadSubmission = null;
         throw error;
       }
     },
@@ -537,7 +507,7 @@ export const useWorkspaceStore = defineStore('workspace', {
         throw error;
       }
     },
-    submitDraftMessage(submission: DraftMessageSubmission | string) {
+    async submitDraftMessage(submission: DraftMessageSubmission | string) {
       const nextSubmission = typeof submission === 'string'
         ? { content: submission, attachments: [] }
         : submission;
@@ -548,7 +518,9 @@ export const useWorkspaceStore = defineStore('workspace', {
         return;
       }
 
+      const targetThreadId = this.activeThreadId;
       const timestamp = formatLocalTimestamp(new Date());
+      const pendingMessageId = createMessageId('pending-user');
       const media = attachments
         .filter((attachment) => attachment.kind === 'image')
         .map((attachment) => ({
@@ -558,7 +530,7 @@ export const useWorkspaceStore = defineStore('workspace', {
           title: attachment.name,
           alt: `用户上传图片：${attachment.name}`,
           mimeType: attachment.mimeType,
-          caption: '本地待上传图片；当前仅用于前端预览，尚未上传到服务端。',
+          caption: '正在上传并发送...',
         }));
       const files = attachments
         .filter((attachment) => attachment.kind === 'file')
@@ -570,9 +542,11 @@ export const useWorkspaceStore = defineStore('workspace', {
           sizeBytes: attachment.sizeBytes,
         }));
 
+      this.messagesStatus = 'loading';
+      this.errorMessage = null;
       this.messages.push({
-        id: createMessageId('local-user'),
-        threadId: this.activeThreadId,
+        id: pendingMessageId,
+        threadId: targetThreadId,
         role: 'user',
         kind: 'markdown',
         content: content || '（已添加附件）',
@@ -581,16 +555,79 @@ export const useWorkspaceStore = defineStore('workspace', {
         createdAt: timestamp,
       });
 
-      this.messages.push({
-        id: createMessageId('local-system'),
-        threadId: this.activeThreadId,
-        role: 'system',
-        kind: 'status',
-        content: attachments.length
-          ? '上游发送链路和真实上传接口尚未接通。当前消息与附件仅保存在本地，用于验证前端输入区、附件预览和消息渲染流程。'
-          : '上游发送链路尚未接通。当前消息仅保存在本地，用于验证前端输入区和消息渲染流程。',
-        createdAt: timestamp,
-      });
+      const reportSubmissionError = (
+        stage: 'upload' | 'send' | 'refresh',
+        error: unknown,
+      ) => {
+        if (this.activeThreadId !== targetThreadId) {
+          return;
+        }
+
+        const rawMessage = error instanceof Error ? error.message : 'Unknown message sending error';
+        const stageMessage = stage === 'upload'
+          ? '附件上传失败'
+          : stage === 'send'
+            ? '消息发送失败'
+            : '消息已发送，但刷新消息列表失败';
+
+        this.messagesStatus = 'error';
+        this.errorMessage = rawMessage;
+        this.messages.push({
+          id: createMessageId('send-error'),
+          threadId: targetThreadId,
+          role: 'system',
+          kind: 'status',
+          content: `${stageMessage}：${rawMessage}`,
+          createdAt: formatLocalTimestamp(new Date()),
+        });
+      };
+
+      let uploadedFiles;
+      try {
+        uploadedFiles = await Promise.all(
+          attachments.map((attachment) => client.uploadThreadFile(targetThreadId, attachment)),
+        );
+      } catch (error) {
+        reportSubmissionError('upload', error);
+        return;
+      }
+
+      const clientRequestId = createMessageId('request');
+      try {
+        const sendResult = await client.sendMessage(targetThreadId, {
+          kind: 'markdown',
+          content: content || '（已添加附件）',
+          attachmentAssetIds: uploadedFiles.map((file) => file.assetId),
+          clientRequestId,
+        });
+
+        if (!sendResult.accepted || sendResult.status === 'failed') {
+          reportSubmissionError(
+            'send',
+            new Error(!sendResult.accepted ? '消息未被服务端接受' : '消息发送失败'),
+          );
+          return;
+        }
+      } catch (error) {
+        reportSubmissionError('send', error);
+        return;
+      }
+
+      let nextMessages;
+      try {
+        nextMessages = await client.getThreadMessages(targetThreadId);
+      } catch (error) {
+        reportSubmissionError('refresh', error);
+        return;
+      }
+
+      if (this.activeThreadId !== targetThreadId) {
+        return;
+      }
+
+      revokeLocalMessageResources(this.messages);
+      this.messages = nextMessages;
+      this.messagesStatus = 'ready';
     },
     closeArtifact() {
       this.artifactPaneOpen = false;

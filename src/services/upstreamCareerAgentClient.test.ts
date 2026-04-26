@@ -178,4 +178,218 @@ describe('createUpstreamCareerAgentClient', () => {
     }));
     expect(thread.id).toBe('2');
   });
+
+  it('uploads a file with the backend direct upload endpoint', async () => {
+    const request = vi.fn(async () => ({
+      data: {
+        asset_id: 'asset-123',
+        kind: 'file',
+        url: '/api/career-agent/threads/12/files/resume.pdf',
+        title: 'resume.pdf',
+        mime_type: 'application/pdf',
+        size_bytes: 245991,
+        created_at: '2026-04-26T10:05:00.000Z',
+        storage_path: '/api/career-agent/threads/12/files/resume.pdf',
+        stored_file_name: 'resume.pdf',
+        original_name: 'resume.pdf',
+      },
+    }));
+    const client = createUpstreamCareerAgentClient({
+      baseUrl: 'https://agent.example.com',
+      userId: '1',
+      httpClient: createHttpClient(request),
+    });
+
+    const uploadedFile = await client.uploadThreadFile('12', new File(['hello'], 'resume.pdf', {
+      type: 'application/pdf',
+    }));
+
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({
+      url: '/api/career-agent/threads/12/files',
+      method: 'POST',
+      data: expect.any(FormData),
+    }));
+    expect(uploadedFile).toMatchObject({
+      assetId: 'asset-123',
+      title: 'resume.pdf',
+      mimeType: 'application/pdf',
+      sizeBytes: 245991,
+    });
+  });
+
+  it('fails upload when a draft attachment blob url cannot be read', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: false,
+      status: 404,
+      statusText: 'Not Found',
+    } as Response);
+    const request = vi.fn();
+    const client = createUpstreamCareerAgentClient({
+      baseUrl: 'https://agent.example.com',
+      userId: '1',
+      httpClient: createHttpClient(request),
+    });
+
+    await expect(client.uploadThreadFile('12', {
+      id: 'local-file',
+      kind: 'file',
+      name: 'resume.pdf',
+      url: 'blob:http://localhost/missing',
+      mimeType: 'application/pdf',
+      sizeBytes: 1,
+    })).rejects.toThrow('Failed to fetch attachment "resume.pdf" (404 Not Found).');
+    expect(request).not.toHaveBeenCalled();
+
+    fetchSpy.mockRestore();
+  });
+
+  it('reads a draft attachment blob before direct upload', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      blob: async () => new Blob(['hello'], { type: 'text/plain' }),
+    } as Response);
+    const request = vi.fn(async () => ({
+      data: {
+        asset_id: 'asset-123',
+        kind: 'file',
+        url: '/api/career-agent/threads/12/files/note.txt',
+        title: 'note.txt',
+        mime_type: 'text/plain',
+        size_bytes: 5,
+      },
+    }));
+    const client = createUpstreamCareerAgentClient({
+      baseUrl: 'https://agent.example.com',
+      userId: '1',
+      httpClient: createHttpClient(request),
+    });
+
+    await expect(client.uploadThreadFile('12', {
+      id: 'local-file',
+      kind: 'file',
+      name: 'note.txt',
+      url: 'blob:http://localhost/note',
+      mimeType: 'text/plain',
+      sizeBytes: 5,
+    })).resolves.toMatchObject({
+      assetId: 'asset-123',
+      title: 'note.txt',
+    });
+    expect(fetchSpy).toHaveBeenCalledWith('blob:http://localhost/note');
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({
+      url: '/api/career-agent/threads/12/files',
+      method: 'POST',
+    }));
+
+    fetchSpy.mockRestore();
+  });
+
+  it('sends a message with attachment asset ids and normalizes the acknowledgement', async () => {
+    const request = vi.fn(async () => ({
+      data: {
+        accepted: true,
+        message_id: 'message-user-101',
+        assistant_message_id: 'message-assistant-102',
+        status: 'done',
+      },
+    }));
+    const client = createUpstreamCareerAgentClient({
+      baseUrl: 'https://agent.example.com',
+      userId: '1',
+      httpClient: createHttpClient(request),
+    });
+
+    const result = await client.sendMessage('12', {
+      kind: 'markdown',
+      content: '请分析附件',
+      attachmentAssetIds: ['asset-123'],
+      clientRequestId: 'req-client-001',
+    });
+
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({
+      url: '/api/career-agent/threads/12/messages',
+      method: 'POST',
+      data: {
+        kind: 'markdown',
+        content: '请分析附件',
+        attachment_asset_ids: ['asset-123'],
+        client_request_id: 'req-client-001',
+        context: undefined,
+      },
+    }));
+    expect(result).toEqual({
+      accepted: true,
+      messageId: 'message-user-101',
+      assistantMessageId: 'message-assistant-102',
+      status: 'done',
+    });
+  });
+
+  it('treats missing optional profile and artifact endpoints as empty optional capabilities', async () => {
+    const request = vi.fn(async () => {
+      throw {
+        isAxiosError: true,
+        message: 'Not Found',
+        response: {
+          status: 404,
+        },
+      };
+    });
+    const client = createUpstreamCareerAgentClient({
+      baseUrl: 'https://agent.example.com',
+      userId: '1',
+      httpClient: createHttpClient(request),
+    });
+
+    await expect(client.listArtifacts()).resolves.toEqual([]);
+    await expect(client.listProfileSuggestions()).resolves.toEqual([]);
+    await expect(client.getProfile()).resolves.toMatchObject({
+      locale: 'zh-CN',
+      timezone: 'Asia/Singapore',
+    });
+  });
+
+  it('includes backend error codes and request ids in upstream errors', async () => {
+    const request = vi.fn(async () => {
+      throw {
+        isAxiosError: true,
+        message: 'Bad Request',
+        response: {
+          status: 400,
+          data: {
+            code: 'PROFILE_VALIDATION_FAILED',
+            message: 'invalid profile',
+            request_id: 'req-123',
+          },
+        },
+      };
+    });
+    const client = createUpstreamCareerAgentClient({
+      baseUrl: 'https://agent.example.com',
+      userId: '1',
+      httpClient: createHttpClient(request),
+    });
+
+    await expect(client.updateProfile({
+      displayName: '',
+      locale: 'zh-CN',
+      timezone: 'Asia/Singapore',
+      currentRole: '',
+      employmentStatus: '',
+      experienceSummary: '',
+      educationSummary: '',
+      locationRegion: '',
+      targetRole: '',
+      targetIndustries: [],
+      shortTermGoal: '',
+      longTermGoal: '',
+      weeklyTimeBudget: '',
+      constraints: [],
+      workPreferences: [],
+      learningPreferences: [],
+      keyStrengths: [],
+      riskSignals: [],
+      portfolioLinks: [],
+    })).rejects.toThrow('code=PROFILE_VALIDATION_FAILED, request_id=req-123');
+  });
 });

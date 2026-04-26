@@ -2,10 +2,13 @@ import { runtimeConfig } from '../config/runtime';
 import type { CareerAgentClient } from './careerAgentClient';
 import type {
   ArtifactRecord,
+  DraftMessageAttachment,
+  MessageMedia,
   ProfileRecord,
   ProfileSuggestion,
   ThreadMessage,
   ThreadSummary,
+  UploadedConversationFile,
 } from '../types/entities';
 
 function buildCanvasFixtureUrl(options: { revision?: number; scenario?: string } = {}): string {
@@ -456,6 +459,7 @@ const messagesByThread: Record<string, ThreadMessage[]> = {
   ...(htmlAppExampleMessages.length ? { 'thread-009': htmlAppExampleMessages } : {}),
   ...(nodeAppExampleMessages.length ? { 'thread-010': nodeAppExampleMessages } : {}),
 };
+const uploadedFilesByAssetId = new Map<string, UploadedConversationFile>();
 
 let profile: ProfileRecord = {
   displayName: 'Fancy',
@@ -1664,6 +1668,95 @@ export function createMockCareerAgentClient(): CareerAgentClient {
     },
     async getThreadMessages(threadId: string) {
       return messagesByThread[threadId] ?? [];
+    },
+    async uploadThreadFile(threadId, attachment) {
+      const isFile = typeof File !== 'undefined' && attachment instanceof File;
+      const draftAttachment = attachment as DraftMessageAttachment;
+      const name = isFile ? attachment.name : draftAttachment.name;
+      const mimeType = isFile ? attachment.type : draftAttachment.mimeType;
+      const sizeBytes = isFile ? attachment.size : draftAttachment.sizeBytes;
+      const now = new Date().toISOString();
+      const randomValue = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const assetId = `asset-local-${randomValue}`;
+      const kind: UploadedConversationFile['kind'] = mimeType.startsWith('image/')
+        ? 'image'
+        : mimeType.startsWith('video/')
+          ? 'video'
+          : 'file';
+      const uploadedFile: UploadedConversationFile = {
+        assetId,
+        kind,
+        url: isFile ? URL.createObjectURL(attachment) : draftAttachment.url,
+        title: name,
+        mimeType,
+        sizeBytes,
+        createdAt: now,
+        storagePath: `/mock-upload/${threadId}/${assetId}`,
+        storedFileName: name,
+        originalName: name,
+      };
+
+      uploadedFilesByAssetId.set(assetId, uploadedFile);
+      return uploadedFile;
+    },
+    async sendMessage(threadId, input) {
+      const now = new Date().toISOString();
+      const userMessageId = `message-local-user-${Date.now()}`;
+      const assistantMessageId = `message-local-assistant-${Date.now()}`;
+      const attachments = (input.attachmentAssetIds ?? [])
+        .map((assetId) => uploadedFilesByAssetId.get(assetId))
+        .filter((file): file is UploadedConversationFile => Boolean(file));
+      const media: MessageMedia[] = attachments
+        .filter((attachment): attachment is UploadedConversationFile & { kind: 'image' | 'video' } => (
+          attachment.kind === 'image' || attachment.kind === 'video'
+        ))
+        .map((attachment) => ({
+          id: attachment.assetId,
+          kind: attachment.kind,
+          url: attachment.url,
+          title: attachment.title,
+          mimeType: attachment.mimeType,
+        }));
+      const files = attachments
+        .filter((attachment) => attachment.kind === 'file')
+        .map((attachment) => ({
+          id: attachment.assetId,
+          name: attachment.title,
+          url: attachment.url,
+          mimeType: attachment.mimeType,
+          sizeBytes: attachment.sizeBytes,
+        }));
+      messagesByThread[threadId] = [
+        ...messagesByThread[threadId] ?? [],
+        {
+          id: userMessageId,
+          threadId,
+          role: 'user',
+          kind: input.kind ?? 'markdown',
+          content: input.content || '（已添加附件）',
+          media: media.length ? media : undefined,
+          files: files.length ? files : undefined,
+          createdAt: now,
+        },
+        {
+          id: assistantMessageId,
+          threadId,
+          role: 'assistant',
+          kind: 'markdown',
+          agentId: 'agent-mock',
+          agentName: '模拟助手',
+          agentAccent: 'teal',
+          content: '已收到你的消息。mock 模式下不会调用真实后端。',
+          createdAt: now,
+        },
+      ];
+
+      return {
+        accepted: true,
+        messageId: userMessageId,
+        assistantMessageId,
+        status: 'done',
+      };
     },
     async getProfile() {
       return cloneProfileRecord(profile);

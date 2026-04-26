@@ -1,18 +1,22 @@
 import axios, { type AxiosInstance, type AxiosRequestConfig } from 'axios';
 import type { CareerAgentClient } from './careerAgentClient';
 import { CAREER_AGENT_API_ROUTES } from './careerAgentApiRoutes';
-import type { ProfileRecord } from '../types/entities';
+import type { DraftMessageAttachment, ProfileRecord } from '../types/entities';
 import type {
   UpstreamArtifactRecord,
   UpstreamProfileSuggestion,
+  UpstreamSendThreadMessageResult,
   UpstreamThreadMessage,
   UpstreamThreadSummary,
+  UpstreamUploadedConversationFile,
 } from './upstreamContracts';
 import {
   normalizeArtifactRecord,
   normalizeProfileSuggestion,
+  normalizeSendThreadMessageResult,
   normalizeThreadMessage,
   normalizeThreadSummary,
+  normalizeUploadedConversationFile,
   sanitizeProfileRecord,
 } from './upstreamContracts';
 
@@ -60,23 +64,59 @@ function createAxiosClient(baseUrl: string, withCredentials: boolean) {
 function formatUpstreamError(error: unknown, path: string) {
   if (axios.isAxiosError(error)) {
     const status = error.response?.status;
-    const message = typeof error.response?.data === 'object' && error.response.data && 'message' in error.response.data
-      ? String(error.response.data.message)
+    const responseData = error.response?.data;
+    const message = typeof responseData === 'object' && responseData && 'message' in responseData
+      ? Array.isArray(responseData.message)
+        ? responseData.message.join(', ')
+        : String(responseData.message)
       : error.message;
+    const code = typeof responseData === 'object' && responseData && 'code' in responseData
+      ? String(responseData.code)
+      : null;
+    const requestId = typeof responseData === 'object' && responseData && 'request_id' in responseData
+      ? String(responseData.request_id)
+      : null;
+    const detail = [
+      code ? `code=${code}` : null,
+      requestId ? `request_id=${requestId}` : null,
+    ].filter(Boolean).join(', ');
 
-    return new Error(`Upstream request failed${status ? ` (${status})` : ''} for ${path}: ${message}`);
+    return new Error(`Upstream request failed${status ? ` (${status})` : ''} for ${path}: ${message}${detail ? ` (${detail})` : ''}`);
   }
 
   return error instanceof Error ? error : new Error(`Upstream request failed for ${path}.`);
 }
 
-function isNotFoundError(error: unknown) {
-  return axios.isAxiosError(error) && error.response?.status === 404;
+function isOptionalCapabilityError(error: unknown) {
+  return axios.isAxiosError(error) && (
+    error.response?.status === 404
+    || error.response?.status === 405
+    || error.response?.status === 501
+  );
 }
 
 function normalizeUserIdForServer(value: string) {
   const numericValue = Number(value);
   return Number.isFinite(numericValue) ? numericValue : value;
+}
+
+async function attachmentToFile(attachment: DraftMessageAttachment | File): Promise<File> {
+  if (typeof File !== 'undefined' && attachment instanceof File) {
+    return attachment;
+  }
+
+  const draftAttachment = attachment as DraftMessageAttachment;
+  const response = await fetch(draftAttachment.url);
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch attachment "${draftAttachment.name}" (${response.status} ${response.statusText}).`);
+  }
+
+  const blob = await response.blob();
+
+  return new File([blob], draftAttachment.name, {
+    type: draftAttachment.mimeType,
+  });
 }
 
 export function createUpstreamCareerAgentClient(
@@ -106,7 +146,7 @@ export function createUpstreamCareerAgentClient(
 
       return response.data;
     } catch (error) {
-      if (isNotFoundError(error)) {
+      if (isOptionalCapabilityError(error)) {
         return null;
       }
 
@@ -146,6 +186,38 @@ export function createUpstreamCareerAgentClient(
 
       return payload.map((message) => normalizeThreadMessage(message, threadId));
     },
+    async uploadThreadFile(threadId, attachment) {
+      const file = await attachmentToFile(attachment);
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const payload = await requestJson<UpstreamUploadedConversationFile>(
+        CAREER_AGENT_API_ROUTES.threadFiles(threadId),
+        {
+          method: 'POST',
+          data: formData,
+        },
+      );
+
+      return normalizeUploadedConversationFile(payload);
+    },
+    async sendMessage(threadId, input) {
+      const payload = await requestJson<UpstreamSendThreadMessageResult>(
+        CAREER_AGENT_API_ROUTES.sendThreadMessage(threadId),
+        {
+          method: 'POST',
+          data: {
+            kind: input.kind ?? 'markdown',
+            content: input.content,
+            attachment_asset_ids: input.attachmentAssetIds ?? [],
+            client_request_id: input.clientRequestId,
+            context: input.context,
+          },
+        },
+      );
+
+      return normalizeSendThreadMessageResult(payload);
+    },
     async getProfile() {
       const payload = await requestOptionalJson<ProfileRecord>(CAREER_AGENT_API_ROUTES.profile());
       return sanitizeProfileRecord(payload ?? createDefaultProfile());
@@ -166,18 +238,18 @@ export function createUpstreamCareerAgentClient(
       return (payload ?? []).map(normalizeProfileSuggestion);
     },
     async listArtifacts() {
-      const payload = await requestJson<UpstreamArtifactRecord[]>(
+      const payload = await requestOptionalJson<UpstreamArtifactRecord[]>(
         CAREER_AGENT_API_ROUTES.listArtifacts(options.userId),
       );
 
-      return payload.map(normalizeArtifactRecord);
+      return (payload ?? []).map(normalizeArtifactRecord);
     },
     async getArtifact(artifactId: string) {
       const findArtifactById = async () => {
-        const artifacts = await requestJson<UpstreamArtifactRecord[]>(
+        const artifacts = await requestOptionalJson<UpstreamArtifactRecord[]>(
           CAREER_AGENT_API_ROUTES.listArtifacts(options.userId),
         );
-        const matchedArtifact = artifacts.find((artifact) => String(artifact.id) === artifactId);
+        const matchedArtifact = artifacts?.find((artifact) => String(artifact.id) === artifactId);
         return matchedArtifact ? normalizeArtifactRecord(matchedArtifact) : null;
       };
 

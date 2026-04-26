@@ -311,6 +311,55 @@ describe('normalizeThreadMessage', () => {
     ]);
   });
 
+  it('normalizes backend file attachments into frontend file attachments', () => {
+    const message = normalizeThreadMessage({
+      id: 'message-file',
+      role: 'user',
+      content: '请看附件。',
+      attachments: [
+        {
+          id: 'asset-file-001',
+          kind: 'file',
+          url: '/api/career-agent/threads/12/files/resume.pdf',
+          title: 'resume.pdf',
+          mime_type: 'application/pdf',
+          size_bytes: 245991,
+        },
+      ],
+      created_at: '2026-04-26T10:06:00.000Z',
+    }, '12');
+
+    expect(message.media).toBeUndefined();
+    expect(message.files).toEqual([
+      {
+        id: 'asset-file-001',
+        name: 'resume.pdf',
+        url: '/api/career-agent/threads/12/files/resume.pdf',
+        mimeType: 'application/pdf',
+        sizeBytes: 245991,
+      },
+    ]);
+  });
+
+  it('normalizes numeric backend file attachment ids safely', () => {
+    const message = normalizeThreadMessage({
+      id: 'message-file',
+      role: 'user',
+      content: '请看附件。',
+      attachments: [
+        {
+          id: 123,
+          kind: 'file',
+          url: '/api/career-agent/threads/12/files/resume.pdf',
+          title: 'resume.pdf',
+        },
+      ],
+      created_at: '2026-04-26T10:06:00.000Z',
+    }, '12');
+
+    expect(message.files?.[0]?.id).toBe('123');
+  });
+
   it('normalizes the current server message list shape into frontend strings', () => {
     const message = normalizeThreadMessage({
       id: 2,
