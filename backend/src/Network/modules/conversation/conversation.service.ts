@@ -171,8 +171,8 @@ export class ConversationService {
     if (file.size > maxUploadBytes) {
       throw new BadRequestException('file is too large');
     }
-
-    const originalName = this.sanitizeFileName(file.originalname || 'upload.bin');
+    file.originalname = Buffer.from(file.originalname, 'latin1').toString('utf8')
+    const originalName = file.originalname;
     const mimeType = file.mimetype || 'application/octet-stream';
     const extension = extname(originalName);
     const storedFileName = `${Date.now()}-${randomUUID()}${extension}`;
@@ -195,7 +195,7 @@ export class ConversationService {
       assetId,
       kind: this.resolveAssetKind(mimeType),
       url: relativePath,
-      title: originalName,
+      title: file.originalname,
       mime_type: mimeType,
       mimeType,
       size_bytes: fileStats.size,

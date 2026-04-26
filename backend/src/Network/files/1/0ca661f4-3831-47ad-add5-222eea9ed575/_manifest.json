@@ -1,1 +1,21 @@
-[]
+[
+  {
+    "asset_id": "asset-5893ba2d-539c-4dec-b350-d0428e816829",
+    "assetId": "asset-5893ba2d-539c-4dec-b350-d0428e816829",
+    "kind": "file",
+    "url": "/api/career-agent/threads/0ca661f4-3831-47ad-add5-222eea9ed575/files/1777220444514-81a6c6b7-84ba-4119-9ebc-f3a41ddf5985.docx",
+    "title": "翻译.docx",
+    "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "size_bytes": 500382,
+    "sizeBytes": 500382,
+    "created_at": "2026-04-26T16:20:44.514Z",
+    "createdAt": "2026-04-26T16:20:44.514Z",
+    "storage_path": "/api/career-agent/threads/0ca661f4-3831-47ad-add5-222eea9ed575/files/1777220444514-81a6c6b7-84ba-4119-9ebc-f3a41ddf5985.docx",
+    "storagePath": "/api/career-agent/threads/0ca661f4-3831-47ad-add5-222eea9ed575/files/1777220444514-81a6c6b7-84ba-4119-9ebc-f3a41ddf5985.docx",
+    "stored_file_name": "1777220444514-81a6c6b7-84ba-4119-9ebc-f3a41ddf5985.docx",
+    "storedFileName": "1777220444514-81a6c6b7-84ba-4119-9ebc-f3a41ddf5985.docx",
+    "original_name": "翻译.docx",
+    "originalName": "翻译.docx"
+  }
+]
