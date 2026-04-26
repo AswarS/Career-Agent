@@ -1,9 +1,22 @@
 import { Injectable } from '@nestjs/common';
-import { AgentRunInput, AgentRunResult, runAgent } from './agent.runtime';
+import {
+  AgentConversationMetadata,
+  AgentCreateConversationInput,
+  AgentSendMessageInput,
+  AgentSendMessageResult,
+  createConversation,
+  sendMessage,
+} from './agent.runtime';
 
 @Injectable()
 export class AgentService {
-  run(input: AgentRunInput): AgentRunResult {
-    return runAgent(input);
+  createConversation(
+    input: AgentCreateConversationInput,
+  ): Promise<AgentConversationMetadata> {
+    return createConversation(input);
+  }
+
+  sendMessage(input: AgentSendMessageInput): Promise<AgentSendMessageResult> {
+    return sendMessage(input);
   }
 }

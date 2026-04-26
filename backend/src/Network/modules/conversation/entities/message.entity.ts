@@ -1,39 +1,34 @@
 import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
 
-export type MessageRole = 'user' | 'assistant' | 'system';
-
 @Entity('messages')
 export class MessageEntity {
   @PrimaryGeneratedColumn({ type: 'integer' })
   id!: number;
 
-  @Column({ type: 'integer' })
-  conversationId!: number;
+  @Column({ type: 'varchar', nullable: true })
+  messageId!: string;
 
   @Column({ type: 'varchar' })
-  role!: MessageRole;
+  conversationId!: string;
 
-  @Column({ type: 'varchar' })
-  kind!: string;
+  @Column({ type: 'varchar', nullable: true })
+  resourceId?: string;
 
-  @Column({ type: 'text' })
-  content!: string;
+  @Column({ type: 'varchar', nullable: true })
+  resourceKind?: string;
 
-  @Column({ nullable: true, type: 'text' })
-  reasoning?: string;
+  @Column({ type: 'text', nullable: true })
+  resourcePath?: string;
 
-  @Column({ nullable: true })
-  agentId?: string;
+  @Column({ type: 'varchar', nullable: true })
+  mimeType?: string;
 
-  @Column({ nullable: true })
-  agentName?: string;
+  @Column({ type: 'varchar', nullable: true })
+  title?: string;
 
-  @Column({ type: 'simple-json', nullable: true })
-  actions?: string[];
+  @Column({ type: 'integer', nullable: true })
+  sizeBytes?: number;
 
-  @Column({ type: 'simple-json', nullable: true })
-  media?: string[];
-
-  @Column()
+  @Column({ type: 'datetime' })
   createdAt!: Date;
 }

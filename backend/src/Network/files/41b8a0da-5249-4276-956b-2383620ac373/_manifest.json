@@ -1,0 +1,21 @@
+[
+  {
+    "asset_id": "asset-6e12e0b3-cae4-4d3e-a79e-ef519b999857",
+    "assetId": "asset-6e12e0b3-cae4-4d3e-a79e-ef519b999857",
+    "kind": "file",
+    "url": "/api/career-agent/threads/41b8a0da-5249-4276-956b-2383620ac373/files/1777207618326-0a04f41a-6917-40d2-be1a-c06535557891.docx",
+    "title": "______.docx",
+    "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "size_bytes": 500382,
+    "sizeBytes": 500382,
+    "created_at": "2026-04-26T12:46:58.326Z",
+    "createdAt": "2026-04-26T12:46:58.326Z",
+    "storage_path": "/api/career-agent/threads/41b8a0da-5249-4276-956b-2383620ac373/files/1777207618326-0a04f41a-6917-40d2-be1a-c06535557891.docx",
+    "storagePath": "/api/career-agent/threads/41b8a0da-5249-4276-956b-2383620ac373/files/1777207618326-0a04f41a-6917-40d2-be1a-c06535557891.docx",
+    "stored_file_name": "1777207618326-0a04f41a-6917-40d2-be1a-c06535557891.docx",
+    "storedFileName": "1777207618326-0a04f41a-6917-40d2-be1a-c06535557891.docx",
+    "original_name": "______.docx",
+    "originalName": "______.docx"
+  }
+]

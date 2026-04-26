@@ -1,7 +1,8 @@
-import { IsOptional, IsString } from 'class-validator';
+import { IsNumber, IsOptional, IsString } from 'class-validator';
 
 export class CreateConversationDto {
   @IsOptional()
+  @IsNumber()
   userId?: number;
 
   @IsOptional()
@@ -11,6 +12,10 @@ export class CreateConversationDto {
   @IsOptional()
   @IsString()
   preview?: string;
+
+  @IsOptional()
+  @IsString()
+  status?: 'active' | 'archived';
 
   @IsOptional()
   updatedAt?: Date;

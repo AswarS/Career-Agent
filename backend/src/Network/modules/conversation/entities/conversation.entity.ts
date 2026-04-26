@@ -3,8 +3,9 @@ import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
 @Entity('conversations')
 export class ConversationEntity {
   @PrimaryGeneratedColumn({ type: 'integer' })
-  id!: number;
-
+  cid!: number;
+  @Column({type:'text'})
+  id!: string;
   @Column({ nullable: false })
   userId!: number;
 
@@ -13,6 +14,9 @@ export class ConversationEntity {
 
   @Column({ nullable: true })
   preview?: string;
+
+  @Column({ default: 'active' })
+  status!: string;
 
   @Column()
   updatedAt!: Date;

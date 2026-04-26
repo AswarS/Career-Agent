@@ -7,10 +7,7 @@ import { MessageEntity } from './entities/message.entity';
 import { AgentModule } from '../agent/agent.module';
 
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([ConversationEntity, MessageEntity]),
-    AgentModule,
-  ],
+  imports: [TypeOrmModule.forFeature([ConversationEntity, MessageEntity]), AgentModule],
   controllers: [ConversationController],
   providers: [ConversationService],
 })

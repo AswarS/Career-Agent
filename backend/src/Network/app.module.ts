@@ -19,7 +19,7 @@ const networkDir = dirname(fileURLToPath(import.meta.url));
   imports: [
     TypeOrmModule.forRoot({
       type: 'sqlite',
-      database: join(networkDir, 'data', 'app.sqlite'),
+      database: join(networkDir, 'data', 'test.sqlite'),
       entities: [UserEntity, ArtifactEntity, ConversationEntity, MessageEntity],
       synchronize: true,
     }),
