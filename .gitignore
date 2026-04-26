@@ -1,0 +1,8 @@
+server/node_modules
+server/dist
+node_modules/
+backend/node_modules/
+backend/src/Network/data/
+backend/src/Network/files/
+backend/src/Network/user/
+*.sqlite
