@@ -43,11 +43,14 @@ For `dev:app-examples`, the external apps must be started separately. See `tests
 - `src/pages/` — Route-level pages (ConversationWorkspace, Profile, Artifacts, Settings)
 - `src/modules/` — Feature modules (conversation, profile, artifacts, navigation)
 - `src/services/` — API clients and upstream contracts; mock client for development
-- `src/stores/` — Pinia stores (workspace store for shell state)
+- `src/stores/` — Pinia stores (`workspace.ts` is the main shell state store)
+- `src/config/` — Runtime configuration parsing (`runtime.ts`)
 - `src/types/entities.ts` — Core types: Thread, Message, Profile, Artifact
 - `src/components/` — Shared components (MarkdownContent)
 
 **Adapter pattern**: Frontend uses typed adapters (`mockCareerAgentClient.ts` for dev, `upstreamCareerAgentClient.ts` for real backend). Both share the same interface. Switch via `VITE_CAREER_AGENT_CLIENT_MODE` env var.
+
+**Workspace store**: `src/stores/workspace.ts` is the central Pinia store managing shell state: current thread, thread list, artifact state, view modes, and loading states. All modules read from and write to this store.
 
 **Artifact host**: `src/modules/artifacts/ArtifactHost.vue` renders generated content via sandboxed iframe (`html` mode) or trusted URL (`url` mode). Supports pane/focus/immersive view modes.
 
@@ -75,6 +78,10 @@ Run a single test: `npx vitest run path/to/file.test.ts`
 
 Current test coverage: runtime config parsing, client factory selection, artifact normalization, upstream contracts, URL canvas policy, workspace store, message presentation.
 
+## Type Checking
+
+TypeScript checking is part of `npm run build` (runs `vue-tsc --noEmit`). There is no separate lint script; the project relies on TypeScript for type safety.
+
 ## Work Canvas Fixtures
 
 `tests/work-canvas/` contains fixtures for testing artifact host with interactive canvases:
@@ -92,6 +99,7 @@ Copy `.env.example` to configure runtime:
 - `VITE_CAREER_AGENT_CLIENT_MODE` — 'mock' or 'upstream'
 - `VITE_CAREER_AGENT_API_BASE_URL` — backend URL
 - `VITE_CAREER_AGENT_USER_ID` — upstream user id for user-scoped thread lists; defaults to '1'
+- `VITE_CAREER_AGENT_WITH_CREDENTIALS` — send cookies for cross-origin requests; defaults to 'false'
 - `VITE_CAREER_AGENT_ARTIFACT_TRANSPORT` — 'polling', 'sse', or 'websocket'
 - `VITE_CAREER_AGENT_ENABLE_VOICE_INPUT` — feature flag for voice UI
 - `VITE_CAREER_AGENT_TRUSTED_CANVAS_ORIGINS` — trusted iframe origins
@@ -104,10 +112,12 @@ Copy `.env.example` to configure runtime:
 - `docs/career-agent-spec.md` — product spec, locked MVP scope
 - `docs/zh/career-agent-spec.md` — Chinese review copy of the product spec
 - `DESIGN.md` — visual design system, color tokens, shell modes
+- `docs/API.md` — API contract for frontend-backend integration
 - `docs/frontend-implementation-plan.md` — phased build plan, current status
 - `docs/frontend-testing-strategy.md` — testing requirements by phase
+- `docs/pr-workflow.md` — PR workflow and Copilot review process
 - `docs/zh/team-sync.md` — Chinese team-facing integration and decision log
-- `docs/zh/pr-workflow.md` — Chinese PR and Copilot review process
+- `docs/zh/pr-workflow.md` — Chinese version of PR workflow
 - `tests/work-canvas/README.md` — fixture and external app-example validation commands
 
 ## Design System
