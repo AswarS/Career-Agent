@@ -107,7 +107,7 @@
 - `POST /api/career-agent/threads` 需要由后端保证 `createdAt` / `updatedAt` 默认值，否则当前实体的 `createdAt` 非空约束可能导致新建失败。
 - 如果要符合接口图里的 `GET /api/career-agent/artifacts` 和 `GET /api/career-agent/artifacts/:artifactId`，server 需要区分“工件列表”和“单工件详情”，当前实现还没有真正的单工件详情。
 - `POST /api/career-agent/artifacts/:artifactId/refresh` 当前 server 未实现，前端只保留了可调用入口和 404 兼容。
-- 当前 server 仍没有真实消息发送 endpoint，也没有 upload controller；图片/文件选择仍是前端本地预览，不是端到端上传。
+- 当前前端已接入 server 后续提供的 `POST /api/career-agent/threads/:id/files` 和 `POST /api/career-agent/threads/:id/messages`，可按“直传附件 -> 引用 asset id 发送消息 -> 刷新消息历史”的路径联调。
 
 ### 1. 上游 artifact payload 对齐
 
@@ -353,38 +353,43 @@
 - 如果图片 / 视频是结果页的一部分，应作为 artifact HTML / URL 页面内部资源展示，而不是新增独立的“图片工件 / 视频工件”类型
 - 如果图片 / 视频只是对话上下文附件，应继续使用消息级 `media` / `attachments`
 
-Composer 已先支持图片和文件的本地选择、本地 object URL 预览和本地草稿消息。这一步只验证前端交互与消息渲染，不代表真实上传已接通。
+Composer 已支持图片和文件的本地选择、本地 object URL 预览。mock 模式会模拟上传与回复；upstream 模式会按当前 server 的会话文件直传接口上传附件，并在发送消息时引用 `attachment_asset_ids`。
 
-推荐上传架构：
+当前已接入的本地联调架构：
+
+- `POST /api/career-agent/threads/:threadId/files`：浏览器以 `multipart/form-data` 直传单个 `file`，server 返回 `asset_id`、浏览器可访问 URL、文件名、mime 和大小。
+- `POST /api/career-agent/threads/:threadId/messages`：请求体支持 `attachment_asset_ids`，前端只传 asset id，不把文件二进制或 base64 混入消息 JSON。
+- 发送成功后，前端重新拉取 `GET /api/career-agent/threads/:threadId/messages`，以服务端消息历史作为权威来源。
+
+未来生产上传架构：
 
 - 第一选择：三段式直传对象存储，流程为 `initiate/presign -> browser PUT binary -> complete`。
-- 本地开发如果暂时没有对象存储，server 可以先用本地磁盘或临时文件服务模拟，但仍应暴露同一套 asset 合同，避免前端以后重写。
+- 本地开发当前已采用 server 本地磁盘直传方案；如果后续切到对象存储，应保持发送消息引用 `attachment_asset_ids` 的语义不变，减少前端重写。
 - 前端不保存密钥，不直接决定存储路径，不信任浏览器传来的 mime 类型作为唯一依据。
-- 消息发送只引用 `attachment_asset_ids`，不要把文件二进制或 base64 混入消息 JSON。
 
-建议后端 / server 需要实现：
+未来三段式方案中，建议后端 / server 需要实现：
 
 - `POST /api/career-agent/uploads/initiate`：接收 `file_name`、`mime_type`、`file_size_bytes`、`thread_id`、`kind`，校验用户、线程、大小、数量和 mime 白名单，返回 `upload_id`、`upload_url`、`upload_headers`、`expires_at`。
 - `PUT upload_url`：浏览器直接上传二进制；生产建议指向对象存储预签名地址，本地开发可指向 server 临时上传地址。
 - `POST /api/career-agent/uploads/complete`：接收 `upload_id` 和 `thread_id`，server 验证文件确实存在、大小和类型匹配，然后返回 `asset_id`、`kind`、`url`、`mime_type`、`size_bytes`。
-- `POST /api/career-agent/threads/:threadId/messages`：请求体支持 `attachment_asset_ids`，server 校验 asset 属于当前用户和线程，再把附件交给 agent runtime。
+- `POST /api/career-agent/threads/:threadId/messages` 保持当前语义：server 校验 asset 属于当前用户和线程，再把附件交给 agent runtime。
 - 建议新增 asset 表或等价持久化记录：`asset_id`、`user_id`、`thread_id`、`message_id`、`status`、`storage_key`、`original_name`、`mime_type`、`size_bytes`、`created_at`、`expires_at`。
 - 需要后台清理过期未完成上传、孤儿 asset 和临时文件。
 - 图片可选做缩略图、尺寸读取和安全扫描；普通文件至少要做大小限制、类型限制和下载鉴权。
 
-前端后续接真实上传时负责：
+前端当前已负责：
 
-- 在 composer 中维护附件队列：待上传、上传中、失败、已完成、可移除。
+- 在 composer 中维护本地附件预览，并在提交时执行上传、发送、刷新历史。
 - 上传成功后只把 `asset_id` 放入发送消息请求。
-- 上传失败时允许移除或重试，不影响纯文本发送。
+- 上传、发送、刷新历史失败时保留 pending 消息并显示阶段化错误。
 - 对图片继续用消息级 `media` 展示；普通文件继续用消息级 `files` 展示，不把它们升级成 artifact。
 
 推荐顺序：
 
 - 先完成对话内图片 / 视频展示。
 - 再完成 composer 本地图片 / 文件附件 UI。
-- 然后由 server 实现上传 asset 合同和真实消息发送 endpoint。
-- 前端接入真实上传队列、pending / error / retry。
+- 当前直传方案已经完成前端接入；后续可补显式 retry UI。
+- 如后端切换对象存储，再接入三段式上传队列。
 - 最后再扩展视频上传、语音输入和更复杂的多模态工作流。
 
 ### 4. Profile 写入权
