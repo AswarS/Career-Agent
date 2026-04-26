@@ -12,7 +12,7 @@ import type { DraftMessageSubmission, MessageAction } from '../types/entities';
 const route = useRoute();
 const router = useRouter();
 const workspaceStore = useWorkspaceStore();
-const { activeThread, errorMessage, messages, messagesStatus } = storeToRefs(workspaceStore);
+const { activeThread, errorMessage, messages, messagesStatus, messageSubmitStatus } = storeToRefs(workspaceStore);
 
 const threadId = computed(() => String(route.params.threadId ?? 'thread-001'));
 const multiAgentMode = computed(() => shouldUseMultiAgentPresentation(messages.value));
@@ -96,7 +96,7 @@ async function handleMessageAction(action: MessageAction) {
     </section>
 
     <section class="composer-dock" aria-label="浮动输入区">
-      <ConversationComposer :disabled="messagesStatus === 'loading'" @submit="handleSubmit" />
+      <ConversationComposer :disabled="messagesStatus === 'loading' || messageSubmitStatus === 'loading'" @submit="handleSubmit" />
     </section>
   </section>
 </template>

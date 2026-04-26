@@ -120,7 +120,7 @@ describe('useWorkspaceStore', () => {
         {
           id: expect.any(String),
           kind: 'image',
-          url: 'blob:http://localhost/image',
+          url: expect.stringMatching(/^blob:/),
           title: 'diagram.png',
           mimeType: 'image/png',
         },
@@ -129,7 +129,7 @@ describe('useWorkspaceStore', () => {
         {
           id: expect.any(String),
           name: 'resume.pdf',
-          url: 'blob:http://localhost/file',
+          url: expect.stringMatching(/^blob:/),
           mimeType: 'application/pdf',
           sizeBytes: 4096,
         },

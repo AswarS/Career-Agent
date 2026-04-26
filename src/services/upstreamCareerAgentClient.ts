@@ -114,6 +114,10 @@ async function attachmentToFile(attachment: DraftMessageAttachment | File): Prom
 
   const blob = await response.blob();
 
+  if (typeof File === 'undefined') {
+    throw new Error(`File API is not available to prepare attachment "${draftAttachment.name}".`);
+  }
+
   return new File([blob], draftAttachment.name, {
     type: draftAttachment.mimeType,
   });

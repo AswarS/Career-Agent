@@ -460,6 +460,7 @@ const messagesByThread: Record<string, ThreadMessage[]> = {
   ...(nodeAppExampleMessages.length ? { 'thread-010': nodeAppExampleMessages } : {}),
 };
 const uploadedFilesByAssetId = new Map<string, UploadedConversationFile>();
+const uploadedFileBlobsByAssetId = new Map<string, Blob>();
 
 let profile: ProfileRecord = {
   displayName: 'Biter',
@@ -567,12 +568,50 @@ function cloneArtifactRecord(input: ArtifactRecord): ArtifactRecord {
 }
 
 function cloneThreadMessage(input: ThreadMessage): ThreadMessage {
+  const replaceUploadedFileUrl = <T extends { id: string; url: string }>(item: T): T => {
+    const blob = uploadedFileBlobsByAssetId.get(item.id);
+
+    if (!blob) {
+      return { ...item };
+    }
+
+    return {
+      ...item,
+      url: URL.createObjectURL(blob),
+    };
+  };
+
   return {
     ...input,
     actions: input.actions?.map((action) => ({ ...action })),
-    media: input.media?.map((media) => ({ ...media })),
-    files: input.files?.map((file) => ({ ...file })),
+    media: input.media?.map(replaceUploadedFileUrl),
+    files: input.files?.map(replaceUploadedFileUrl),
   };
+}
+
+async function readMockAttachmentBlob(attachment: DraftMessageAttachment | File): Promise<Blob> {
+  if (typeof File !== 'undefined' && attachment instanceof File) {
+    return attachment;
+  }
+
+  const draftAttachment = attachment as DraftMessageAttachment;
+  let response: Response;
+
+  try {
+    response = await fetch(draftAttachment.url);
+  } catch (error) {
+    if (draftAttachment.url.startsWith('blob:')) {
+      return new Blob([], { type: draftAttachment.mimeType });
+    }
+
+    throw error;
+  }
+
+  if (!response.ok) {
+    throw new Error(`Failed to read mock attachment "${draftAttachment.name}" (${response.status} ${response.statusText}).`);
+  }
+
+  return response.blob();
 }
 
 function buildProfileSummaryArtifact(nextProfile: ProfileRecord, revision: number): ArtifactRecord {
@@ -1692,10 +1731,11 @@ export function createMockCareerAgentClient(): CareerAgentClient {
         : mimeType.startsWith('video/')
           ? 'video'
           : 'file';
+      const blob = await readMockAttachmentBlob(attachment);
       const uploadedFile: UploadedConversationFile = {
         assetId,
         kind,
-        url: isFile ? URL.createObjectURL(attachment) : draftAttachment.url,
+        url: URL.createObjectURL(blob),
         title: name,
         mimeType,
         sizeBytes,
@@ -1706,6 +1746,7 @@ export function createMockCareerAgentClient(): CareerAgentClient {
       };
 
       uploadedFilesByAssetId.set(assetId, uploadedFile);
+      uploadedFileBlobsByAssetId.set(assetId, blob);
       return uploadedFile;
     },
     async sendMessage(threadId, input) {

@@ -113,6 +113,7 @@ interface WorkspaceState {
   profileSuggestionsStatus: LoadState;
   profileSaveStatus: LoadState;
   artifactsStatus: LoadState;
+  messageSubmitStatus: LoadState;
   errorMessage: string | null;
 }
 
@@ -137,6 +138,7 @@ export const useWorkspaceStore = defineStore('workspace', {
     profileSuggestionsStatus: 'idle',
     profileSaveStatus: 'idle',
     artifactsStatus: 'idle',
+    messageSubmitStatus: 'idle',
     errorMessage: null,
   }),
   getters: {
@@ -518,6 +520,10 @@ export const useWorkspaceStore = defineStore('workspace', {
         return;
       }
 
+      if (this.messageSubmitStatus === 'loading') {
+        return;
+      }
+
       const targetThreadId = this.activeThreadId;
       const timestamp = formatLocalTimestamp(new Date());
       const pendingMessageId = createMessageId('pending-user');
@@ -542,7 +548,10 @@ export const useWorkspaceStore = defineStore('workspace', {
           sizeBytes: attachment.sizeBytes,
         }));
 
-      this.messagesStatus = 'loading';
+      if (this.messagesStatus !== 'ready') {
+        this.messagesStatus = 'ready';
+      }
+      this.messageSubmitStatus = 'loading';
       this.errorMessage = null;
       this.messages.push({
         id: pendingMessageId,
@@ -570,7 +579,8 @@ export const useWorkspaceStore = defineStore('workspace', {
             ? '消息发送失败'
             : '消息已发送，但刷新消息列表失败';
 
-        this.messagesStatus = 'error';
+        this.messagesStatus = 'ready';
+        this.messageSubmitStatus = 'error';
         this.errorMessage = rawMessage;
         this.messages.push({
           id: createMessageId('send-error'),
@@ -628,6 +638,7 @@ export const useWorkspaceStore = defineStore('workspace', {
       revokeLocalMessageResources(this.messages);
       this.messages = nextMessages;
       this.messagesStatus = 'ready';
+      this.messageSubmitStatus = 'ready';
     },
     closeArtifact() {
       this.artifactPaneOpen = false;

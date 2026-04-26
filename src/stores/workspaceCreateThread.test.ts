@@ -175,6 +175,7 @@ describe('useWorkspaceStore createThread upstream state', () => {
       attachmentAssetIds: ['asset-test'],
     }));
     expect(workspaceStore.messagesStatus).toBe('ready');
+    expect(workspaceStore.messageSubmitStatus).toBe('ready');
     expect(workspaceStore.messages).toEqual(serverMessages);
   });
 
@@ -192,7 +193,8 @@ describe('useWorkspaceStore createThread upstream state', () => {
       attachments: [],
     });
 
-    expect(workspaceStore.messagesStatus).toBe('error');
+    expect(workspaceStore.messagesStatus).toBe('ready');
+    expect(workspaceStore.messageSubmitStatus).toBe('error');
     expect(workspaceStore.errorMessage).toBe('send failed');
     expect(workspaceStore.messages[0]).toMatchObject({
       role: 'user',
@@ -222,7 +224,8 @@ describe('useWorkspaceStore createThread upstream state', () => {
     });
 
     expect(client.getThreadMessages).not.toHaveBeenCalledWith('1');
-    expect(workspaceStore.messagesStatus).toBe('error');
+    expect(workspaceStore.messagesStatus).toBe('ready');
+    expect(workspaceStore.messageSubmitStatus).toBe('error');
     expect(workspaceStore.errorMessage).toBe('消息未被服务端接受');
     expect(workspaceStore.messages[1]).toMatchObject({
       role: 'system',
@@ -244,7 +247,8 @@ describe('useWorkspaceStore createThread upstream state', () => {
       attachments: [],
     });
 
-    expect(workspaceStore.messagesStatus).toBe('error');
+    expect(workspaceStore.messagesStatus).toBe('ready');
+    expect(workspaceStore.messageSubmitStatus).toBe('error');
     expect(workspaceStore.errorMessage).toBe('refresh failed');
     expect(workspaceStore.messages[1]).toMatchObject({
       role: 'system',
@@ -276,7 +280,8 @@ describe('useWorkspaceStore createThread upstream state', () => {
     });
 
     expect(client.sendMessage).not.toHaveBeenCalled();
-    expect(workspaceStore.messagesStatus).toBe('error');
+    expect(workspaceStore.messagesStatus).toBe('ready');
+    expect(workspaceStore.messageSubmitStatus).toBe('error');
     expect(workspaceStore.errorMessage).toBe('upload failed');
   });
 });
