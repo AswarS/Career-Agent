@@ -136,7 +136,10 @@ export class ConversationService {
     });
     const savedConversation = await this.conversationRepo.save(conversation);
 
-    await this.ensureConversationFileManifest(savedConversation.id);
+    await this.ensureConversationFileManifest(
+      savedConversation.userId,
+      savedConversation.id,
+    );
 
     return this.toThreadSummary(savedConversation);
   }
@@ -173,7 +176,10 @@ export class ConversationService {
     const mimeType = file.mimetype || 'application/octet-stream';
     const extension = extname(originalName);
     const storedFileName = `${Date.now()}-${randomUUID()}${extension}`;
-    const conversationDir = join(conversationFilesRootDir, conversation.id);
+    const conversationDir = this.getConversationFilesDirectory(
+      conversation.userId,
+      conversation.id,
+    );
     const absolutePath = join(conversationDir, storedFileName);
     const relativePath = this.toPublicFilePath(conversation.id, storedFileName);
     const createdAt = new Date().toISOString();
@@ -204,9 +210,16 @@ export class ConversationService {
       originalName: originalName,
     };
 
-    const manifest = await this.readConversationFileManifest(conversation.id);
+    const manifest = await this.readConversationFileManifest(
+      conversation.userId,
+      conversation.id,
+    );
     manifest.push(uploadedFile);
-    await this.writeConversationFileManifest(conversation.id, manifest);
+    await this.writeConversationFileManifest(
+      conversation.userId,
+      conversation.id,
+      manifest,
+    );
     await this.touchConversation(conversation, `Uploaded file: ${originalName}`);
 
     return uploadedFile;
@@ -214,7 +227,10 @@ export class ConversationService {
 
   async getConversationFile(conversationId: string, fileName: string) {
     const conversation = await this.getConversationByIdentifier(conversationId);
-    const manifest = await this.readConversationFileManifest(conversation.id);
+    const manifest = await this.readConversationFileManifest(
+      conversation.userId,
+      conversation.id,
+    );
     const asset = manifest.find(
       (entry) =>
         entry.stored_file_name === fileName || entry.storedFileName === fileName,
@@ -226,7 +242,10 @@ export class ConversationService {
 
     return {
       asset,
-      absolutePath: join(conversationFilesRootDir, conversation.id, fileName),
+      absolutePath: join(
+        this.getConversationFilesDirectory(conversation.userId, conversation.id),
+        fileName,
+      ),
     };
   }
 
@@ -328,9 +347,9 @@ export class ConversationService {
     assetIds: string[],
   ): Promise<MessageMedia[]> {
     const attachments: MessageMedia[] = [];
-
+    const conversation = await this.getConversationByIdentifier(conversationId)
     for (const assetId of assetIds) {
-      const asset = await this.getConversationAsset(conversationId, assetId);
+      const asset = await this.getConversationAsset(conversation, assetId);
       attachments.push(this.toMessageMedia(asset));
     }
 
@@ -416,10 +435,13 @@ export class ConversationService {
   }
 
   private async getConversationAsset(
-    conversationId: string,
+    conversation: ConversationEntity,
     assetId: string,
   ): Promise<UploadedConversationFile> {
-    const manifest = await this.readConversationFileManifest(conversationId);
+    const manifest = await this.readConversationFileManifest(
+      conversation.userId,
+      conversation.id,
+    );
     const asset = manifest.find(
       (entry) => entry.asset_id === assetId || entry.assetId === assetId,
     );
@@ -431,8 +453,15 @@ export class ConversationService {
     return asset;
   }
 
-  private getConversationManifestPath(conversationId: string) {
-    return join(conversationFilesRootDir, conversationId, manifestFileName);
+  private getConversationFilesDirectory(userId: number, conversationId: string) {
+    return join(conversationFilesRootDir, String(userId), conversationId);
+  }
+
+  private getConversationManifestPath(userId: number, conversationId: string) {
+    return join(
+      this.getConversationFilesDirectory(userId, conversationId),
+      manifestFileName,
+    );
   }
 
   private async readRuntimeSessionMessages(
@@ -659,9 +688,12 @@ export class ConversationService {
     throw new NotFoundException(`Runtime session ${sessionId} not found`);
   }
 
-  private async ensureConversationFileManifest(conversationId: string) {
-    const manifestPath = this.getConversationManifestPath(conversationId);
-    const conversationDir = join(conversationFilesRootDir, conversationId);
+  private async ensureConversationFileManifest(
+    userId: number,
+    conversationId: string,
+  ) {
+    const manifestPath = this.getConversationManifestPath(userId, conversationId);
+    const conversationDir = this.getConversationFilesDirectory(userId, conversationId);
 
     await mkdir(conversationDir, { recursive: true });
 
@@ -677,10 +709,11 @@ export class ConversationService {
   }
 
   private async readConversationFileManifest(
+    userId: number,
     conversationId: string,
   ): Promise<UploadedConversationFile[]> {
-    const manifestPath = this.getConversationManifestPath(conversationId);
-    await this.ensureConversationFileManifest(conversationId);
+    const manifestPath = this.getConversationManifestPath(userId, conversationId);
+    await this.ensureConversationFileManifest(userId, conversationId);
 
     const rawContent = await readFile(manifestPath, 'utf8');
     const parsed = JSON.parse(rawContent) as unknown;
@@ -693,11 +726,12 @@ export class ConversationService {
   }
 
   private async writeConversationFileManifest(
+    userId: number,
     conversationId: string,
     assets: UploadedConversationFile[],
   ) {
-    const manifestPath = this.getConversationManifestPath(conversationId);
-    await this.ensureConversationFileManifest(conversationId);
+    const manifestPath = this.getConversationManifestPath(userId, conversationId);
+    await this.ensureConversationFileManifest(userId, conversationId);
     await writeFile(manifestPath, JSON.stringify(assets, null, 2) + '\n', 'utf8');
   }
 

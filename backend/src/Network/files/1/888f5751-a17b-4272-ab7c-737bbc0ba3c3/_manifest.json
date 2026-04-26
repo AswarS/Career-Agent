@@ -1,0 +1,40 @@
+[
+  {
+    "asset_id": "asset-27fef92e-8ad2-42bd-8397-7ad200297cdf",
+    "assetId": "asset-27fef92e-8ad2-42bd-8397-7ad200297cdf",
+    "kind": "image",
+    "url": "/api/career-agent/threads/888f5751-a17b-4272-ab7c-737bbc0ba3c3/files/1777210012329-dfbf2e5e-5a87-49ec-abfc-be77061f8dc2.png",
+    "title": "_____________2025-07-11_014934.png",
+    "mime_type": "image/png",
+    "mimeType": "image/png",
+    "size_bytes": 186989,
+    "sizeBytes": 186989,
+    "created_at": "2026-04-26T13:26:52.329Z",
+    "createdAt": "2026-04-26T13:26:52.329Z",
+    "storage_path": "/api/career-agent/threads/888f5751-a17b-4272-ab7c-737bbc0ba3c3/files/1777210012329-dfbf2e5e-5a87-49ec-abfc-be77061f8dc2.png",
+    "storagePath": "/api/career-agent/threads/888f5751-a17b-4272-ab7c-737bbc0ba3c3/files/1777210012329-dfbf2e5e-5a87-49ec-abfc-be77061f8dc2.png",
+    "stored_file_name": "1777210012329-dfbf2e5e-5a87-49ec-abfc-be77061f8dc2.png",
+    "storedFileName": "1777210012329-dfbf2e5e-5a87-49ec-abfc-be77061f8dc2.png",
+    "original_name": "_____________2025-07-11_014934.png",
+    "originalName": "_____________2025-07-11_014934.png"
+  },
+  {
+    "asset_id": "asset-f253966b-98fd-49f0-ab5c-c57744451edf",
+    "assetId": "asset-f253966b-98fd-49f0-ab5c-c57744451edf",
+    "kind": "file",
+    "url": "/api/career-agent/threads/888f5751-a17b-4272-ab7c-737bbc0ba3c3/files/1777213367048-10e80882-8e45-4f80-ba87-b9b319ae99c8.docx",
+    "title": "______.docx",
+    "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "size_bytes": 500382,
+    "sizeBytes": 500382,
+    "created_at": "2026-04-26T14:22:47.051Z",
+    "createdAt": "2026-04-26T14:22:47.051Z",
+    "storage_path": "/api/career-agent/threads/888f5751-a17b-4272-ab7c-737bbc0ba3c3/files/1777213367048-10e80882-8e45-4f80-ba87-b9b319ae99c8.docx",
+    "storagePath": "/api/career-agent/threads/888f5751-a17b-4272-ab7c-737bbc0ba3c3/files/1777213367048-10e80882-8e45-4f80-ba87-b9b319ae99c8.docx",
+    "stored_file_name": "1777213367048-10e80882-8e45-4f80-ba87-b9b319ae99c8.docx",
+    "storedFileName": "1777213367048-10e80882-8e45-4f80-ba87-b9b319ae99c8.docx",
+    "original_name": "______.docx",
+    "originalName": "______.docx"
+  }
+]
