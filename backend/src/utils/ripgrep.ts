@@ -4,6 +4,8 @@ import memoize from 'lodash-es/memoize.js'
 import { homedir } from 'os'
 import * as path from 'path'
 import { logEvent } from 'src/services/analytics/index.js'
+import { existsSync } from 'fs'
+import { createRequire } from 'module'
 import { fileURLToPath } from 'url'
 import { isInBundledMode } from './bundledMode.js'
 import { logForDebugging } from './debug.js'
@@ -60,7 +62,19 @@ const getRipgrepConfig = memoize((): RipgrepConfig => {
     process.platform === 'win32'
       ? path.resolve(rgRoot, `${process.arch}-win32`, 'rg.exe')
       : path.resolve(rgRoot, `${process.arch}-${process.platform}`, 'rg')
-
+    // Fallback: try @vscode/ripgrep from node_modules when vendor binary is absent
+  if (!existsSync(command)) {
+    try {
+      const require = createRequire(import.meta.url)
+      const vscodeRg = require('@vscode/ripgrep')
+      if (vscodeRg?.rgPath) {
+        logForDebugging(`[ripgrep] found via @vscode/ripgrep: ${vscodeRg.rgPath}`)
+        return { mode: 'builtin', command: vscodeRg.rgPath, args: [] }
+      }
+    } catch {
+      // no fallback available, let original command fail with a clear error
+    }
+  }
   return { mode: 'builtin', command, args: [] }
 })
 

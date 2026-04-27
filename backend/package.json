@@ -43,6 +43,7 @@
     "@opentelemetry/sdk-metrics": "*",
     "@opentelemetry/sdk-trace-base": "*",
     "@opentelemetry/semantic-conventions": "*",
+    "@vscode/ripgrep": "^1.5.7",
     "ajv": "*",
     "asciichart": "*",
     "auto-bind": "*",
