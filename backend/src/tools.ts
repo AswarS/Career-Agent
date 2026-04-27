@@ -79,6 +79,8 @@ import { EnterPlanModeTool } from './tools/EnterPlanModeTool/EnterPlanModeTool.j
 import { EnterWorktreeTool } from './tools/EnterWorktreeTool/EnterWorktreeTool.js'
 import { ExitWorktreeTool } from './tools/ExitWorktreeTool/ExitWorktreeTool.js'
 import { ConfigTool } from './tools/ConfigTool/ConfigTool.js'
+import { ImageGenerateTool } from './tools/ImageGenerateTool/ImageGenerateTool.js'
+import { VideoGenerateTool } from './tools/VideoGenerateTool/VideoGenerateTool.js'
 import { TaskCreateTool } from './tools/TaskCreateTool/TaskCreateTool.js'
 import { TaskGetTool } from './tools/TaskGetTool/TaskGetTool.js'
 import { TaskUpdateTool } from './tools/TaskUpdateTool/TaskUpdateTool.js'
@@ -236,6 +238,8 @@ export function getAllBaseTools(): Tools {
     ...(RemoteTriggerTool ? [RemoteTriggerTool] : []),
     ...(MonitorTool ? [MonitorTool] : []),
     BriefTool,
+    ImageGenerateTool,
+    VideoGenerateTool,
     ...(SendUserFileTool ? [SendUserFileTool] : []),
     ...(PushNotificationTool ? [PushNotificationTool] : []),
     ...(SubscribePRTool ? [SubscribePRTool] : []),

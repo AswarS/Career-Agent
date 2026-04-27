@@ -1,0 +1,18 @@
+{
+    "image_url": "https://openrouter.ai/api",
+    "image_key": "sk-or-v1-...",
+    "image_default_model": "bytedance-seed/seedream-4.5",
+    "image_models": [
+        "bytedance-seed/seedream-4.5",
+        "black-forest-labs/flux.2-klein-4b",
+        "sourceful/riverflow-v2-fast"
+    ],
+    "video_url": "https://openrouter.ai/api",
+    "video_key": "sk-or-v1-...",
+    "video_default_model": "alibaba/wan-2.6",
+    "video_models": [
+        "alibaba/wan-2.6",
+        "bytedance/seedance-2.0-fast",
+        "alibaba/wan-2.7"
+    ]
+}

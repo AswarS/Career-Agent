@@ -38,7 +38,7 @@ allowed-tools: read, write, exec
 └── metadata.json               # 元信息
 ```
 
-默认输出目录：`~/.openclaw/workspace/learning-plan/output/`
+默认输出目录：`$CLAUDE_CONFIG_DIR/workspace/learning-plan/output/`（即 `~/.claude-dev/workspace/learning-plan/output/`）
 
 ---
 

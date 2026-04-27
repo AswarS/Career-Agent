@@ -1,2 +1,5 @@
 server/node_modules
 server/dist
+/tmp
+start.sh
+.claude/
