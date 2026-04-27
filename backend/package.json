@@ -61,6 +61,7 @@
     "cli-boxes": "*",
     "code-excerpt": "*",
     "color-diff-napi": "file:./shims/color-diff-napi",
+    "content-disposition": "^1.1.0",
     "diff": "*",
     "emoji-regex": "*",
     "env-paths": "*",

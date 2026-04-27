@@ -16,7 +16,6 @@ import type { Response } from 'express';
 import { ConversationService } from './conversation.service';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { SendMultimodalMessageDto } from './dto/send-multimodal-message.dto';
-
 @Controller('api/career-agent/threads')
 export class ConversationController {
   constructor(private readonly conversationService: ConversationService) {}
@@ -71,9 +70,9 @@ export class ConversationController {
       conversationId,
       fileName,
     );
-
+    const contentDisposition = require('content-disposition')
     response.setHeader('Content-Type', asset.mime_type);
-    response.setHeader('Content-Disposition', `inline; filename="${asset.original_name}"`);
+    response.setHeader('Content-Disposition', contentDisposition(asset.originalName, { type: 'inline' }));
 
     return new StreamableFile(await readFile(absolutePath));
   }
