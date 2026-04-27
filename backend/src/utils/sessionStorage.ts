@@ -17,6 +17,7 @@ import {
 } from 'fs/promises'
 import memoize from 'lodash-es/memoize.js'
 import { basename, dirname, join } from 'path'
+import { fileURLToPath } from 'url'
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,

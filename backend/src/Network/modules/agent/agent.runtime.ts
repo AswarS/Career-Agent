@@ -7,6 +7,9 @@ export interface AgentCreateConversationInput {
   userId: string;
   title?: string;
   preview?: string;
+  apiKey?: string;
+  baseUrl?: string;
+  model?: string;
 }
 
 export interface AgentConversationMetadata {
@@ -33,6 +36,10 @@ export interface AgentSendMessageInput {
   attachments?: AgentAttachmentInput[];
   context?: Record<string, unknown>;
   clientRequestId?: string;
+  /** Per-message override, falls back to conversation-level config */
+  apiKey?: string;
+  baseUrl?: string;
+  model?: string;
 }
 
 export interface AgentSendMessageResult {
@@ -67,107 +74,7 @@ export async function createConversation(
   return metadata;
 }
 
-export async function sendMessage(
-  input: AgentSendMessageInput,
-): Promise<AgentSendMessageResult> {
-  const userMessageId = `msg_user_${randomUUID().replace(/-/g, '')}`;
-  const assistantMessageId = `msg_assistant_${randomUUID().replace(/-/g, '')}`;
-  const promptId = input.clientRequestId ?? randomUUID();
-  const userEventUuid = randomUUID();
-  const assistantThinkingUuid = randomUUID();
-  const assistantReplyUuid = randomUUID();
-  const now = new Date();
-  const userTimestamp = now.toISOString();
-  const thinkingTimestamp = new Date(now.getTime() + 300).toISOString();
-  const replyTimestamp = new Date(now.getTime() + 700).toISOString();
-  const reply = `Stub agent reply: ${input.content}`;
-
-  await ensureRuntimeSessionFile(input.userId, input.conversationId);
-
-  await appendRuntimeEvent(input.userId, input.conversationId, {
-    parentUuid: null,
-    isSidechain: false,
-    promptId,
-    type: 'user',
-    message: {
-      id: userMessageId,
-      role: 'user',
-      content: input.content,
-    },
-    uuid: userEventUuid,
-    timestamp: userTimestamp,
-    sessionId: input.conversationId,
-  });
-
-  await appendRuntimeEvent(input.userId, input.conversationId, {
-    parentUuid: userEventUuid,
-    isSidechain: false,
-    type: 'assistant',
-    message: {
-      id: assistantMessageId,
-      type: 'message',
-      role: 'assistant',
-      model: 'stub-agent',
-      content: [
-        {
-          type: 'thinking',
-          thinking: `Preparing a response for: ${input.content}`,
-          signature: '',
-        },
-      ],
-      stop_reason: null,
-      stop_sequence: null,
-      usage: {
-        input_tokens: 0,
-        output_tokens: 0,
-      },
-    },
-    uuid: assistantThinkingUuid,
-    timestamp: thinkingTimestamp,
-    sessionId: input.conversationId,
-  });
-
-  await appendRuntimeEvent(input.userId, input.conversationId, {
-    parentUuid: assistantThinkingUuid,
-    isSidechain: false,
-    type: 'assistant',
-    message: {
-      id: assistantMessageId,
-      type: 'message',
-      role: 'assistant',
-      model: 'stub-agent',
-      content: [
-        {
-          type: 'text',
-          text: reply,
-        },
-      ],
-      stop_reason: 'end_turn',
-      stop_sequence: null,
-      usage: {
-        input_tokens: 0,
-        output_tokens: 0,
-      },
-    },
-    uuid: assistantReplyUuid,
-    timestamp: replyTimestamp,
-    sessionId: input.conversationId,
-  });
-
-  return {
-    accepted: true,
-    status: 'done',
-    conversationId: input.conversationId,
-    userMessageId,
-    assistantMessageId,
-    reply,
-    raw: {
-      kind: input.kind ?? 'markdown',
-      attachmentCount: input.attachments?.length ?? 0,
-      context: input.context ?? {},
-    },
-  };
-}
+export { ensureRuntimeSessionFile, appendRuntimeEvent }
 
 async function ensureRuntimeSessionFile(userId: string, conversationId: string) {
   const userDir = join(userDataRootDir, userId);
