@@ -240,6 +240,7 @@ export function createQueryEngineForSession(
     initialMessages: options.initialMessages ?? [],
     readFileCache: options.readFileCache ?? new Map() as FileStateCache,
     userSpecifiedModel: context.config.model,
+    thinkingConfig: { type: 'disabled' },
     abortController: context.abortController,
   }
 

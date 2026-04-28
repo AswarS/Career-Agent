@@ -2,6 +2,11 @@ import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
+import { enableConfigs } from '../utils/config.js';
+import { ensureBootstrapMacro } from '../bootstrapMacro.js';
+
+enableConfigs();
+ensureBootstrapMacro();
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);

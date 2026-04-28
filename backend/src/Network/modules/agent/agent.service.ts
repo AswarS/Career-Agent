@@ -15,6 +15,7 @@ import {
   runWithSessionContext,
   type SessionContext,
 } from '../../../server/SessionContext.js';
+import { createIsolatedState } from '../../../bootstrap/state.js';
 import { appendFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -257,8 +258,10 @@ export class AgentService {
     let qe: QueryEngine;
     try {
       qe = await this.getOrCreateQueryEngine(conversationId, userId, config);
-    } catch {
-      // QueryEngine creation failed (e.g. no API key) — caller will use stub
+    } catch (qeError: any) {
+      // QueryEngine creation failed — log the actual error
+      console.error('[AgentService] getOrCreateQueryEngine FAILED:', qeError?.message ?? qeError);
+      console.error('[AgentService] getOrCreateQueryEngine stack:', qeError?.stack);
       return { success: false };
     }
 
@@ -301,6 +304,9 @@ export class AgentService {
         }
       });
     } catch (err: any) {
+      // Log the actual submitMessage error
+      console.error('[AgentService] submitMessage FAILED:', err?.message ?? err);
+      console.error('[AgentService] submitMessage stack:', err?.stack);
       // If we got a partial reply, return it; otherwise treat as failure
       if (!reply) {
         return { success: false };
@@ -349,7 +355,7 @@ export class AgentService {
     return {
       sessionId: conversationId,
       userId,
-      state: {},
+      state: createIsolatedState({ sessionId: conversationId as any }),
       config: {
         cwd: process.cwd(),
         apiKey: config.apiKey,
