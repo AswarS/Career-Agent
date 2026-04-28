@@ -15,6 +15,7 @@ import { CreateConversationDto } from './dto/create-conversation.dto';
 import { SendMultimodalMessageDto } from './dto/send-multimodal-message.dto';
 import { ConversationEntity } from './entities/conversation.entity';
 import { MessageEntity } from './entities/message.entity';
+import {integer} from "vscode-languageserver-types";
 
 export interface MessageAction {
   id: string;
@@ -181,7 +182,8 @@ export class ConversationService {
       conversation.id,
     );
     const absolutePath = join(conversationDir, storedFileName);
-    const relativePath = this.toPublicFilePath(conversation.id, storedFileName);
+    const relativePath = this.toLocalFilePath(conversation.id, storedFileName,conversation.userId);
+    const url = this.toPublicFilePath(conversation.id,storedFileName)
     const createdAt = new Date().toISOString();
 
     this.resolveAssetKind(mimeType);
@@ -194,7 +196,7 @@ export class ConversationService {
       asset_id: assetId,
       assetId,
       kind: this.resolveAssetKind(mimeType),
-      url: relativePath,
+      url: url,
       title: file.originalname,
       mime_type: mimeType,
       mimeType,
@@ -253,6 +255,7 @@ export class ConversationService {
     const conversation = await this.getConversationByIdentifier(conversationId);
     const attachmentIds = dto.attachment_asset_ids ?? dto.attachmentAssetIds ?? [];
     const attachments = await this.resolveAttachments(conversation.id, attachmentIds);
+
     const agentResponse = await this.agentService.sendMessage({
       conversationId: conversation.id,
       userId: String(conversation.userId),
@@ -788,7 +791,7 @@ export class ConversationService {
         conversationId,
         resourceId: resource.id,
         resourceKind: resource.kind,
-        resourcePath: resource.storage_path ?? resource.storagePath ?? resource.url,
+        resourcePath: resource.url,
         mimeType: resource.mime_type ?? resource.mimeType,
         title: resource.title,
         sizeBytes: resource.size_bytes ?? resource.sizeBytes,
@@ -834,7 +837,9 @@ export class ConversationService {
   private toPublicFilePath(conversationId: string, storedFileName: string) {
     return `/api/career-agent/threads/${conversationId}/files/${storedFileName}`;
   }
-
+  private toLocalFilePath(conversationId: string, storedFileName: string,userId: integer) {
+    return `./src/Network/files/${userId}/${conversationId}/${storedFileName}`;
+  }
   private isEnoent(error: unknown) {
     return (
       typeof error === 'object' &&
