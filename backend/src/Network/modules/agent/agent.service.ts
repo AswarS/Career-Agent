@@ -6,11 +6,6 @@ import {
   AgentSendMessageResult,
   createConversation,
 } from './agent.runtime';
-import { QueryEngine } from '../../../QueryEngine.js';
-import {
-  createQueryEngineForSession,
-  createServerAppState,
-} from '../../../server/queryEngineFactory.js';
 import {
   runWithSessionContext,
   type SessionContext,
@@ -50,10 +45,10 @@ interface ConversationConfig {
 
 @Injectable()
 export class AgentService {
-  /** Per-conversation QueryEngine instances to preserve multi-turn history */
-  private queryEngines = new Map<string, QueryEngine>();
   /** Per-conversation LLM config (apiKey / baseUrl / model) */
   private conversationConfigs = new Map<string, ConversationConfig>();
+  /** Per-conversation message history for multi-turn */
+  private conversationHistories = new Map<string, Array<{ role: 'user' | 'assistant'; content: string }>>();
 
   async createConversation(
     input: AgentCreateConversationInput,
@@ -255,95 +250,84 @@ export class AgentService {
       }
     | { success: false }
   > {
-    let qe: QueryEngine;
-    try {
-      qe = await this.getOrCreateQueryEngine(conversationId, userId, config);
-    } catch (qeError: any) {
-      // QueryEngine creation failed — log the actual error
-      console.error('[AgentService] getOrCreateQueryEngine FAILED:', qeError?.message ?? qeError);
-      console.error('[AgentService] getOrCreateQueryEngine stack:', qeError?.stack);
+    const apiKey = config.apiKey;
+    const baseUrl = config.baseUrl;
+    const model = config.model;
+
+    if (!apiKey || !baseUrl) {
+      console.error('[AgentService] No apiKey/baseUrl configured, skipping real inference');
       return { success: false };
     }
 
     const startTime = Date.now();
     let reply = '';
-    let thinking = '';
-    let model: string | undefined;
-    let usage: Record<string, unknown> | undefined;
 
     try {
-      const ctx = this.buildSessionContext(conversationId, userId, config);
-      await runWithSessionContext(ctx, async () => {
-        for await (const event of qe.submitMessage(content)) {
-          // Extract text from assistant content blocks
-          if (event.type === 'assistant') {
-            const message = event.message as any;
-            if (message?.model) model = message.model;
-            if (message?.usage) usage = message.usage;
+      // Get or create per-conversation message history
+      let history = this.conversationHistories.get(conversationId);
+      if (!history) {
+        history = [];
+        this.conversationHistories.set(conversationId, history);
+      }
 
-            const contentBlocks: any[] = Array.isArray(message?.content)
-              ? message.content
-              : [];
+      // Append user message
+      history.push({ role: 'user', content });
 
-            for (const block of contentBlocks) {
-              if (block.type === 'text' && typeof block.text === 'string') {
-                reply += block.text;
-              }
-              if (block.type === 'thinking' && typeof block.thinking === 'string') {
-                thinking += block.thinking;
-              }
-            }
-          }
+      // Build OpenAI-compatible chat completions request URL
+      const endpoint = baseUrl.replace(/\/+$/, '') + '/chat/completions';
 
-          // Extract usage from result event
-          if (event.type === 'result') {
-            const result = event as any;
-            if (result.usage) usage = result.usage;
-            if (result.model) model = result.model;
-          }
-        }
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: model ?? 'deepseek-chat',
+          messages: history,
+          max_tokens: 4096,
+          stream: false,
+        }),
       });
+
+      if (!response.ok) {
+        const errBody = await response.text();
+        console.error(`[AgentService] API ${response.status}: ${errBody}`);
+        // Remove failed user message from history
+        history.pop();
+        return { success: false };
+      }
+
+      const data = await response.json() as any;
+      const choice = data.choices?.[0];
+      if (choice?.message?.content) {
+        reply = choice.message.content;
+      }
+
+      // Append assistant reply to history for multi-turn
+      if (reply) {
+        history.push({ role: 'assistant', content: reply });
+      }
+
+      return {
+        success: true,
+        reply: reply || '(no text reply)',
+        model: data.model ?? model,
+        usage: data.usage as Record<string, unknown> | undefined,
+        durationMs: Date.now() - startTime,
+      };
     } catch (err: any) {
-      // Log the actual submitMessage error
-      console.error('[AgentService] submitMessage FAILED:', err?.message ?? err);
-      console.error('[AgentService] submitMessage stack:', err?.stack);
-      // If we got a partial reply, return it; otherwise treat as failure
+      console.error('[AgentService] API call FAILED:', err?.message ?? err);
       if (!reply) {
         return { success: false };
       }
+      return {
+        success: true,
+        reply,
+        model,
+        durationMs: Date.now() - startTime,
+      };
     }
-
-    if (!reply && !thinking) {
-      return { success: false };
-    }
-
-    return {
-      success: true,
-      reply: reply || '(no text reply)',
-      thinking: thinking || undefined,
-      model,
-      usage,
-      durationMs: Date.now() - startTime,
-    };
-  }
-
-  // -------------------------------------------------------------------------
-  // Private: QueryEngine lifecycle
-  // -------------------------------------------------------------------------
-
-  private async getOrCreateQueryEngine(
-    conversationId: string,
-    userId: string,
-    config: ConversationConfig,
-  ): Promise<QueryEngine> {
-    const existing = this.queryEngines.get(conversationId);
-    if (existing) return existing;
-
-    const ctx = this.buildSessionContext(conversationId, userId, config);
-    const qe = createQueryEngineForSession(ctx as any);
-
-    this.queryEngines.set(conversationId, qe);
-    return qe;
   }
 
   private buildSessionContext(
