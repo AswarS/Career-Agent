@@ -266,6 +266,9 @@ export class ConversationService {
       })),
       context: dto.context,
       clientRequestId: dto.client_request_id ?? dto.clientRequestId,
+      apiKey: "",
+      baseUrl: "",
+      model: ""
     });
 
     await this.replaceMessageResourceMappings(
