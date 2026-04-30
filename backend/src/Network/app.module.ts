@@ -9,6 +9,8 @@ import { AgentModule } from './modules/agent/agent.module';
 import { UserEntity } from './modules/user/entities/user.entity';
 import { ArtifactEntity } from './modules/artifact/entities/artifact.entity';
 import { ArtifactModule } from './modules/artifact/artifact.module';
+import { TeamModule } from './modules/team/team.module';
+import { TeamEntity } from './modules/team/entities/team.entity';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -20,12 +22,13 @@ const networkDir = dirname(fileURLToPath(import.meta.url));
     TypeOrmModule.forRoot({
       type: 'sqlite',
       database: join(networkDir, 'data', 'test.sqlite'),
-      entities: [UserEntity, ArtifactEntity, ConversationEntity, MessageEntity],
+      entities: [UserEntity, ArtifactEntity, ConversationEntity, MessageEntity, TeamEntity],
       synchronize: true,
     }),
     AgentModule,
     ConversationModule,
     ArtifactModule,
+    TeamModule,
   ],
   providers: [AppService],
 })

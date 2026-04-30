@@ -11,6 +11,8 @@ import {
   type SessionContext,
 } from '../../../server/SessionContext.js';
 import { createIsolatedState } from '../../../bootstrap/state.js';
+import { createQueryEngineForSession } from '../../../server/queryEngineFactory.js';
+import { QueryEngine } from '../../../QueryEngine.js';
 import { appendFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -47,14 +49,15 @@ interface ConversationConfig {
 export class AgentService {
   /** Per-conversation LLM config (apiKey / baseUrl / model) */
   private conversationConfigs = new Map<string, ConversationConfig>();
-  /** Per-conversation message history for multi-turn */
-  private conversationHistories = new Map<string, Array<{ role: 'user' | 'assistant'; content: string }>>();
+  /** Per-conversation QueryEngine instances (manages own message history) */
+  private queryEngines = new Map<string, QueryEngine>();
+  /** Per-conversation SessionContext for ALS routing */
+  private sessionContexts = new Map<string, SessionContext>();
 
   async createConversation(
     input: AgentCreateConversationInput,
   ): Promise<AgentConversationMetadata> {
     const meta = await createConversation(input);
-    // Store config for later QueryEngine creation
     if (input.apiKey || input.baseUrl || input.model) {
       this.conversationConfigs.set(meta.conversationId, {
         apiKey: input.apiKey,
@@ -88,15 +91,21 @@ export class AgentService {
       sessionId: conversationId,
     });
 
-    // 2. Try real LLM inference via QueryEngine
-    // Merge: message-level override > conversation-level config
+    // 2. Merge config: message-level override > conversation-level config
     const convCfg = this.conversationConfigs.get(conversationId);
     const mergedConfig: ConversationConfig = {
       apiKey: input.apiKey ?? convCfg?.apiKey,
       baseUrl: input.baseUrl ?? convCfg?.baseUrl,
       model: input.model ?? convCfg?.model,
     };
-    const qeResult = await this.tryRealInference(conversationId, userId, content, mergedConfig);
+
+    // 3. Run inference via QueryEngine
+    const qeResult = await this.runQueryEngineInference(
+      conversationId,
+      userId,
+      content,
+      mergedConfig,
+    );
 
     if (qeResult.success) {
       // Write assistant thinking event
@@ -169,7 +178,7 @@ export class AgentService {
       };
     }
 
-    // 3. Fallback to stub if QueryEngine unavailable
+    // 4. Fallback to stub if QueryEngine unavailable
     const stubReply = `Stub agent reply: ${content}`;
     const thinkingUuid = randomUUID();
     const replyUuid = randomUUID();
@@ -231,10 +240,10 @@ export class AgentService {
   }
 
   // -------------------------------------------------------------------------
-  // Private: real LLM inference via QueryEngine
+  // Private: real LLM inference via existing QueryEngine
   // -------------------------------------------------------------------------
 
-  private async tryRealInference(
+  private async runQueryEngineInference(
     conversationId: string,
     userId: string,
     content: string,
@@ -250,83 +259,75 @@ export class AgentService {
       }
     | { success: false }
   > {
-    const apiKey = config.apiKey;
-    const baseUrl = config.baseUrl;
-    const model = config.model;
-
-    if (!apiKey || !baseUrl) {
-      console.error('[AgentService] No apiKey/baseUrl configured, skipping real inference');
-      return { success: false };
-    }
-
     const startTime = Date.now();
-    let reply = '';
 
     try {
-      // Get or create per-conversation message history
-      let history = this.conversationHistories.get(conversationId);
-      if (!history) {
-        history = [];
-        this.conversationHistories.set(conversationId, history);
+      // Get or create per-conversation QueryEngine + SessionContext
+      let queryEngine = this.queryEngines.get(conversationId);
+      if (!queryEngine) {
+        const ctx = this.buildSessionContext(conversationId, userId, config);
+        this.sessionContexts.set(conversationId, ctx);
+        queryEngine = createQueryEngineForSession(ctx);
+        ctx.queryEngine = queryEngine;
+        this.queryEngines.set(conversationId, queryEngine);
       }
 
-      // Append user message
-      history.push({ role: 'user', content });
+      const ctx = this.sessionContexts.get(conversationId)!;
 
-      // Build OpenAI-compatible chat completions request URL
-      const endpoint = baseUrl.replace(/\/+$/, '') + '/chat/completions';
+      // Run inside ALS context so all module-level helpers route correctly
+      const result = await runWithSessionContext(ctx, async () => {
+        const textParts: string[] = [];
+        const thinkingParts: string[] = [];
+        let model: string | undefined;
 
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: model ?? 'deepseek-chat',
-          messages: history,
-          max_tokens: 4096,
-          stream: false,
-        }),
+        const stream = queryEngine!.submitMessage(content);
+
+        for await (const msg of stream) {
+          // QueryEngine yields different event types:
+          // - type=assistant: msg.message.content is content block array
+          // - type=result: msg.result is the final text summary
+          const msgMessage = (msg as any).message;
+          if (msgMessage && Array.isArray(msgMessage.content)) {
+            for (const block of msgMessage.content) {
+              if (block.type === 'text' && typeof block.text === 'string') {
+                textParts.push(block.text);
+              }
+              if (block.type === 'thinking' && typeof block.thinking === 'string') {
+                thinkingParts.push(block.thinking);
+              }
+            }
+            if (msgMessage.model && !model) {
+              model = msgMessage.model;
+            }
+          }
+
+          // Fallback: capture result text if no content blocks were extracted
+          if ((msg as any).type === 'result' && typeof (msg as any).result === 'string' && !textParts.length) {
+            textParts.push((msg as any).result);
+          }
+        }
+
+        const reply = textParts.join('\n').trim();
+        const thinking = thinkingParts.join('\n').trim();
+
+        return { reply, thinking, model };
       });
 
-      if (!response.ok) {
-        const errBody = await response.text();
-        console.error(`[AgentService] API ${response.status}: ${errBody}`);
-        // Remove failed user message from history
-        history.pop();
+      if (!result.reply) {
+        console.error('[AgentService] QueryEngine returned empty reply');
         return { success: false };
-      }
-
-      const data = await response.json() as any;
-      const choice = data.choices?.[0];
-      if (choice?.message?.content) {
-        reply = choice.message.content;
-      }
-
-      // Append assistant reply to history for multi-turn
-      if (reply) {
-        history.push({ role: 'assistant', content: reply });
       }
 
       return {
         success: true,
-        reply: reply || '(no text reply)',
-        model: data.model ?? model,
-        usage: data.usage as Record<string, unknown> | undefined,
+        reply: result.reply,
+        thinking: result.thinking || undefined,
+        model: result.model,
         durationMs: Date.now() - startTime,
       };
     } catch (err: any) {
-      console.error('[AgentService] API call FAILED:', err?.message ?? err);
-      if (!reply) {
-        return { success: false };
-      }
-      return {
-        success: true,
-        reply,
-        model,
-        durationMs: Date.now() - startTime,
-      };
+      console.error('[AgentService] QueryEngine inference FAILED:', err?.message ?? err);
+      return { success: false };
     }
   }
 
@@ -335,7 +336,6 @@ export class AgentService {
     userId: string,
     config: ConversationConfig = {},
   ): SessionContext {
-    const { getAppState } = createServerAppState();
     return {
       sessionId: conversationId,
       userId,

@@ -266,9 +266,9 @@ export class ConversationService {
       })),
       context: dto.context,
       clientRequestId: dto.client_request_id ?? dto.clientRequestId,
-      apiKey: "sk-oSbna4Z97neXObFMFekMaQ",
-      baseUrl: "https://llmapi.paratera.com/v1",
-      model: "DeepSeek-V4-Flash"
+      apiKey: "",
+      baseUrl: "",
+      model: "",
     });
 
     await this.replaceMessageResourceMappings(
