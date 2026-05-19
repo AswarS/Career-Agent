@@ -38,6 +38,7 @@
     "@modelcontextprotocol/sdk": "*",
     "@nestjs/common": "^11.1.19",
     "@nestjs/core": "^11.1.19",
+    "@nestjs/mapped-types": "^2.1.1",
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/typeorm": "^11.0.1",
     "@opentelemetry/api": "*",

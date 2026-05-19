@@ -11,6 +11,7 @@ import { extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Repository } from 'typeorm';
 import { AgentService } from '../agent/agent.service';
+import { SkillService } from '../skill/skill.service';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { SendMultimodalMessageDto } from './dto/send-multimodal-message.dto';
 import { ConversationEntity } from './entities/conversation.entity';
@@ -115,6 +116,7 @@ export class ConversationService {
     @InjectRepository(MessageEntity)
     private readonly messageResourceRepo: Repository<MessageEntity>,
     private readonly agentService: AgentService,
+    private readonly skillService: SkillService,
   ) {}
 
   async createConversation(dto: CreateConversationDto) {
@@ -255,6 +257,28 @@ export class ConversationService {
     const conversation = await this.getConversationByIdentifier(conversationId);
     const attachmentIds = dto.attachment_asset_ids ?? dto.attachmentAssetIds ?? [];
     const attachments = await this.resolveAttachments(conversation.id, attachmentIds);
+
+    const skillInvocation = this.skillService.parseSkillInvocation(dto.content);
+    if (skillInvocation && this.skillService.registry.has(skillInvocation.skillName)) {
+      const skillResult = await this.skillService.invokeSkill(
+        skillInvocation.skillName,
+        skillInvocation.args,
+        dto.context,
+      );
+
+      return {
+        accepted: true,
+        status: 'done',
+        conversation_id: conversation.id,
+        conversationId: conversation.id,
+        message_id: `msg_user_skill_${Date.now()}`,
+        messageId: `msg_user_skill_${Date.now()}`,
+        assistant_message_id: `msg_assistant_skill_${Date.now()}`,
+        assistantMessageId: `msg_assistant_skill_${Date.now()}`,
+        reply: skillResult.reply,
+        raw: { source: 'skill', skillName: skillInvocation.skillName, ...skillResult.metadata },
+      };
+    }
 
     const agentResponse = await this.agentService.sendMessage({
       conversationId: conversation.id,

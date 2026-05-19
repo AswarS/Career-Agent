@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, HttpCode, HttpStatus } from '@nestjs/common';
 import { TeamService } from './team.service';
 import { CreateTeamDto, UpdateTeamDto, ExecuteTaskDto } from './dto';
-import { TeamMember } from './entities/team.entity';
+import type { TeamMember } from './entities/team.entity';
 
 @Controller('teams')
 export class TeamController {

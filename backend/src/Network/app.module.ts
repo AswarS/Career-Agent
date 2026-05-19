@@ -11,6 +11,7 @@ import { ArtifactEntity } from './modules/artifact/entities/artifact.entity';
 import { ArtifactModule } from './modules/artifact/artifact.module';
 import { TeamModule } from './modules/team/team.module';
 import { TeamEntity } from './modules/team/entities/team.entity';
+import { SkillModule } from './modules/skill/skill.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -29,6 +30,7 @@ const networkDir = dirname(fileURLToPath(import.meta.url));
     ConversationModule,
     ArtifactModule,
     TeamModule,
+    SkillModule,
   ],
   providers: [AppService],
 })
