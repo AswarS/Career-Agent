@@ -259,6 +259,46 @@ export class ConversationService {
     const attachments = await this.resolveAttachments(conversation.id, attachmentIds);
 
     const skillInvocation = this.skillService.parseSkillInvocation(dto.content);
+    if (skillInvocation && skillInvocation.skillName === 'skills') {
+      const skills = this.skillService.listSkills();
+      const lines = skills.map(
+        (s) => `- **/${ s.name }** (${s.status}) — ${s.description}`,
+      );
+      const reply = lines.length
+        ? `Available skills:\n${lines.join('\n')}`
+        : 'No skills available.';
+
+      const userMessageId = `msg_user_skill_${Date.now()}`;
+      const assistantMessageId = `msg_assistant_skill_${Date.now()}`;
+      const now = new Date();
+      const sessionFilePath = await this.findRuntimeSessionFile(conversation.id);
+
+      await appendFile(
+        sessionFilePath,
+        `${JSON.stringify({ type: 'user', message: { id: userMessageId, role: 'user', content: dto.content }, uuid: randomUUID(), timestamp: now.toISOString(), sessionId: conversation.id })}\n`,
+        'utf8',
+      );
+      await appendFile(
+        sessionFilePath,
+        `${JSON.stringify({ type: 'assistant', message: { id: assistantMessageId, role: 'assistant', content: [{ type: 'text', text: reply }] }, uuid: randomUUID(), timestamp: new Date(now.getTime() + 100).toISOString(), sessionId: conversation.id })}\n`,
+        'utf8',
+      );
+      await this.touchConversation(conversation, dto.content);
+
+      return {
+        accepted: true,
+        status: 'done',
+        conversation_id: conversation.id,
+        conversationId: conversation.id,
+        message_id: userMessageId,
+        messageId: userMessageId,
+        assistant_message_id: assistantMessageId,
+        assistantMessageId: assistantMessageId,
+        reply,
+        raw: { source: 'skill-list', skillCount: skills.length },
+      };
+    }
+
     if (skillInvocation && this.skillService.registry.has(skillInvocation.skillName)) {
       const skillResult = await this.skillService.invokeSkill(
         skillInvocation.skillName,
