@@ -5,7 +5,7 @@ import {
   UnsupportedMediaTypeException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -266,15 +266,36 @@ export class ConversationService {
         dto.context,
       );
 
+      const userMessageId = `msg_user_skill_${Date.now()}`;
+      const assistantMessageId = `msg_assistant_skill_${Date.now()}`;
+      const now = new Date();
+      const userEventUuid = randomUUID();
+      const replyEventUuid = randomUUID();
+      const sessionFilePath = await this.findRuntimeSessionFile(conversation.id);
+
+      await appendFile(
+        sessionFilePath,
+        `${JSON.stringify({ type: 'user', message: { id: userMessageId, role: 'user', content: dto.content }, uuid: userEventUuid, timestamp: now.toISOString(), sessionId: conversation.id })}\n`,
+        'utf8',
+      );
+
+      await appendFile(
+        sessionFilePath,
+        `${JSON.stringify({ type: 'assistant', message: { id: assistantMessageId, role: 'assistant', content: [{ type: 'text', text: skillResult.reply }] }, uuid: replyEventUuid, timestamp: new Date(now.getTime() + 500).toISOString(), sessionId: conversation.id })}\n`,
+        'utf8',
+      );
+
+      await this.touchConversation(conversation, dto.content);
+
       return {
         accepted: true,
         status: 'done',
         conversation_id: conversation.id,
         conversationId: conversation.id,
-        message_id: `msg_user_skill_${Date.now()}`,
-        messageId: `msg_user_skill_${Date.now()}`,
-        assistant_message_id: `msg_assistant_skill_${Date.now()}`,
-        assistantMessageId: `msg_assistant_skill_${Date.now()}`,
+        message_id: userMessageId,
+        messageId: userMessageId,
+        assistant_message_id: assistantMessageId,
+        assistantMessageId: assistantMessageId,
         reply: skillResult.reply,
         raw: { source: 'skill', skillName: skillInvocation.skillName, ...skillResult.metadata },
       };
