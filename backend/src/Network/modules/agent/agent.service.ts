@@ -45,6 +45,21 @@ interface ConversationConfig {
   model?: string;
 }
 
+type QueryEngineInferenceResult =
+  | {
+      success: true;
+      reply: string;
+      thinking?: string;
+      model?: string;
+      usage?: Record<string, unknown>;
+      durationMs?: number;
+    }
+  | {
+      success: false;
+      errorMessage?: string;
+      retryable?: boolean;
+    };
+
 @Injectable()
 export class AgentService {
   /** Per-conversation LLM config (apiKey / baseUrl / model) */
@@ -98,49 +113,31 @@ export class AgentService {
       baseUrl: input.baseUrl ?? convCfg?.baseUrl,
       model: input.model ?? convCfg?.model,
     };
+    this.syncConversationConfig(conversationId, mergedConfig);
 
     // 3. Run inference via QueryEngine
-    const qeResult = await this.runQueryEngineInference(
+    let qeResult = await this.runQueryEngineInference(
       conversationId,
       userId,
       content,
       mergedConfig,
     );
 
-    if (qeResult.success) {
-      // Write assistant thinking event
-      const thinkingUuid = randomUUID();
-      const thinkingTimestamp = new Date(now.getTime() + 100).toISOString();
-      await appendJsonlEvent(userId, conversationId, {
-        parentUuid: userEventUuid,
-        isSidechain: false,
-        type: 'assistant',
-        message: {
-          id: assistantMessageId,
-          type: 'message',
-          role: 'assistant',
-          model: qeResult.model ?? 'unknown',
-          content: [
-            {
-              type: 'thinking',
-              thinking: qeResult.thinking ?? '',
-              signature: '',
-            },
-          ],
-          stop_reason: null,
-          stop_sequence: null,
-          usage: qeResult.usage ?? { input_tokens: 0, output_tokens: 0 },
-        },
-        uuid: thinkingUuid,
-        timestamp: thinkingTimestamp,
-        sessionId: conversationId,
-      });
+    if (!qeResult.success && qeResult.retryable) {
+      this.resetConversationRuntime(conversationId);
+      qeResult = await this.runQueryEngineInference(
+        conversationId,
+        userId,
+        content,
+        mergedConfig,
+      );
+    }
 
-      // Write assistant text reply event
+    if (qeResult.success) {
       const replyUuid = randomUUID();
       const replyTimestamp = new Date(now.getTime() + 500 + (qeResult.durationMs ?? 0)).toISOString();
       await appendJsonlEvent(userId, conversationId, {
-        parentUuid: thinkingUuid,
+        parentUuid: userEventUuid,
         isSidechain: false,
         type: 'assistant',
         message: {
@@ -180,32 +177,11 @@ export class AgentService {
 
     // 4. Fallback to stub if QueryEngine unavailable
     const stubReply = `Stub agent reply: ${content}`;
-    const thinkingUuid = randomUUID();
     const replyUuid = randomUUID();
-    const thinkingTimestamp = new Date(now.getTime() + 300).toISOString();
     const replyTimestamp = new Date(now.getTime() + 700).toISOString();
 
     await appendJsonlEvent(userId, conversationId, {
       parentUuid: userEventUuid,
-      isSidechain: false,
-      type: 'assistant',
-      message: {
-        id: assistantMessageId,
-        type: 'message',
-        role: 'assistant',
-        model: 'stub-agent',
-        content: [{ type: 'thinking', thinking: `Preparing a response for: ${content}`, signature: '' }],
-        stop_reason: null,
-        stop_sequence: null,
-        usage: { input_tokens: 0, output_tokens: 0 },
-      },
-      uuid: thinkingUuid,
-      timestamp: thinkingTimestamp,
-      sessionId: conversationId,
-    });
-
-    await appendJsonlEvent(userId, conversationId, {
-      parentUuid: thinkingUuid,
       isSidechain: false,
       type: 'assistant',
       message: {
@@ -235,6 +211,7 @@ export class AgentService {
         attachmentCount: input.attachments?.length ?? 0,
         context: input.context ?? {},
         fallback: true,
+        error: qeResult.errorMessage,
       },
     };
   }
@@ -248,17 +225,7 @@ export class AgentService {
     userId: string,
     content: string,
     config: ConversationConfig,
-  ): Promise<
-    | {
-        success: true;
-        reply: string;
-        thinking?: string;
-        model?: string;
-        usage?: Record<string, unknown>;
-        durationMs?: number;
-      }
-    | { success: false }
-  > {
+  ): Promise<QueryEngineInferenceResult> {
     const startTime = Date.now();
 
     try {
@@ -283,6 +250,11 @@ export class AgentService {
         const stream = queryEngine!.submitMessage(content);
 
         for await (const msg of stream) {
+          const messageError = this.getApiErrorMessage(msg);
+          if (messageError) {
+            throw new Error(messageError);
+          }
+
           // QueryEngine yields different event types:
           // - type=assistant: msg.message.content is content block array
           // - type=result: msg.result is the final text summary
@@ -326,9 +298,114 @@ export class AgentService {
         durationMs: Date.now() - startTime,
       };
     } catch (err: any) {
-      console.error('[AgentService] QueryEngine inference FAILED:', err?.message ?? err);
-      return { success: false };
+      const errorMessage = err?.message ? String(err.message) : String(err);
+      console.error('[AgentService] QueryEngine inference FAILED:', errorMessage);
+      return {
+        success: false,
+        errorMessage,
+        retryable: this.isRetryableInferenceError(errorMessage),
+      };
     }
+  }
+
+  private syncConversationConfig(
+    conversationId: string,
+    nextConfig: ConversationConfig,
+  ) {
+    const previousConfig = this.conversationConfigs.get(conversationId);
+    const normalizedNext = this.normalizeConversationConfig(nextConfig);
+
+    if (!this.hasConfigValues(normalizedNext)) {
+      return;
+    }
+
+    if (!previousConfig) {
+      this.conversationConfigs.set(conversationId, normalizedNext);
+      return;
+    }
+
+    if (!this.areConversationConfigsEqual(previousConfig, normalizedNext)) {
+      this.conversationConfigs.set(conversationId, normalizedNext);
+      this.resetConversationRuntime(conversationId);
+    }
+  }
+
+  private resetConversationRuntime(conversationId: string) {
+    const ctx = this.sessionContexts.get(conversationId);
+    ctx?.abortController.abort();
+    this.queryEngines.delete(conversationId);
+    this.sessionContexts.delete(conversationId);
+  }
+
+  private normalizeConversationConfig(config: ConversationConfig): ConversationConfig {
+    return {
+      apiKey: config.apiKey?.trim() || undefined,
+      baseUrl: config.baseUrl?.trim() || undefined,
+      model: config.model?.trim() || undefined,
+    };
+  }
+
+  private hasConfigValues(config: ConversationConfig) {
+    return Boolean(config.apiKey || config.baseUrl || config.model);
+  }
+
+  private areConversationConfigsEqual(
+    a: ConversationConfig,
+    b: ConversationConfig,
+  ) {
+    return a.apiKey === b.apiKey && a.baseUrl === b.baseUrl && a.model === b.model;
+  }
+
+  private getApiErrorMessage(message: unknown) {
+    const value = message as {
+      isApiErrorMessage?: boolean;
+      apiError?: unknown;
+      error?: unknown;
+      errorDetails?: unknown;
+      message?: { content?: unknown };
+    };
+
+    if (!value?.isApiErrorMessage && !value?.apiError && !value?.error) {
+      return undefined;
+    }
+
+    const text = this.extractMessageText(value.message?.content);
+    return (
+      text ||
+      (typeof value.errorDetails === 'string' ? value.errorDetails : undefined) ||
+      (typeof value.error === 'string' ? value.error : undefined) ||
+      (typeof value.apiError === 'string' ? value.apiError : undefined) ||
+      'model api error'
+    );
+  }
+
+  private extractMessageText(content: unknown) {
+    if (typeof content === 'string') {
+      return content;
+    }
+
+    if (!Array.isArray(content)) {
+      return '';
+    }
+
+    return content
+      .map((block) => {
+        if (typeof block !== 'object' || block === null) {
+          return '';
+        }
+
+        const typedBlock = block as Record<string, unknown>;
+        return typedBlock.type === 'text' && typeof typedBlock.text === 'string'
+          ? typedBlock.text
+          : '';
+      })
+      .filter(Boolean)
+      .join('\n')
+      .trim();
+  }
+
+  private isRetryableInferenceError(errorMessage: string) {
+    return errorMessage.includes('Content block is not a thinking block');
   }
 
   private buildSessionContext(
