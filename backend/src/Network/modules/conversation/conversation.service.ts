@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { Repository } from 'typeorm';
 import { AgentService } from '../agent/agent.service';
 import { SkillService } from '../skill/skill.service';
+import { UserSettingsService } from '../user-settings/user-settings.service';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { SendMultimodalMessageDto } from './dto/send-multimodal-message.dto';
 import { ConversationEntity } from './entities/conversation.entity';
@@ -117,6 +118,7 @@ export class ConversationService {
     private readonly messageResourceRepo: Repository<MessageEntity>,
     private readonly agentService: AgentService,
     private readonly skillService: SkillService,
+    private readonly userSettingsService: UserSettingsService,
   ) {}
 
   async createConversation(dto: CreateConversationDto) {
@@ -341,6 +343,7 @@ export class ConversationService {
       };
     }
 
+    const agentConfig = await this.userSettingsService.getAgentConfig(conversation.userId);
     const agentResponse = await this.agentService.sendMessage({
       conversationId: conversation.id,
       userId: String(conversation.userId),
@@ -354,9 +357,9 @@ export class ConversationService {
       })),
       context: dto.context,
       clientRequestId: dto.client_request_id ?? dto.clientRequestId,
-      apiKey: "",
-      baseUrl: "",
-      model: "",
+      apiKey: agentConfig.apiKey,
+      baseUrl: agentConfig.baseUrl,
+      model: agentConfig.model,
     });
 
     await this.replaceMessageResourceMappings(

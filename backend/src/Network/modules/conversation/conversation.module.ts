@@ -6,9 +6,15 @@ import { ConversationEntity } from './entities/conversation.entity';
 import { MessageEntity } from './entities/message.entity';
 import { AgentModule } from '../agent/agent.module';
 import { SkillModule } from '../skill/skill.module';
+import { UserSettingsModule } from '../user-settings/user-settings.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([ConversationEntity, MessageEntity]), AgentModule, SkillModule],
+  imports: [
+    TypeOrmModule.forFeature([ConversationEntity, MessageEntity]),
+    AgentModule,
+    SkillModule,
+    UserSettingsModule,
+  ],
   controllers: [ConversationController],
   providers: [ConversationService],
 })
