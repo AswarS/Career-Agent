@@ -188,12 +188,16 @@ backend/src/Network/modules/conversation
 3. 解析上传附件
 4. 调用 `UserSettingsService.getAgentConfig(conversation.userId)`
 5. 将解密后的 `apiKey`、`baseUrl`、`model` 传给 `AgentService.sendMessage`
-6. `AgentService` 将配置写入 SessionContext，QueryEngine 使用该配置执行推理
+6. `AgentService` 从 JSONL 会话记录拼接最近消息历史，并直接调用 Anthropic Messages API 执行推理
 
 如果用户没有配置 API Key：
 
-- `getAgentConfig` 返回空配置
-- Agent 层继续保持原 fallback 行为
+- `ConversationService` 返回 400 `API_KEY_REQUIRED`
+
+如果 Anthropic 返回鉴权或权限错误：
+
+- `AgentService` 写入一条失败的 assistant 事件，便于前端展示
+- 消息发送响应返回 `status: "failed"`，`reply/raw.error` 包含上游错误信息
 
 ## 7. 数据表说明
 

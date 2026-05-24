@@ -121,9 +121,9 @@ export class ConversationService {
     private readonly userSettingsService: UserSettingsService,
   ) {}
 
-  async createConversation(dto: CreateConversationDto) {
+  async createConversation(dto: CreateConversationDto, authenticatedUserId?: number) {
     const now = new Date();
-    const userId = dto.userId ?? 1;
+    const userId = authenticatedUserId ?? dto.userId ?? 1;
     const agentConversation = await this.agentService.createConversation({
       userId: String(userId),
       title: dto.title,
@@ -158,16 +158,23 @@ export class ConversationService {
     return conversations.map((conversation) => this.toThreadSummary(conversation));
   }
 
-  async listMessages(conversationId: string) {
-    const conversation = await this.getConversationByIdentifier(conversationId);
+  async listMessages(conversationId: string, authenticatedUserId?: number) {
+    const conversation = await this.getConversationByIdentifier(
+      conversationId,
+      authenticatedUserId,
+    );
     return this.readRuntimeSessionMessages(conversation.id);
   }
 
   async uploadConversationFile(
     conversationId: string,
     file: Express.Multer.File,
+    authenticatedUserId?: number,
   ) {
-    const conversation = await this.getConversationByIdentifier(conversationId);
+    const conversation = await this.getConversationByIdentifier(
+      conversationId,
+      authenticatedUserId,
+    );
 
     if (!file) {
       throw new BadRequestException('file is required');
@@ -231,8 +238,15 @@ export class ConversationService {
     return uploadedFile;
   }
 
-  async getConversationFile(conversationId: string, fileName: string) {
-    const conversation = await this.getConversationByIdentifier(conversationId);
+  async getConversationFile(
+    conversationId: string,
+    fileName: string,
+    authenticatedUserId?: number,
+  ) {
+    const conversation = await this.getConversationByIdentifier(
+      conversationId,
+      authenticatedUserId,
+    );
     const manifest = await this.readConversationFileManifest(
       conversation.userId,
       conversation.id,
@@ -255,8 +269,15 @@ export class ConversationService {
     };
   }
 
-  async sendMessage(conversationId: string, dto: SendMultimodalMessageDto) {
-    const conversation = await this.getConversationByIdentifier(conversationId);
+  async sendMessage(
+    conversationId: string,
+    dto: SendMultimodalMessageDto,
+    authenticatedUserId?: number,
+  ) {
+    const conversation = await this.getConversationByIdentifier(
+      conversationId,
+      authenticatedUserId,
+    );
     const attachmentIds = dto.attachment_asset_ids ?? dto.attachmentAssetIds ?? [];
     const attachments = await this.resolveAttachments(conversation.id, attachmentIds);
 
@@ -344,6 +365,13 @@ export class ConversationService {
     }
 
     const agentConfig = await this.userSettingsService.getAgentConfig(conversation.userId);
+    if (!agentConfig.apiKey) {
+      throw new BadRequestException({
+        code: 'API_KEY_REQUIRED',
+        message: 'please save an Anthropic API key before sending messages',
+      });
+    }
+
     const agentResponse = await this.agentService.sendMessage({
       conversationId: conversation.id,
       userId: String(conversation.userId),
@@ -391,21 +419,38 @@ export class ConversationService {
     };
   }
 
-  private async getConversationByIdentifier(identifier: string) {
+  private async getConversationByIdentifier(
+    identifier: string,
+    authenticatedUserId?: number,
+  ) {
     const byAgentId = await this.conversationRepo.findOne({ where: { id: identifier } });
     if (byAgentId) {
-      return byAgentId;
+      return this.assertConversationOwner(byAgentId, authenticatedUserId);
     }
 
     const numericId = Number(identifier);
     if (Number.isInteger(numericId)) {
       const byCid = await this.conversationRepo.findOne({ where: { cid: numericId } });
       if (byCid) {
-        return byCid;
+        return this.assertConversationOwner(byCid, authenticatedUserId);
       }
     }
 
     throw new NotFoundException(`Conversation ${identifier} not found`);
+  }
+
+  private assertConversationOwner(
+    conversation: ConversationEntity,
+    authenticatedUserId?: number,
+  ) {
+    if (
+      authenticatedUserId !== undefined &&
+      conversation.userId !== authenticatedUserId
+    ) {
+      throw new NotFoundException(`Conversation ${conversation.id} not found`);
+    }
+
+    return conversation;
   }
 
   private toThreadSummary(conversation: ConversationEntity) {

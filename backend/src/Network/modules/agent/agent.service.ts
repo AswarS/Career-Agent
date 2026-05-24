@@ -1,19 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import {
   AgentConversationMetadata,
+  AgentAttachmentInput,
   AgentCreateConversationInput,
   AgentSendMessageInput,
   AgentSendMessageResult,
   createConversation,
 } from './agent.runtime';
-import {
-  runWithSessionContext,
-  type SessionContext,
-} from '../../../server/SessionContext.js';
-import { createIsolatedState } from '../../../bootstrap/state.js';
-import { createQueryEngineForSession } from '../../../server/queryEngineFactory.js';
-import { QueryEngine } from '../../../QueryEngine.js';
-import { appendFile, mkdir } from 'node:fs/promises';
+import { appendFile, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
@@ -34,6 +28,40 @@ async function appendJsonlEvent(
   await appendFile(sessionFilePath, `${JSON.stringify(payload)}\n`, 'utf8');
 }
 
+async function readJsonlEvents(
+  userId: string,
+  conversationId: string,
+): Promise<Record<string, unknown>[]> {
+  const sessionFilePath = join(userDataRootDir, userId, `${conversationId}.jsonl`);
+
+  try {
+    const raw = await readFile(sessionFilePath, 'utf8');
+    return raw
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => {
+        try {
+          return JSON.parse(line) as Record<string, unknown>;
+        } catch {
+          return null;
+        }
+      })
+      .filter((event): event is Record<string, unknown> => Boolean(event));
+  } catch (error) {
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      error.code === 'ENOENT'
+    ) {
+      return [];
+    }
+
+    throw error;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Service
 // ---------------------------------------------------------------------------
@@ -45,11 +73,15 @@ interface ConversationConfig {
   model?: string;
 }
 
-type QueryEngineInferenceResult =
+interface AnthropicMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+type AgentInferenceResult =
   | {
       success: true;
       reply: string;
-      thinking?: string;
       model?: string;
       usage?: Record<string, unknown>;
       durationMs?: number;
@@ -57,17 +89,18 @@ type QueryEngineInferenceResult =
   | {
       success: false;
       errorMessage?: string;
-      retryable?: boolean;
+      status?: number;
     };
+
+const defaultAnthropicBaseUrl = 'https://api.anthropic.com';
+const defaultAnthropicModel = 'claude-sonnet-4-5';
+const anthropicVersion = '2023-06-01';
+const maxHistoryMessages = 30;
 
 @Injectable()
 export class AgentService {
   /** Per-conversation LLM config (apiKey / baseUrl / model) */
   private conversationConfigs = new Map<string, ConversationConfig>();
-  /** Per-conversation QueryEngine instances (manages own message history) */
-  private queryEngines = new Map<string, QueryEngine>();
-  /** Per-conversation SessionContext for ALS routing */
-  private sessionContexts = new Map<string, SessionContext>();
 
   async createConversation(
     input: AgentCreateConversationInput,
@@ -88,6 +121,7 @@ export class AgentService {
     const userMessageId = `msg_user_${randomUUID().replace(/-/g, '')}`;
     const assistantMessageId = `msg_assistant_${randomUUID().replace(/-/g, '')}`;
     const now = new Date();
+    const userContent = this.composeUserContent(content, input.attachments);
 
     // 1. Write user message event to JSONL
     const userEventUuid = randomUUID();
@@ -99,7 +133,7 @@ export class AgentService {
       message: {
         id: userMessageId,
         role: 'user',
-        content,
+        content: userContent,
       },
       uuid: userEventUuid,
       timestamp: now.toISOString(),
@@ -115,27 +149,18 @@ export class AgentService {
     };
     this.syncConversationConfig(conversationId, mergedConfig);
 
-    // 3. Run inference via QueryEngine
-    let qeResult = await this.runQueryEngineInference(
+    // 3. Run inference via Anthropic Messages API directly. The legacy runtime
+    // can emit CLI-oriented requests that normal API keys reject.
+    const inferenceResult = await this.runAnthropicInference(
       conversationId,
       userId,
-      content,
+      userContent,
       mergedConfig,
     );
 
-    if (!qeResult.success && qeResult.retryable) {
-      this.resetConversationRuntime(conversationId);
-      qeResult = await this.runQueryEngineInference(
-        conversationId,
-        userId,
-        content,
-        mergedConfig,
-      );
-    }
-
-    if (qeResult.success) {
+    if (inferenceResult.success) {
       const replyUuid = randomUUID();
-      const replyTimestamp = new Date(now.getTime() + 500 + (qeResult.durationMs ?? 0)).toISOString();
+      const replyTimestamp = new Date(now.getTime() + 500 + (inferenceResult.durationMs ?? 0)).toISOString();
       await appendJsonlEvent(userId, conversationId, {
         parentUuid: userEventUuid,
         isSidechain: false,
@@ -144,16 +169,16 @@ export class AgentService {
           id: assistantMessageId,
           type: 'message',
           role: 'assistant',
-          model: qeResult.model ?? 'unknown',
+          model: inferenceResult.model ?? mergedConfig.model ?? defaultAnthropicModel,
           content: [
             {
               type: 'text',
-              text: qeResult.reply,
+              text: inferenceResult.reply,
             },
           ],
           stop_reason: 'end_turn',
           stop_sequence: null,
-          usage: qeResult.usage ?? { input_tokens: 0, output_tokens: 0 },
+          usage: inferenceResult.usage ?? { input_tokens: 0, output_tokens: 0 },
         },
         uuid: replyUuid,
         timestamp: replyTimestamp,
@@ -166,17 +191,21 @@ export class AgentService {
         conversationId,
         userMessageId,
         assistantMessageId,
-        reply: qeResult.reply,
+        reply: inferenceResult.reply,
         raw: {
-          model: qeResult.model,
-          usage: qeResult.usage,
-          durationMs: qeResult.durationMs,
+          model: inferenceResult.model,
+          usage: inferenceResult.usage,
+          durationMs: inferenceResult.durationMs,
+          provider: 'anthropic',
         },
       };
     }
 
-    // 4. Fallback to stub if QueryEngine unavailable
-    const stubReply = `Stub agent reply: ${content}`;
+    // 4. Persist the failed assistant turn so the UI can display a concrete
+    // API error instead of a misleading placeholder answer.
+    const errorReply =
+      inferenceResult.errorMessage ??
+      'Anthropic inference failed. Please check the saved API key, base URL, and model.';
     const replyUuid = randomUUID();
     const replyTimestamp = new Date(now.getTime() + 700).toISOString();
 
@@ -188,8 +217,8 @@ export class AgentService {
         id: assistantMessageId,
         type: 'message',
         role: 'assistant',
-        model: 'stub-agent',
-        content: [{ type: 'text', text: stubReply }],
+        model: mergedConfig.model ?? defaultAnthropicModel,
+        content: [{ type: 'text', text: errorReply }],
         stop_reason: 'end_turn',
         stop_sequence: null,
         usage: { input_tokens: 0, output_tokens: 0 },
@@ -200,110 +229,108 @@ export class AgentService {
     });
 
     return {
-      accepted: true,
-      status: 'done',
+      accepted: false,
+      status: 'failed',
       conversationId,
       userMessageId,
       assistantMessageId,
-      reply: stubReply,
+      reply: errorReply,
       raw: {
         kind: input.kind ?? 'markdown',
         attachmentCount: input.attachments?.length ?? 0,
         context: input.context ?? {},
-        fallback: true,
-        error: qeResult.errorMessage,
+        provider: 'anthropic',
+        status: inferenceResult.status,
+        error: inferenceResult.errorMessage,
       },
     };
   }
 
   // -------------------------------------------------------------------------
-  // Private: real LLM inference via existing QueryEngine
+  // Private: real LLM inference via Anthropic Messages API
   // -------------------------------------------------------------------------
 
-  private async runQueryEngineInference(
+  private async runAnthropicInference(
     conversationId: string,
     userId: string,
-    content: string,
+    currentUserContent: string,
     config: ConversationConfig,
-  ): Promise<QueryEngineInferenceResult> {
+  ): Promise<AgentInferenceResult> {
     const startTime = Date.now();
+    const apiKey = config.apiKey?.trim();
+
+    if (!apiKey) {
+      return {
+        success: false,
+        errorMessage: 'API key is required before sending messages.',
+        status: 400,
+      };
+    }
+
+    const model = config.model?.trim() || defaultAnthropicModel;
+    const baseUrl = this.normalizeBaseUrl(config.baseUrl || defaultAnthropicBaseUrl);
+    const endpoint = this.buildAnthropicMessagesEndpoint(baseUrl);
 
     try {
-      // Get or create per-conversation QueryEngine + SessionContext
-      let queryEngine = this.queryEngines.get(conversationId);
-      if (!queryEngine) {
-        const ctx = this.buildSessionContext(conversationId, userId, config);
-        this.sessionContexts.set(conversationId, ctx);
-        queryEngine = createQueryEngineForSession(ctx);
-        ctx.queryEngine = queryEngine;
-        this.queryEngines.set(conversationId, queryEngine);
+      const messages = await this.buildAnthropicMessages(
+        userId,
+        conversationId,
+        currentUserContent,
+      );
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': anthropicVersion,
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 4096,
+          messages,
+        }),
+      });
+      const responseText = await response.text();
+      const responseBody = this.tryParseJson(responseText);
+
+      if (!response.ok) {
+        const errorMessage =
+          this.extractAnthropicErrorMessage(responseBody) ||
+          responseText ||
+          `Anthropic API request failed with status ${response.status}`;
+        console.error('[AgentService] Anthropic inference FAILED:', errorMessage);
+        return {
+          success: false,
+          errorMessage: `Anthropic API Error: ${response.status} ${errorMessage}`,
+          status: response.status,
+        };
       }
 
-      const ctx = this.sessionContexts.get(conversationId)!;
+      const reply = this.extractAnthropicReply(responseBody).trim();
 
-      // Run inside ALS context so all module-level helpers route correctly
-      const result = await runWithSessionContext(ctx, async () => {
-        const textParts: string[] = [];
-        const thinkingParts: string[] = [];
-        let model: string | undefined;
-
-        const stream = queryEngine!.submitMessage(content);
-
-        for await (const msg of stream) {
-          const messageError = this.getApiErrorMessage(msg);
-          if (messageError) {
-            throw new Error(messageError);
-          }
-
-          // QueryEngine yields different event types:
-          // - type=assistant: msg.message.content is content block array
-          // - type=result: msg.result is the final text summary
-          const msgMessage = (msg as any).message;
-          if (msgMessage && Array.isArray(msgMessage.content)) {
-            for (const block of msgMessage.content) {
-              if (block.type === 'text' && typeof block.text === 'string') {
-                textParts.push(block.text);
-              }
-              if (block.type === 'thinking' && typeof block.thinking === 'string') {
-                thinkingParts.push(block.thinking);
-              }
-            }
-            if (msgMessage.model && !model) {
-              model = msgMessage.model;
-            }
-          }
-
-          // Fallback: capture result text if no content blocks were extracted
-          if ((msg as any).type === 'result' && typeof (msg as any).result === 'string' && !textParts.length) {
-            textParts.push((msg as any).result);
-          }
-        }
-
-        const reply = textParts.join('\n').trim();
-        const thinking = thinkingParts.join('\n').trim();
-
-        return { reply, thinking, model };
-      });
-
-      if (!result.reply) {
-        console.error('[AgentService] QueryEngine returned empty reply');
-        return { success: false };
+      if (!reply) {
+        console.error('[AgentService] Anthropic inference returned empty reply');
+        return {
+          success: false,
+          errorMessage: 'Anthropic inference returned an empty reply.',
+          status: response.status,
+        };
       }
 
       return {
         success: true,
-        reply: result.reply,
-        thinking: result.thinking || undefined,
-        model: result.model,
+        reply,
+        model: this.getStringField(responseBody, 'model') || model,
+        usage: this.getRecordField(responseBody, 'usage'),
         durationMs: Date.now() - startTime,
       };
     } catch (err: any) {
       const errorMessage = err?.message ? String(err.message) : String(err);
-      console.error('[AgentService] QueryEngine inference FAILED:', errorMessage);
+      console.error('[AgentService] Anthropic inference FAILED:', errorMessage);
       return {
         success: false,
         errorMessage,
-        retryable: this.isRetryableInferenceError(errorMessage),
+        status: 0,
       };
     }
   }
@@ -326,21 +353,13 @@ export class AgentService {
 
     if (!this.areConversationConfigsEqual(previousConfig, normalizedNext)) {
       this.conversationConfigs.set(conversationId, normalizedNext);
-      this.resetConversationRuntime(conversationId);
     }
-  }
-
-  private resetConversationRuntime(conversationId: string) {
-    const ctx = this.sessionContexts.get(conversationId);
-    ctx?.abortController.abort();
-    this.queryEngines.delete(conversationId);
-    this.sessionContexts.delete(conversationId);
   }
 
   private normalizeConversationConfig(config: ConversationConfig): ConversationConfig {
     return {
       apiKey: config.apiKey?.trim() || undefined,
-      baseUrl: config.baseUrl?.trim() || undefined,
+      baseUrl: config.baseUrl ? this.normalizeBaseUrl(config.baseUrl) : undefined,
       model: config.model?.trim() || undefined,
     };
   }
@@ -356,33 +375,123 @@ export class AgentService {
     return a.apiKey === b.apiKey && a.baseUrl === b.baseUrl && a.model === b.model;
   }
 
-  private getApiErrorMessage(message: unknown) {
-    const value = message as {
-      isApiErrorMessage?: boolean;
-      apiError?: unknown;
-      error?: unknown;
-      errorDetails?: unknown;
-      message?: { content?: unknown };
-    };
+  private composeUserContent(
+    content: string,
+    attachments: AgentAttachmentInput[] = [],
+  ) {
+    const trimmedContent = content.trim();
+    const attachmentLines = attachments
+      .map((attachment) => {
+        const title = attachment.title || attachment.assetId;
+        const mimeType = attachment.mimeType ? `, ${attachment.mimeType}` : '';
+        return `- ${title} (${attachment.path}${mimeType})`;
+      })
+      .filter(Boolean);
 
-    if (!value?.isApiErrorMessage && !value?.apiError && !value?.error) {
-      return undefined;
+    if (!attachmentLines.length) {
+      return trimmedContent;
     }
 
-    const text = this.extractMessageText(value.message?.content);
-    return (
-      text ||
-      (typeof value.errorDetails === 'string' ? value.errorDetails : undefined) ||
-      (typeof value.error === 'string' ? value.error : undefined) ||
-      (typeof value.apiError === 'string' ? value.apiError : undefined) ||
-      'model api error'
-    );
+    return [
+      trimmedContent,
+      '',
+      'Attached files available to the backend:',
+      ...attachmentLines,
+    ].join('\n');
   }
 
-  private extractMessageText(content: unknown) {
+  private async buildAnthropicMessages(
+    userId: string,
+    conversationId: string,
+    fallbackContent: string,
+  ): Promise<AnthropicMessage[]> {
+    const events = await readJsonlEvents(userId, conversationId);
+    const messages: AnthropicMessage[] = [];
+
+    for (const event of events) {
+      const message = this.getRecordField(event, 'message');
+      const role = this.getStringField(message, 'role');
+
+      if (event.type === 'user' && role === 'user') {
+        const content = this.extractPlainText(this.getUnknownField(message, 'content'));
+        this.pushAnthropicMessage(messages, 'user', content);
+      }
+
+      if (event.type === 'assistant' && role === 'assistant') {
+        const content = this.extractPlainText(this.getUnknownField(message, 'content'));
+        this.pushAnthropicMessage(messages, 'assistant', content);
+      }
+    }
+
+    if (!messages.length) {
+      messages.push({ role: 'user', content: fallbackContent });
+    }
+
+    const recent = messages.slice(-maxHistoryMessages);
+    while (recent.length && recent[0].role !== 'user') {
+      recent.shift();
+    }
+
+    return recent.length ? recent : [{ role: 'user', content: fallbackContent }];
+  }
+
+  private pushAnthropicMessage(
+    messages: AnthropicMessage[],
+    role: AnthropicMessage['role'],
+    content: string,
+  ) {
+    const text = content.trim();
+    if (!text) {
+      return;
+    }
+
+    const last = messages[messages.length - 1];
+    if (last?.role === role) {
+      last.content = `${last.content}\n\n${text}`;
+      return;
+    }
+
+    messages.push({ role, content: text });
+  }
+
+  private extractPlainText(content: unknown): string {
     if (typeof content === 'string') {
       return content;
     }
+
+    if (!Array.isArray(content)) {
+      return '';
+    }
+
+    return content
+      .map((block) => {
+        if (typeof block === 'string') {
+          return block;
+        }
+
+        if (typeof block !== 'object' || block === null) {
+          return '';
+        }
+
+        const typedBlock = block as Record<string, unknown>;
+        if (typedBlock.type === 'text' && typeof typedBlock.text === 'string') {
+          return typedBlock.text;
+        }
+
+        if (typedBlock.type === 'tool_result' && typeof typedBlock.content === 'string') {
+          return typedBlock.content;
+        }
+
+        return '';
+      })
+      .filter(Boolean)
+      .join('\n')
+      .trim();
+  }
+
+  private extractAnthropicReply(responseBody: unknown): string {
+    const body = this.asRecord(responseBody);
+    const content = body?.content;
 
     if (!Array.isArray(content)) {
       return '';
@@ -404,38 +513,55 @@ export class AgentService {
       .trim();
   }
 
-  private isRetryableInferenceError(errorMessage: string) {
-    return errorMessage.includes('Content block is not a thinking block');
+  private extractAnthropicErrorMessage(responseBody: unknown): string | undefined {
+    const body = this.asRecord(responseBody);
+    const error = this.asRecord(body?.error);
+    const message = this.getStringField(error, 'message');
+    const type = this.getStringField(error, 'type');
+
+    if (message && type) {
+      return `${type}: ${message}`;
+    }
+
+    return message || this.getStringField(body, 'message');
   }
 
-  private buildSessionContext(
-    conversationId: string,
-    userId: string,
-    config: ConversationConfig = {},
-  ): SessionContext {
-    return {
-      sessionId: conversationId,
-      userId,
-      state: createIsolatedState({ sessionId: conversationId as any }),
-      config: {
-        cwd: process.cwd(),
-        apiKey: config.apiKey,
-        baseUrl: config.baseUrl,
-        model: config.model,
-      },
-      anthropicClient: null,
-      queryEngine: null,
-      mcpClients: [],
-      wsConnections: new Set(),
-      abortController: new AbortController(),
-      createdAt: Date.now(),
-      lastActivityAt: Date.now(),
-      isHeadless: true,
-      sessionSwitched: {
-        subscribe: () => {},
-        emit: () => {},
-      },
-      pendingToolResponses: new Map(),
-    } as unknown as SessionContext;
+  private buildAnthropicMessagesEndpoint(baseUrl: string) {
+    return baseUrl.endsWith('/v1') ? `${baseUrl}/messages` : `${baseUrl}/v1/messages`;
+  }
+
+  private normalizeBaseUrl(baseUrl: string) {
+    return baseUrl.trim().replace(/\/+$/, '');
+  }
+
+  private tryParseJson(raw: string): unknown {
+    if (!raw) {
+      return {};
+    }
+
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return undefined;
+    }
+  }
+
+  private getUnknownField(value: unknown, key: string): unknown {
+    return this.asRecord(value)?.[key];
+  }
+
+  private getStringField(value: unknown, key: string): string | undefined {
+    const field = this.asRecord(value)?.[key];
+    return typeof field === 'string' ? field : undefined;
+  }
+
+  private getRecordField(value: unknown, key: string): Record<string, unknown> | undefined {
+    return this.asRecord(this.asRecord(value)?.[key]);
+  }
+
+  private asRecord(value: unknown): Record<string, unknown> | undefined {
+    return typeof value === 'object' && value !== null
+      ? (value as Record<string, unknown>)
+      : undefined;
   }
 }

@@ -353,7 +353,13 @@
 - `baseUrl`: 用户配置的 Anthropic 兼容地址
 - `model`: 用户配置模型
 
-如果用户没有配置 API Key，仍保留原有 fallback 行为。
+Agent 运行时直接调用 Anthropic Messages API：
+
+- 请求 `POST {baseUrl}/v1/messages`，如果 `baseUrl` 已以 `/v1` 结尾则请求 `{baseUrl}/messages`
+- 请求头包含 `x-api-key` 和 `anthropic-version: 2023-06-01`
+- 请求体使用 Anthropic `messages` 数组格式，并从本地 JSONL 会话记录拼接最近消息历史
+
+如果用户没有配置 API Key，后端返回 400 `API_KEY_REQUIRED`。如果 Anthropic 返回鉴权或权限错误，发送消息响应会返回 `status: "failed"`，`reply/raw.error` 中包含上游错误信息。
 
 ## 5. 错误码
 

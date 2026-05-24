@@ -35,6 +35,15 @@ export class UserSettingsController {
     return this.userSettingsService.upsertApiSetting(request.user!.id, dto);
   }
 
+  @Post('api')
+  @HttpCode(HttpStatus.OK)
+  createOrUpdateApiSetting(
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: UpsertApiSettingDto,
+  ) {
+    return this.userSettingsService.upsertApiSetting(request.user!.id, dto);
+  }
+
   @Post('api/test')
   @HttpCode(HttpStatus.OK)
   testApiSetting(

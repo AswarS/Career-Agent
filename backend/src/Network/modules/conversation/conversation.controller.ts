@@ -4,6 +4,7 @@ import {
   Get,
   Param,
   Post,
+  Req,
   Res,
   StreamableFile,
   UploadedFile,
@@ -13,6 +14,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { readFile } from 'node:fs/promises';
 import type { Response } from 'express';
+import type { AuthenticatedRequest } from '../auth/auth.types';
 import { ConversationService } from './conversation.service';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { SendMultimodalMessageDto } from './dto/send-multimodal-message.dto';
@@ -21,27 +23,41 @@ export class ConversationController {
   constructor(private readonly conversationService: ConversationService) {}
 
   @Post()
-  create(@Body() dto: CreateConversationDto) {
-    return this.conversationService.createConversation(dto);
+  create(@Body() dto: CreateConversationDto, @Req() request: AuthenticatedRequest) {
+    return this.conversationService.createConversation(
+      dto,
+      Number(request.user!.id),
+    );
   }
 
   @Get(':id')
-  getByUserId(@Param('id') uid: string) {
-    const userId = Number(uid);
+  getByUserId(@Param('id') uid: string, @Req() request: AuthenticatedRequest) {
+    const userId = Number(request.user?.id ?? uid);
     return this.conversationService.listConversations(userId);
   }
 
   @Get(':id/messages')
-  listMessages(@Param('id') conversationId: string) {
-    return this.conversationService.listMessages(conversationId);
+  listMessages(
+    @Param('id') conversationId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.conversationService.listMessages(
+      conversationId,
+      Number(request.user!.id),
+    );
   }
 
   @Post(':id/messages')
   sendMessage(
     @Param('id') conversationId: string,
     @Body() dto: SendMultimodalMessageDto,
+    @Req() request: AuthenticatedRequest,
   ) {
-    return this.conversationService.sendMessage(conversationId, dto);
+    return this.conversationService.sendMessage(
+      conversationId,
+      dto,
+      Number(request.user!.id),
+    );
   }
 
   @Post(':id/files')
@@ -56,19 +72,26 @@ export class ConversationController {
   uploadFile(
     @Param('id') conversationId: string,
     @UploadedFile() file: Express.Multer.File,
+    @Req() request: AuthenticatedRequest,
   ) {
-    return this.conversationService.uploadConversationFile(conversationId, file);
+    return this.conversationService.uploadConversationFile(
+      conversationId,
+      file,
+      Number(request.user!.id),
+    );
   }
 
   @Get(':id/files/:fileName')
   async getFile(
     @Param('id') conversationId: string,
     @Param('fileName') fileName: string,
+    @Req() request: AuthenticatedRequest,
     @Res({ passthrough: true }) response: Response,
   ) {
     const { asset, absolutePath } = await this.conversationService.getConversationFile(
       conversationId,
       fileName,
+      Number(request.user!.id),
     );
     const contentDisposition = require('content-disposition')
     response.setHeader('Content-Type', asset.mime_type);
