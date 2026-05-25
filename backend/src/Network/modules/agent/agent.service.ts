@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import {
   AgentConversationMetadata,
   AgentCreateConversationInput,
@@ -17,6 +17,7 @@ import { appendFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
+import { SettingsService } from '../settings/settings.service';
 
 // ---------------------------------------------------------------------------
 // JSONL helpers
@@ -53,6 +54,8 @@ export class AgentService {
   private queryEngines = new Map<string, QueryEngine>();
   /** Per-conversation SessionContext for ALS routing */
   private sessionContexts = new Map<string, SessionContext>();
+
+  constructor(@Optional() private readonly settingsService?: SettingsService) {}
 
   async createConversation(
     input: AgentCreateConversationInput,
@@ -91,12 +94,19 @@ export class AgentService {
       sessionId: conversationId,
     });
 
-    // 2. Merge config: message-level override > conversation-level config
+    // 2. Merge config: message-level override > conversation-level config > user-level settings
     const convCfg = this.conversationConfigs.get(conversationId);
+    let userSettings: ConversationConfig = {};
+    if (this.settingsService) {
+      const saved = await this.settingsService.getSettings(Number(userId));
+      if (saved) {
+        userSettings = { apiKey: saved.apiKey ?? undefined, baseUrl: saved.baseUrl ?? undefined, model: saved.model ?? undefined };
+      }
+    }
     const mergedConfig: ConversationConfig = {
-      apiKey: input.apiKey ?? convCfg?.apiKey,
-      baseUrl: input.baseUrl ?? convCfg?.baseUrl,
-      model: input.model ?? convCfg?.model,
+      apiKey: input.apiKey ?? convCfg?.apiKey ?? userSettings.apiKey,
+      baseUrl: input.baseUrl ?? convCfg?.baseUrl ?? userSettings.baseUrl,
+      model: input.model ?? convCfg?.model ?? userSettings.model,
     };
 
     // 3. Run inference via QueryEngine

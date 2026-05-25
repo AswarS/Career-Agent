@@ -5,6 +5,9 @@ export class TeamEntity {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
+  @Column({ type: 'integer', nullable: true })
+  userId?: number;
+
   @Column({ type: 'text' })
   name!: string;
 

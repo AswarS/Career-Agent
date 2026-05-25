@@ -4,40 +4,47 @@ import {
   Get,
   Param,
   Post,
+  Req,
   Res,
   StreamableFile,
   UploadedFile,
+  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { readFile } from 'node:fs/promises';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { ConversationService } from './conversation.service';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { SendMultimodalMessageDto } from './dto/send-multimodal-message.dto';
+import { OwnershipGuard } from '../auth/ownership.guard';
+
 @Controller('api/career-agent/threads')
 export class ConversationController {
   constructor(private readonly conversationService: ConversationService) {}
 
   @Post()
-  create(@Body() dto: CreateConversationDto) {
-    return this.conversationService.createConversation(dto);
+  create(@Req() req: Request, @Body() dto: CreateConversationDto) {
+    return this.conversationService.createConversation(dto, req.userId);
   }
 
   @Get(':id')
-  getByUserId(@Param('id') uid: string) {
+  getByUserId(@Req() req: Request, @Param('id') uid: string) {
     const userId = Number(uid);
     return this.conversationService.listConversations(userId);
   }
 
   @Get(':id/messages')
-  listMessages(@Param('id') conversationId: string) {
+  @UseGuards(OwnershipGuard)
+  listMessages(@Req() req: Request, @Param('id') conversationId: string) {
     return this.conversationService.listMessages(conversationId);
   }
 
   @Post(':id/messages')
+  @UseGuards(OwnershipGuard)
   sendMessage(
+    @Req() req: Request,
     @Param('id') conversationId: string,
     @Body() dto: SendMultimodalMessageDto,
   ) {
@@ -45,6 +52,7 @@ export class ConversationController {
   }
 
   @Post(':id/files')
+  @UseGuards(OwnershipGuard)
   @UseInterceptors(
     FileInterceptor('file', {
       storage: memoryStorage(),
@@ -54,6 +62,7 @@ export class ConversationController {
     }),
   )
   uploadFile(
+    @Req() req: Request,
     @Param('id') conversationId: string,
     @UploadedFile() file: Express.Multer.File,
   ) {
@@ -61,7 +70,9 @@ export class ConversationController {
   }
 
   @Get(':id/files/:fileName')
+  @UseGuards(OwnershipGuard)
   async getFile(
+    @Req() req: Request,
     @Param('id') conversationId: string,
     @Param('fileName') fileName: string,
     @Res({ passthrough: true }) response: Response,

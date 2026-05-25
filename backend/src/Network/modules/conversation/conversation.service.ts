@@ -5,7 +5,7 @@ import {
   UnsupportedMediaTypeException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { appendFile, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,6 +17,14 @@ import { SendMultimodalMessageDto } from './dto/send-multimodal-message.dto';
 import { ConversationEntity } from './entities/conversation.entity';
 import { MessageEntity } from './entities/message.entity';
 import {integer} from "vscode-languageserver-types";
+
+declare global {
+  namespace Express {
+    interface Request {
+      userId?: number;
+    }
+  }
+}
 
 export interface MessageAction {
   id: string;
@@ -119,9 +127,9 @@ export class ConversationService {
     private readonly skillService: SkillService,
   ) {}
 
-  async createConversation(dto: CreateConversationDto) {
+  async createConversation(dto: CreateConversationDto, requestUserId?: number) {
     const now = new Date();
-    const userId = dto.userId ?? 1;
+    const userId = requestUserId ?? dto.userId ?? 1;
     const agentConversation = await this.agentService.createConversation({
       userId: String(userId),
       title: dto.title,
@@ -158,7 +166,7 @@ export class ConversationService {
 
   async listMessages(conversationId: string) {
     const conversation = await this.getConversationByIdentifier(conversationId);
-    return this.readRuntimeSessionMessages(conversation.id);
+    return this.readRuntimeSessionMessages(conversation.id, conversation.userId);
   }
 
   async uploadConversationFile(
@@ -271,7 +279,7 @@ export class ConversationService {
       const userMessageId = `msg_user_skill_${Date.now()}`;
       const assistantMessageId = `msg_assistant_skill_${Date.now()}`;
       const now = new Date();
-      const sessionFilePath = await this.findRuntimeSessionFile(conversation.id);
+      const sessionFilePath = await this.findRuntimeSessionFile(conversation.id, conversation.userId);
 
       await appendFile(
         sessionFilePath,
@@ -311,7 +319,7 @@ export class ConversationService {
       const now = new Date();
       const userEventUuid = randomUUID();
       const replyEventUuid = randomUUID();
-      const sessionFilePath = await this.findRuntimeSessionFile(conversation.id);
+      const sessionFilePath = await this.findRuntimeSessionFile(conversation.id, conversation.userId);
 
       await appendFile(
         sessionFilePath,
@@ -557,8 +565,9 @@ export class ConversationService {
 
   private async readRuntimeSessionMessages(
     sessionId: string,
+    userId?: number,
   ): Promise<ConversationMessage[]> {
-    const sessionFilePath = await this.findRuntimeSessionFile(sessionId);
+    const sessionFilePath = await this.findRuntimeSessionFile(sessionId, userId);
     const rawContent = await readFile(sessionFilePath, 'utf8');
     const lines = rawContent
       .split(/\r?\n/)
@@ -759,7 +768,19 @@ export class ConversationService {
     });
   }
 
-  private async findRuntimeSessionFile(sessionId: string) {
+  private async findRuntimeSessionFile(sessionId: string, userId?: number) {
+    if (userId !== undefined) {
+      const directPath = join(userDataRootDir, String(userId), `${sessionId}.jsonl`);
+      try {
+        await stat(directPath);
+        return directPath;
+      } catch {
+        // Fall through to legacy scan for backwards compatibility
+      }
+    }
+
+    // Legacy fallback: scan user directories (needed for sessions created before userId tracking)
+    const { readdir } = await import('node:fs/promises');
     const userDirs = await readdir(userDataRootDir, { withFileTypes: true });
 
     for (const dir of userDirs) {
