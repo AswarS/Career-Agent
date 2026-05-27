@@ -1,4 +1,4 @@
-import { IsString } from 'class-validator';
+import { IsOptional, IsString } from 'class-validator';
 
 export class RegisterSkillDto {
   @IsString()
@@ -6,4 +6,8 @@ export class RegisterSkillDto {
 
   @IsString()
   description!: string;
+
+  @IsOptional()
+  @IsString()
+  category?: string;
 }

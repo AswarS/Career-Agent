@@ -269,12 +269,35 @@ export class ConversationService {
     const skillInvocation = this.skillService.parseSkillInvocation(dto.content);
     if (skillInvocation && skillInvocation.skillName === 'skills') {
       const skills = this.skillService.listSkills();
-      const lines = skills.map(
-        (s) => `- **/${ s.name }** (${s.status}) — ${s.description}`,
-      );
-      const reply = lines.length
-        ? `Available skills:\n${lines.join('\n')}`
-        : 'No skills available.';
+      const byCategory = new Map<string, typeof skills>();
+      for (const s of skills) {
+        const cat = s.category ?? 'utility';
+        if (!byCategory.has(cat)) byCategory.set(cat, []);
+        byCategory.get(cat)!.push(s);
+      }
+
+      const sections: string[] = ['**Available Skills**\n'];
+      const categoryLabels: Record<string, string> = {
+        search: '🔍 Search',
+        analysis: '🔬 Analysis',
+        generation: '🎨 Generation',
+        utility: '🛠 Utility',
+      };
+
+      for (const [cat, items] of byCategory) {
+        const label = categoryLabels[cat] ?? cat;
+        sections.push(`**${label}**`);
+        for (const s of items) {
+          const paramHint = s.parameters?.length
+            ? ` — params: ${s.parameters.map((p) => p.name).join(', ')}`
+            : '';
+          sections.push(`- \`/${s.name}\` — ${s.description}${paramHint}`);
+        }
+        sections.push('');
+      }
+
+      sections.push('Type `/help` for usage information.');
+      const reply = sections.join('\n');
 
       const userMessageId = `msg_user_skill_${Date.now()}`;
       const assistantMessageId = `msg_assistant_skill_${Date.now()}`;
@@ -308,10 +331,14 @@ export class ConversationService {
     }
 
     if (skillInvocation && this.skillService.registry.has(skillInvocation.skillName)) {
+      const skillContext = await this.skillService.buildExecutionContext(
+        conversation.userId,
+        conversation.id,
+      );
       const skillResult = await this.skillService.invokeSkill(
         skillInvocation.skillName,
         skillInvocation.args,
-        dto.context,
+        { ...dto.context, ...skillContext },
       );
 
       const userMessageId = `msg_user_skill_${Date.now()}`;

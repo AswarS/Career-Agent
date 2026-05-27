@@ -1,41 +1,59 @@
 import { Injectable } from '@nestjs/common';
 
-export type SkillStatus = 'loaded' | 'unloaded';
+export type SkillStatus = 'loaded' | 'unloaded' | 'error';
+
+export interface SkillParameter {
+  name: string;
+  description: string;
+  required?: boolean;
+  default?: string;
+}
 
 export interface SkillHandlerResult {
   success: boolean;
   reply: string;
   metadata?: Record<string, unknown>;
+  artifacts?: Array<{
+    type: 'text' | 'image' | 'link';
+    content: string;
+    title?: string;
+  }>;
+}
+
+export interface SkillExecutionContext {
+  userId?: number;
+  conversationId?: string;
+  llmConfig?: {
+    apiKey?: string;
+    baseUrl?: string;
+    model?: string;
+  };
+  [key: string]: unknown;
 }
 
 export type SkillHandler = (
   args: string,
-  context?: Record<string, unknown>,
+  context?: SkillExecutionContext,
 ) => Promise<SkillHandlerResult>;
 
 export interface SkillEntry {
   name: string;
   description: string;
+  category: 'search' | 'analysis' | 'generation' | 'utility';
   status: SkillStatus;
   handler: SkillHandler;
+  parameters: SkillParameter[];
+  requiresLlm?: boolean;
+  version?: string;
 }
 
 @Injectable()
 export class SkillRegistry {
   private readonly skills = new Map<string, SkillEntry>();
 
-  register(
-    name: string,
-    description: string,
-    handler: SkillHandler,
-  ): void {
-    const key = this.normalizeName(name);
-    this.skills.set(key, {
-      name: key,
-      description,
-      status: 'loaded',
-      handler,
-    });
+  register(entry: Omit<SkillEntry, 'status'>): void {
+    const key = this.normalizeName(entry.name);
+    this.skills.set(key, { ...entry, status: 'loaded', name: key });
   }
 
   unregister(name: string): boolean {
@@ -50,22 +68,12 @@ export class SkillRegistry {
     return this.skills.has(this.normalizeName(name));
   }
 
-  setLoaded(name: string): void {
-    const entry = this.skills.get(this.normalizeName(name));
-    if (entry) {
-      entry.status = 'loaded';
-    }
-  }
-
-  setUnloaded(name: string): void {
-    const entry = this.skills.get(this.normalizeName(name));
-    if (entry) {
-      entry.status = 'unloaded';
-    }
-  }
-
   getAll(): SkillEntry[] {
     return Array.from(this.skills.values());
+  }
+
+  getByCategory(category: SkillEntry['category']): SkillEntry[] {
+    return this.getAll().filter((s) => s.category === category);
   }
 
   clear(): void {
