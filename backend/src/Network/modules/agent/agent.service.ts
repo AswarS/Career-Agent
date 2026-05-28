@@ -108,7 +108,6 @@ export class AgentService {
       baseUrl: input.baseUrl ?? convCfg?.baseUrl ?? userSettings.baseUrl,
       model: input.model ?? convCfg?.model ?? userSettings.model,
     };
-    console.log(`[AgentService] mergedConfig: ${JSON.stringify(mergedConfig)}, settingsService=${!!this.settingsService}, userSettings=${JSON.stringify(userSettings)}, inputApiKey=${input.apiKey}, convCfg=${JSON.stringify(convCfg)}`);
 
     // 3. Run inference via QueryEngine
     const qeResult = await this.runQueryEngineInference(
