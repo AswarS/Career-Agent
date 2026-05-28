@@ -302,7 +302,7 @@ export class ConversationService {
       const userMessageId = `msg_user_skill_${Date.now()}`;
       const assistantMessageId = `msg_assistant_skill_${Date.now()}`;
       const now = new Date();
-      const sessionFilePath = await this.findRuntimeSessionFile(conversation.id, conversation.userId);
+      const sessionFilePath = await this.findOrCreateRuntimeSessionFile(conversation.id, conversation.userId);
 
       await appendFile(
         sessionFilePath,
@@ -346,7 +346,7 @@ export class ConversationService {
       const now = new Date();
       const userEventUuid = randomUUID();
       const replyEventUuid = randomUUID();
-      const sessionFilePath = await this.findRuntimeSessionFile(conversation.id, conversation.userId);
+      const sessionFilePath = await this.findOrCreateRuntimeSessionFile(conversation.id, conversation.userId);
 
       await appendFile(
         sessionFilePath,
@@ -596,7 +596,7 @@ export class ConversationService {
   ): Promise<ConversationMessage[]> {
     let sessionFilePath: string;
     try {
-      sessionFilePath = await this.findRuntimeSessionFile(sessionId, userId);
+      sessionFilePath = await this.findOrCreateRuntimeSessionFile(sessionId, userId, true);
     } catch {
       return [];
     }
@@ -800,7 +800,7 @@ export class ConversationService {
     });
   }
 
-  private async findRuntimeSessionFile(sessionId: string, userId?: number) {
+  private async findOrCreateRuntimeSessionFile(sessionId: string, userId?: number, readOnly = false) {
     if (userId !== undefined) {
       const directPath = join(userDataRootDir, String(userId), `${sessionId}.jsonl`);
       try {
@@ -825,7 +825,16 @@ export class ConversationService {
       }
     }
 
-    throw new NotFoundException(`Runtime session ${sessionId} not found`);
+    if (readOnly) {
+      throw new NotFoundException(`Runtime session ${sessionId} not found`);
+    }
+
+    // Session file doesn't exist — create it under the user's directory
+    const targetDir = join(userDataRootDir, String(userId ?? 1));
+    await mkdir(targetDir, { recursive: true });
+    const newPath = join(targetDir, `${sessionId}.jsonl`);
+    await writeFile(newPath, '', 'utf8');
+    return newPath;
   }
 
   private async ensureConversationFileManifest(
