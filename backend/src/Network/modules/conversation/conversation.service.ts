@@ -594,7 +594,12 @@ export class ConversationService {
     sessionId: string,
     userId?: number,
   ): Promise<ConversationMessage[]> {
-    const sessionFilePath = await this.findRuntimeSessionFile(sessionId, userId);
+    let sessionFilePath: string;
+    try {
+      sessionFilePath = await this.findRuntimeSessionFile(sessionId, userId);
+    } catch {
+      return [];
+    }
     const rawContent = await readFile(sessionFilePath, 'utf8');
     const lines = rawContent
       .split(/\r?\n/)
