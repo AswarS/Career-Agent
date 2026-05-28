@@ -311,10 +311,19 @@ export class AgentService {
     const startTime = Date.now();
 
     try {
+      const userWorkspaceDir = join(userDataRootDir, String(userId));
+      const userWorkspaceRelativeDir = `./src/Network/user/${String(userId)}`;
+      await mkdir(userWorkspaceDir, { recursive: true });
+
       // Get or create per-conversation QueryEngine + SessionContext
       let queryEngine = this.queryEngines.get(conversationId);
       if (!queryEngine) {
-        const ctx = this.buildSessionContext(conversationId, userId, config);
+        const ctx = this.buildSessionContext(
+          conversationId,
+          userId,
+          config,
+          userWorkspaceRelativeDir,
+        );
         this.sessionContexts.set(conversationId, ctx);
         queryEngine = createQueryEngineForSession(ctx);
         ctx.queryEngine = queryEngine;
@@ -414,13 +423,14 @@ export class AgentService {
     conversationId: string,
     userId: string,
     config: ConversationConfig = {},
+    workspaceDir?: string,
   ): SessionContext {
     return {
       sessionId: conversationId,
       userId,
       state: createIsolatedState({ sessionId: conversationId as any }),
       config: {
-        cwd: process.cwd(),
+        cwd: workspaceDir ?? process.cwd(),
         apiKey: config.apiKey,
         baseUrl: config.baseUrl,
         model: config.model,

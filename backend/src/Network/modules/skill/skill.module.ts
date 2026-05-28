@@ -3,9 +3,10 @@ import { SkillController } from './skill.controller';
 import { SkillService } from './skill.service';
 import { SkillRegistry } from './skill.registry';
 import { SettingsModule } from '../settings/settings.module';
+import { AgentModule } from '../agent/agent.module';
 
 @Module({
-  imports: [forwardRef(() => SettingsModule)],
+  imports: [forwardRef(() => SettingsModule), AgentModule],
   controllers: [SkillController],
   providers: [SkillService, SkillRegistry],
   exports: [SkillService, SkillRegistry],

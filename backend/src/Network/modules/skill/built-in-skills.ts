@@ -1,5 +1,35 @@
 import type { SkillHandler, SkillExecutionContext } from './skill.registry';
-import type { SettingsService } from '../settings/settings.service';
+
+function extractAssistantText(payload: any): string | null {
+  const content = payload?.choices?.[0]?.message?.content;
+  if (typeof content === 'string' && content.trim()) return content.trim();
+  if (Array.isArray(content)) {
+    const text = content
+      .map((part: any) => {
+        if (typeof part === 'string') return part;
+        if (part && typeof part.text === 'string') return part.text;
+        return '';
+      })
+      .join('\n')
+      .trim();
+    if (text) return text;
+  }
+
+  if (Array.isArray(payload?.content)) {
+    const text = payload.content
+      .map((part: any) => (part?.type === 'text' ? part.text : ''))
+      .filter((t: any) => typeof t === 'string' && t.trim().length > 0)
+      .join('\n')
+      .trim();
+    if (text) return text;
+  }
+
+  if (typeof payload?.output_text === 'string' && payload.output_text.trim()) {
+    return payload.output_text.trim();
+  }
+
+  return null;
+}
 
 export interface BuiltinSkillDefinition {
   name: string;
@@ -76,6 +106,34 @@ const codeAnalysisSkill: BuiltinSkillDefinition = {
       };
     }
 
+    if (context?.runUnifiedPrompt) {
+      const result = await context.runUnifiedPrompt({
+        userId: context.userId,
+        conversationId: context.conversationId,
+        apiKey: llmConfig.apiKey,
+        baseUrl: llmConfig.baseUrl,
+        model: llmConfig.model,
+        content:
+          'You are a code analysis expert. Analyze the provided code for:\n' +
+          '1. Security vulnerabilities\n' +
+          '2. Performance issues\n' +
+          '3. Code quality and best practices\n' +
+          '4. Improvement suggestions\n\n' +
+          'Respond in a clear, structured format using markdown.\n\n' +
+          `Analyze this code:\n\n${code}`,
+      });
+
+      if (!result.success || !result.reply) {
+        return { success: false, reply: 'Code analysis failed via unified query engine.' };
+      }
+
+      return {
+        success: true,
+        reply: result.reply,
+        metadata: { model: result.model ?? llmConfig.model },
+      };
+    }
+
     const baseUrl = llmConfig.baseUrl.replace(/\/+$/, '');
     try {
       const response = await fetch(`${baseUrl}/chat/completions`, {
@@ -105,7 +163,7 @@ const codeAnalysisSkill: BuiltinSkillDefinition = {
       }
 
       const data = await response.json() as any;
-      const reply = data.choices?.[0]?.message?.content ?? 'No analysis result returned.';
+      const reply = extractAssistantText(data) ?? 'No analysis result returned.';
 
       return {
         success: true,

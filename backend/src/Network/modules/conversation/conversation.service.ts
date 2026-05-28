@@ -376,6 +376,67 @@ export class ConversationService {
       };
     }
 
+    // Auto skill routing: user does not need to type `/skill`.
+    // Let model decide whether a suitable skill should be used.
+    const autoRoute = await this.skillService.autoSelectSkill(
+      dto.content,
+      conversation.userId,
+      conversation.id,
+    );
+    console.log(
+      `[ConversationService] autoSkill useSkill=${autoRoute.useSkill} skillName=${autoRoute.skillName ?? 'none'} reason=${autoRoute.reason ?? 'n/a'} userId=${conversation.userId} conversationId=${conversation.id}`,
+    );
+    if (autoRoute.useSkill && autoRoute.skillName) {
+      const skillContext = await this.skillService.buildExecutionContext(
+        conversation.userId,
+        conversation.id,
+      );
+      const skillResult = await this.skillService.invokeSkill(
+        autoRoute.skillName,
+        autoRoute.args ?? dto.content,
+        { ...dto.context, ...skillContext },
+      );
+
+      const userMessageId = `msg_user_skill_${Date.now()}`;
+      const assistantMessageId = `msg_assistant_skill_${Date.now()}`;
+      const now = new Date();
+      const userEventUuid = randomUUID();
+      const replyEventUuid = randomUUID();
+      const sessionFilePath = await this.findOrCreateRuntimeSessionFile(conversation.id, conversation.userId);
+
+      await appendFile(
+        sessionFilePath,
+        `${JSON.stringify({ type: 'user', message: { id: userMessageId, role: 'user', content: dto.content }, uuid: userEventUuid, timestamp: now.toISOString(), sessionId: conversation.id })}\n`,
+        'utf8',
+      );
+
+      await appendFile(
+        sessionFilePath,
+        `${JSON.stringify({ type: 'assistant', message: { id: assistantMessageId, role: 'assistant', content: [{ type: 'text', text: skillResult.reply }] }, uuid: replyEventUuid, timestamp: new Date(now.getTime() + 500).toISOString(), sessionId: conversation.id })}\n`,
+        'utf8',
+      );
+
+      await this.touchConversation(conversation, dto.content);
+
+      return {
+        accepted: true,
+        status: 'done',
+        conversation_id: conversation.id,
+        conversationId: conversation.id,
+        message_id: userMessageId,
+        messageId: userMessageId,
+        assistant_message_id: assistantMessageId,
+        assistantMessageId: assistantMessageId,
+        reply: skillResult.reply,
+        raw: {
+          source: 'skill:auto',
+          skillName: autoRoute.skillName,
+          routerReason: autoRoute.reason,
+          ...skillResult.metadata,
+        },
+      };
+    }
+
     const agentResponse = await this.agentService.sendMessage({
       conversationId: conversation.id,
       userId: String(conversation.userId),

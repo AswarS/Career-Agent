@@ -28,6 +28,14 @@ export interface SkillExecutionContext {
     baseUrl?: string;
     model?: string;
   };
+  runUnifiedPrompt?: (input: {
+    content: string;
+    apiKey?: string;
+    baseUrl?: string;
+    model?: string;
+    userId?: number;
+    conversationId?: string;
+  }) => Promise<{ success: boolean; reply?: string; thinking?: string; model?: string }>;
   [key: string]: unknown;
 }
 

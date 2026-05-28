@@ -12,6 +12,7 @@ import {
 } from './skill.registry';
 import { registerBuiltinSkills } from './built-in-skills';
 import { SettingsService } from '../settings/settings.service';
+import { AgentService } from '../agent/agent.service';
 import {
   listUserSkills,
   readSkillFile,
@@ -26,6 +27,7 @@ export class SkillService implements OnModuleInit {
   constructor(
     public readonly registry: SkillRegistry,
     @Optional() private readonly settingsService?: SettingsService,
+    @Optional() private readonly agentService?: AgentService,
   ) {}
 
   onModuleInit() {
@@ -202,14 +204,40 @@ export class SkillService implements OnModuleInit {
     args: string,
     context?: SkillExecutionContext,
   ): Promise<SkillHandlerResult> {
+    const mergedContext: SkillExecutionContext = { ...(context ?? {}) };
+    if (!mergedContext.llmConfig && mergedContext.userId && this.settingsService) {
+      const saved = await this.settingsService.getSettings(mergedContext.userId);
+      if (saved) {
+        mergedContext.llmConfig = {
+          apiKey: saved.apiKey ?? undefined,
+          baseUrl: saved.baseUrl ?? undefined,
+          model: saved.model ?? undefined,
+        };
+      }
+    }
+    if (this.agentService) {
+      mergedContext.runUnifiedPrompt = async (input) =>
+        this.agentService!.runIsolatedPrompt({
+          userId: String(input.userId ?? mergedContext.userId ?? 1),
+          conversationId: input.conversationId ?? mergedContext.conversationId,
+          apiKey: input.apiKey ?? mergedContext.llmConfig?.apiKey,
+          baseUrl: input.baseUrl ?? mergedContext.llmConfig?.baseUrl,
+          model: input.model ?? mergedContext.llmConfig?.model,
+          content: input.content,
+        });
+    }
+
     // 1. Try builtin skill (hardcoded handler)
     const builtin = this.registry.get(name);
     if (builtin) {
+      console.log(
+        `[SkillService] invokeSkill source=builtin name=${name} userId=${mergedContext.userId ?? 'unknown'} conversationId=${mergedContext.conversationId ?? 'unknown'}`,
+      );
       if (builtin.status !== 'loaded') {
         throw new ForbiddenException({ error: 'Skill not loaded', skill: name });
       }
       try {
-        return await builtin.handler(args, context);
+        return await builtin.handler(args, mergedContext);
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         return { success: false, reply: `Skill execution failed: ${message}` };
@@ -217,10 +245,13 @@ export class SkillService implements OnModuleInit {
     }
 
     // 2. Try custom skill (SKILL.md → expand → LLM)
-    if (context?.userId) {
-      const custom = await readSkillFile(context.userId, name);
+    if (mergedContext?.userId) {
+      const custom = await readSkillFile(mergedContext.userId, name);
       if (custom) {
-        return this.invokeCustomSkill(custom, args, context);
+        console.log(
+          `[SkillService] invokeSkill source=custom name=${name} userId=${mergedContext.userId} conversationId=${mergedContext.conversationId ?? 'unknown'}`,
+        );
+        return this.invokeCustomSkill(custom, args, mergedContext);
       }
     }
 
@@ -248,49 +279,38 @@ export class SkillService implements OnModuleInit {
       skill.argumentNames,
     );
 
-    const baseUrl = llmConfig.baseUrl.replace(/\/+$/, '');
     try {
-      const response = await fetch(`${baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${llmConfig.apiKey}`,
-        },
-        body: JSON.stringify({
-          model: llmConfig.model ?? 'glm-4',
-          messages: [
-            { role: 'system', content: expanded },
-            { role: 'user', content: args || '请执行' },
-          ],
-          max_tokens: 4096,
-          temperature: 0.7,
-        }),
-        signal: AbortSignal.timeout(180000),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
+      if (!this.agentService) {
         return {
           success: false,
-          reply: `LLM API error (${response.status}): ${errorText}`,
+          reply: 'Skill backend is not ready: AgentService unavailable.',
         };
       }
 
-      const data = (await response.json()) as any;
-      const reply =
-        data.choices?.[0]?.message?.content ?? 'No result returned.';
+      const result = await this.agentService.runIsolatedPrompt({
+        userId: String(context.userId ?? 1),
+        conversationId:
+          typeof context.conversationId === 'string'
+            ? context.conversationId
+            : undefined,
+        apiKey: llmConfig.apiKey,
+        baseUrl: llmConfig.baseUrl,
+        model: llmConfig.model,
+        content: `${expanded}\n\nUser request:\n${args || 'Please execute.'}`,
+      });
+
+      if (!result.success || !result.reply) {
+        return {
+          success: false,
+          reply: 'Skill execution failed: empty result from unified query engine.',
+        };
+      }
 
       return {
         success: true,
-        reply,
+        reply: result.reply,
         metadata: {
-          model: data.model ?? llmConfig.model,
-          usage: data.usage
-            ? {
-                input_tokens: data.usage.prompt_tokens,
-                output_tokens: data.usage.completion_tokens,
-              }
-            : undefined,
+          model: result.model ?? llmConfig.model,
         },
       };
     } catch (err: unknown) {
@@ -346,5 +366,91 @@ export class SkillService implements OnModuleInit {
       if (custom) return true;
     }
     return false;
+  }
+
+  async autoSelectSkill(
+    content: string,
+    userId: number,
+    conversationId?: string,
+  ): Promise<{ useSkill: boolean; skillName?: string; args?: string; reason?: string }> {
+    if (!this.agentService) {
+      return { useSkill: false, reason: 'agent_service_unavailable' };
+    }
+
+    const skills = await this.listSkills(userId);
+    const candidates = skills
+      .filter((s) => typeof s.name === 'string' && s.name !== 'skills')
+      .map((s) => ({
+        name: String(s.name),
+        description: String(s.description ?? ''),
+        category: String(s.category ?? 'utility'),
+        source: String(s.source ?? 'unknown'),
+      }));
+
+    if (!candidates.length) return { useSkill: false, reason: 'no_skills' };
+
+    let llmConfig: SkillExecutionContext['llmConfig'] | undefined;
+    if (this.settingsService) {
+      const saved = await this.settingsService.getSettings(userId);
+      if (saved) {
+        llmConfig = {
+          apiKey: saved.apiKey ?? undefined,
+          baseUrl: saved.baseUrl ?? undefined,
+          model: saved.model ?? undefined,
+        };
+      }
+    }
+    if (!llmConfig?.apiKey || !llmConfig?.baseUrl) {
+      return { useSkill: false, reason: 'llm_not_configured' };
+    }
+
+    const routerPrompt =
+      'You are a strict skill router.\n' +
+      'Given user message and available skills, decide whether to call one skill.\n' +
+      'Rules:\n' +
+      '1) Return ONLY compact JSON.\n' +
+      '2) If no skill is clearly beneficial, set useSkill=false.\n' +
+      '3) If useSkill=true, skillName must exactly match one available name.\n' +
+      '4) args should be concise, preserving user intent.\n\n' +
+      `Available skills JSON:\n${JSON.stringify(candidates)}\n\n` +
+      `User message:\n${content}\n\n` +
+      'Output schema:\n{"useSkill":boolean,"skillName":"string","args":"string","reason":"string"}';
+
+    const route = await this.agentService.runIsolatedPrompt({
+      userId: String(userId),
+      conversationId,
+      apiKey: llmConfig.apiKey,
+      baseUrl: llmConfig.baseUrl,
+      model: llmConfig.model,
+      content: routerPrompt,
+    });
+
+    if (!route.success || !route.reply) {
+      return { useSkill: false, reason: 'router_failed' };
+    }
+
+    try {
+      const matched = route.reply.match(/\{[\s\S]*\}/);
+      if (!matched) return { useSkill: false, reason: 'router_no_json' };
+      const parsed = JSON.parse(matched[0]) as {
+        useSkill?: boolean;
+        skillName?: string;
+        args?: string;
+        reason?: string;
+      };
+      if (!parsed.useSkill || !parsed.skillName) {
+        return { useSkill: false, reason: parsed.reason ?? 'router_declined' };
+      }
+      const exists = await this.skillExists(parsed.skillName, userId);
+      if (!exists) return { useSkill: false, reason: 'router_skill_not_found' };
+      return {
+        useSkill: true,
+        skillName: parsed.skillName,
+        args: parsed.args ?? content,
+        reason: parsed.reason ?? 'router_selected',
+      };
+    } catch {
+      return { useSkill: false, reason: 'router_parse_failed' };
+    }
   }
 }
