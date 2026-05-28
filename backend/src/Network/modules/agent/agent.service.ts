@@ -57,6 +57,45 @@ export class AgentService {
 
   constructor(@Optional() private readonly settingsService?: SettingsService) {}
 
+  async runIsolatedPrompt(input: {
+    userId: string;
+    content: string;
+    apiKey?: string;
+    baseUrl?: string;
+    model?: string;
+    conversationId?: string;
+  }): Promise<{ success: boolean; reply?: string; thinking?: string; model?: string }> {
+    const tempConversationId =
+      input.conversationId && input.conversationId.trim().length > 0
+        ? `${input.conversationId}-skill`
+        : `skill-${randomUUID()}`;
+
+    try {
+      const result = await this.runQueryEngineInference(
+        tempConversationId,
+        input.userId,
+        input.content,
+        {
+          apiKey: input.apiKey,
+          baseUrl: input.baseUrl,
+          model: input.model,
+        },
+      );
+
+      if (!result.success) return { success: false };
+      return {
+        success: true,
+        reply: result.reply,
+        thinking: result.thinking,
+        model: result.model,
+      };
+    } finally {
+      this.queryEngines.delete(tempConversationId);
+      this.sessionContexts.delete(tempConversationId);
+      this.conversationConfigs.delete(tempConversationId);
+    }
+  }
+
   async createConversation(
     input: AgentCreateConversationInput,
   ): Promise<AgentConversationMetadata> {
@@ -299,59 +338,59 @@ export class AgentService {
         process.env.ANTHROPIC_MODEL = config.model
       }
 
-      const result = await runWithSessionContext(ctx, async () => {
-        const textParts: string[] = [];
-        const thinkingParts: string[] = [];
-        let model: string | undefined;
+      const result = await (async () => {
+        try {
+          return await runWithSessionContext(ctx, async () => {
+            const textParts: string[] = [];
+            const thinkingParts: string[] = [];
+            let model: string | undefined;
 
-        const stream = queryEngine!.submitMessage(content);
+            const stream = queryEngine!.submitMessage(content);
 
-        for await (const msg of stream) {
-          // QueryEngine yields different event types:
-          // - type=assistant: msg.message.content is content block array
-          // - type=result: msg.result is the final text summary
-          const msgMessage = (msg as any).message;
-          if (msgMessage && Array.isArray(msgMessage.content)) {
-            for (const block of msgMessage.content) {
-              if (block.type === 'text' && typeof block.text === 'string') {
-                textParts.push(block.text);
+            for await (const msg of stream) {
+              const msgMessage = (msg as any).message;
+              if (msgMessage && Array.isArray(msgMessage.content)) {
+                for (const block of msgMessage.content) {
+                  if (block.type === 'text' && typeof block.text === 'string') {
+                    textParts.push(block.text);
+                  }
+                  if (block.type === 'thinking' && typeof block.thinking === 'string') {
+                    thinkingParts.push(block.thinking);
+                  }
+                }
+                if (msgMessage.model && !model) {
+                  model = msgMessage.model;
+                }
               }
-              if (block.type === 'thinking' && typeof block.thinking === 'string') {
-                thinkingParts.push(block.thinking);
+
+              if ((msg as any).type === 'result' && typeof (msg as any).result === 'string' && !textParts.length) {
+                textParts.push((msg as any).result);
               }
             }
-            if (msgMessage.model && !model) {
-              model = msgMessage.model;
-            }
+
+            const reply = textParts.join('\n').trim();
+            const thinking = thinkingParts.join('\n').trim();
+
+            return { reply, thinking, model };
+          });
+        } finally {
+          if (prevApiKey === undefined) {
+            delete process.env.ANTHROPIC_API_KEY;
+          } else {
+            process.env.ANTHROPIC_API_KEY = prevApiKey;
           }
-
-          // Fallback: capture result text if no content blocks were extracted
-          if ((msg as any).type === 'result' && typeof (msg as any).result === 'string' && !textParts.length) {
-            textParts.push((msg as any).result);
+          if (prevBaseUrl === undefined) {
+            delete process.env.ANTHROPIC_BASE_URL;
+          } else {
+            process.env.ANTHROPIC_BASE_URL = prevBaseUrl;
+          }
+          if (prevModel === undefined) {
+            delete process.env.ANTHROPIC_MODEL;
+          } else {
+            process.env.ANTHROPIC_MODEL = prevModel;
           }
         }
-
-        const reply = textParts.join('\n').trim();
-        const thinking = thinkingParts.join('\n').trim();
-
-        return { reply, thinking, model };
-      });
-
-      if (prevApiKey === undefined) {
-        delete process.env.ANTHROPIC_API_KEY
-      } else {
-        process.env.ANTHROPIC_API_KEY = prevApiKey
-      }
-      if (prevBaseUrl === undefined) {
-        delete process.env.ANTHROPIC_BASE_URL
-      } else {
-        process.env.ANTHROPIC_BASE_URL = prevBaseUrl
-      }
-      if (prevModel === undefined) {
-        delete process.env.ANTHROPIC_MODEL
-      } else {
-        process.env.ANTHROPIC_MODEL = prevModel
-      }
+      })();
 
       if (!result.reply) {
         console.error('[AgentService] QueryEngine returned empty reply');
