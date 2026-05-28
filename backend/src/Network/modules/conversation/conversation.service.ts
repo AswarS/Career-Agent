@@ -796,35 +796,17 @@ export class ConversationService {
   }
 
   private async findRuntimeSessionFile(sessionId: string, userId?: number) {
-    if (userId !== undefined) {
-      const directPath = join(userDataRootDir, String(userId), `${sessionId}.jsonl`);
-      try {
-        await stat(directPath);
-        return directPath;
-      } catch {
-        // Fall through to legacy scan for backwards compatibility
-      }
+    if (userId === undefined) {
+      throw new NotFoundException(`Runtime session ${sessionId} requires userId`);
     }
 
-    // Legacy fallback: scan user directories (needed for sessions created before userId tracking)
-    const { readdir } = await import('node:fs/promises');
-    const userDirs = await readdir(userDataRootDir, { withFileTypes: true });
-
-    for (const dir of userDirs) {
-      if (!dir.isDirectory()) {
-        continue;
-      }
-
-      const candidate = join(userDataRootDir, dir.name, `${sessionId}.jsonl`);
-      try {
-        await stat(candidate);
-        return candidate;
-      } catch {
-        continue;
-      }
+    const directPath = join(userDataRootDir, String(userId), `${sessionId}.jsonl`);
+    try {
+      await stat(directPath);
+      return directPath;
+    } catch {
+      throw new NotFoundException(`Runtime session ${sessionId} not found for user ${userId}`);
     }
-
-    throw new NotFoundException(`Runtime session ${sessionId} not found`);
   }
 
   private async ensureConversationFileManifest(
