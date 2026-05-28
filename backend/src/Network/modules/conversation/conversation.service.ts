@@ -268,7 +268,7 @@ export class ConversationService {
 
     const skillInvocation = this.skillService.parseSkillInvocation(dto.content);
     if (skillInvocation && skillInvocation.skillName === 'skills') {
-      const skills = this.skillService.listSkills();
+      const skills = await this.skillService.listSkills(conversation.userId);
       const byCategory = new Map<string, typeof skills>();
       for (const s of skills) {
         const cat = s.category ?? 'utility';
@@ -330,7 +330,7 @@ export class ConversationService {
       };
     }
 
-    if (skillInvocation && this.skillService.registry.has(skillInvocation.skillName)) {
+    if (skillInvocation && await this.skillService.skillExists(skillInvocation.skillName, conversation.userId)) {
       const skillContext = await this.skillService.buildExecutionContext(
         conversation.userId,
         conversation.id,

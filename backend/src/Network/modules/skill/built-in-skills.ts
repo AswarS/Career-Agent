@@ -96,7 +96,7 @@ const codeAnalysisSkill: BuiltinSkillDefinition = {
           max_tokens: 4096,
           temperature: 0.3,
         }),
-        signal: AbortSignal.timeout(60000),
+        signal: AbortSignal.timeout(180000),
       });
 
       if (!response.ok) {
