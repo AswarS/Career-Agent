@@ -108,6 +108,7 @@ export class AgentService {
       baseUrl: input.baseUrl ?? convCfg?.baseUrl ?? userSettings.baseUrl,
       model: input.model ?? convCfg?.model ?? userSettings.model,
     };
+    console.log(`[AgentService] mergedConfig: ${JSON.stringify(mergedConfig)}, settingsService=${!!this.settingsService}, userSettings=${JSON.stringify(userSettings)}, inputApiKey=${input.apiKey}, convCfg=${JSON.stringify(convCfg)}`);
 
     // 3. Run inference via QueryEngine
     const qeResult = await this.runQueryEngineInference(
@@ -285,6 +286,20 @@ export class AgentService {
       const ctx = this.sessionContexts.get(conversationId)!;
 
       // Run inside ALS context so all module-level helpers route correctly
+      const prevApiKey = process.env.ANTHROPIC_API_KEY
+      const prevBaseUrl = process.env.ANTHROPIC_BASE_URL
+      const prevModel = process.env.ANTHROPIC_MODEL
+
+      if (config.apiKey) {
+        process.env.ANTHROPIC_API_KEY = config.apiKey
+      }
+      if (config.baseUrl) {
+        process.env.ANTHROPIC_BASE_URL = config.baseUrl
+      }
+      if (config.model) {
+        process.env.ANTHROPIC_MODEL = config.model
+      }
+
       const result = await runWithSessionContext(ctx, async () => {
         const textParts: string[] = [];
         const thinkingParts: string[] = [];
@@ -322,6 +337,22 @@ export class AgentService {
 
         return { reply, thinking, model };
       });
+
+      if (prevApiKey === undefined) {
+        delete process.env.ANTHROPIC_API_KEY
+      } else {
+        process.env.ANTHROPIC_API_KEY = prevApiKey
+      }
+      if (prevBaseUrl === undefined) {
+        delete process.env.ANTHROPIC_BASE_URL
+      } else {
+        process.env.ANTHROPIC_BASE_URL = prevBaseUrl
+      }
+      if (prevModel === undefined) {
+        delete process.env.ANTHROPIC_MODEL
+      } else {
+        process.env.ANTHROPIC_MODEL = prevModel
+      }
 
       if (!result.reply) {
         console.error('[AgentService] QueryEngine returned empty reply');

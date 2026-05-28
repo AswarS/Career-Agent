@@ -389,9 +389,9 @@ export class ConversationService {
       })),
       context: dto.context,
       clientRequestId: dto.client_request_id ?? dto.clientRequestId,
-      apiKey: "",
-      baseUrl: "",
-      model: "",
+      apiKey: undefined,
+      baseUrl: undefined,
+      model: undefined,
     });
 
     await this.replaceMessageResourceMappings(
