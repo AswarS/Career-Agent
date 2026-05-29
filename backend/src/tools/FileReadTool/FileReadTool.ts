@@ -58,7 +58,12 @@ import {
   readNotebook,
 } from '../../utils/notebook.js'
 import { expandPath } from '../../utils/path.js'
-import { extractPDFPages, getPDFPageCount, readPDF } from '../../utils/pdf.js'
+import {
+  extractPDFPages,
+  getPDFPageCount,
+  isPdftoppmAvailable,
+  readPDF,
+} from '../../utils/pdf.js'
 import {
   isPDFExtension,
   isPDFSupported,
@@ -899,6 +904,39 @@ async function callInner(
         parsedRange ?? undefined,
       )
       if (!extractResult.success) {
+        // Windows/local fallback: if page extraction backend is unavailable,
+        // fall back to full PDF document block so model can still read content.
+        if (extractResult.error.reason === 'unavailable') {
+          const readResult = await readPDF(resolvedFilePath)
+          if (!readResult.success) {
+            throw new Error(readResult.error.message)
+          }
+          const pdfData = readResult.data
+          logFileOperation({
+            operation: 'read',
+            tool: 'FileReadTool',
+            filePath: fullFilePath,
+            content: pdfData.file.base64,
+          })
+          return {
+            data: pdfData,
+            newMessages: [
+              createUserMessage({
+                content: [
+                  {
+                    type: 'document',
+                    source: {
+                      type: 'base64',
+                      media_type: 'application/pdf',
+                      data: pdfData.file.base64,
+                    },
+                  },
+                ],
+                isMeta: true,
+              }),
+            ],
+          }
+        }
         throw new Error(extractResult.error.message)
       }
       logEvent('tengu_pdf_page_extraction', {
@@ -946,7 +984,12 @@ async function callInner(
     }
 
     const pageCount = await getPDFPageCount(resolvedFilePath)
-    if (pageCount !== null && pageCount > PDF_AT_MENTION_INLINE_THRESHOLD) {
+    const pdftoppmReady = await isPdftoppmAvailable()
+    if (
+      pageCount !== null &&
+      pageCount > PDF_AT_MENTION_INLINE_THRESHOLD &&
+      pdftoppmReady
+    ) {
       throw new Error(
         `This PDF has ${pageCount} pages, which is too many to read at once. ` +
           `Use the pages parameter to read specific page ranges (e.g., pages: "1-5"). ` +

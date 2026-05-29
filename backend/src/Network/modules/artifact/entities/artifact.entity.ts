@@ -5,8 +5,8 @@ export class ArtifactEntity {
   @PrimaryGeneratedColumn({ type: 'integer' })
   id!: number;
 
-  @Column({ nullable: true, type: 'integer' })
-  uid!: number;
+  @Column({ type: 'integer' })
+  userId!: number;
 
   @Column({ nullable: true, type: 'text' })
   type?: string;

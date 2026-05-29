@@ -23,9 +23,9 @@ export class ArtifactService {
     return artifact;
   }
 
-  async listArtifacts(uid: number) {
+  async listArtifacts(userId: number) {
     return this.artifactRepo.find({
-      where: { uid: uid },
+      where: { userId },
       order: { createdAt: 'ASC' },
     });
   }

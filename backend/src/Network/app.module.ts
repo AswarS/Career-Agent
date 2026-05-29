@@ -18,6 +18,9 @@ import { MemoryModule } from './modules/memory/memory.module';
 import { MemoryEntity } from './modules/memory/entities/memory.entity';
 import { SettingsModule } from './modules/settings/settings.module';
 import { ApiSettingsEntity } from './modules/settings/entities/api-settings.entity';
+import { UserModule } from './modules/user/user.module';
+import { ResourceEntity } from './modules/resource/entities/resource.entity';
+import { GeneratedAppEntity } from './modules/generated-app/entities/generated-app.entity';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -37,6 +40,8 @@ const networkDir = dirname(fileURLToPath(import.meta.url));
         TeamEntity,
         MemoryEntity,
         ApiSettingsEntity,
+        ResourceEntity,
+        GeneratedAppEntity,
       ],
       synchronize: true,
     }),
@@ -48,6 +53,7 @@ const networkDir = dirname(fileURLToPath(import.meta.url));
     AuthModule,
     MemoryModule,
     SettingsModule,
+    UserModule,
   ],
   providers: [AppService],
 })

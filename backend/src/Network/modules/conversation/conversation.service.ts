@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
   UnsupportedMediaTypeException,
@@ -15,7 +16,7 @@ import { SkillService } from '../skill/skill.service';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { SendMultimodalMessageDto } from './dto/send-multimodal-message.dto';
 import { ConversationEntity } from './entities/conversation.entity';
-import { MessageEntity } from './entities/message.entity';
+import { ResourceEntity } from '../resource/entities/resource.entity';
 import {integer} from "vscode-languageserver-types";
 
 declare global {
@@ -121,8 +122,8 @@ export class ConversationService {
   constructor(
     @InjectRepository(ConversationEntity)
     private readonly conversationRepo: Repository<ConversationEntity>,
-    @InjectRepository(MessageEntity)
-    private readonly messageResourceRepo: Repository<MessageEntity>,
+    @InjectRepository(ResourceEntity)
+    private readonly messageResourceRepo: Repository<ResourceEntity>,
     private readonly agentService: AgentService,
     private readonly skillService: SkillService,
   ) {}
@@ -155,25 +156,26 @@ export class ConversationService {
     return this.toThreadSummary(savedConversation);
   }
 
-  async listConversations(uid: number) {
+  async listConversations(userId: number) {
     const conversations = await this.conversationRepo.find({
-      where: { userId: uid },
+      where: { userId },
       order: { updatedAt: 'DESC' },
     });
 
     return conversations.map((conversation) => this.toThreadSummary(conversation));
   }
 
-  async listMessages(conversationId: string) {
-    const conversation = await this.getConversationByIdentifier(conversationId);
+  async listMessages(conversationId: string, requestUserId?: number) {
+    const conversation = await this.getConversationByIdentifier(conversationId, requestUserId);
     return this.readRuntimeSessionMessages(conversation.id, conversation.userId);
   }
 
   async uploadConversationFile(
     conversationId: string,
     file: Express.Multer.File,
+    requestUserId?: number,
   ) {
-    const conversation = await this.getConversationByIdentifier(conversationId);
+    const conversation = await this.getConversationByIdentifier(conversationId, requestUserId);
 
     if (!file) {
       throw new BadRequestException('file is required');
@@ -237,8 +239,8 @@ export class ConversationService {
     return uploadedFile;
   }
 
-  async getConversationFile(conversationId: string, fileName: string) {
-    const conversation = await this.getConversationByIdentifier(conversationId);
+  async getConversationFile(conversationId: string, fileName: string, requestUserId?: number) {
+    const conversation = await this.getConversationByIdentifier(conversationId, requestUserId);
     const manifest = await this.readConversationFileManifest(
       conversation.userId,
       conversation.id,
@@ -261,10 +263,13 @@ export class ConversationService {
     };
   }
 
-  async sendMessage(conversationId: string, dto: SendMultimodalMessageDto) {
-    const conversation = await this.getConversationByIdentifier(conversationId);
+  async sendMessage(conversationId: string, dto: SendMultimodalMessageDto, requestUserId?: number) {
+    const conversation = await this.getConversationByIdentifier(conversationId, requestUserId);
     const attachmentIds = dto.attachment_asset_ids ?? dto.attachmentAssetIds ?? [];
-    const attachments = await this.resolveAttachments(conversation.id, attachmentIds);
+    let attachments = await this.resolveAttachments(conversation.id, attachmentIds);
+    if (attachments.length === 0) {
+      attachments = await this.resolveImplicitAttachments(conversation, dto.content);
+    }
 
     const skillInvocation = this.skillService.parseSkillInvocation(dto.content);
     if (skillInvocation && skillInvocation.skillName === 'skills') {
@@ -456,6 +461,7 @@ export class ConversationService {
     });
 
     await this.replaceMessageResourceMappings(
+      conversation.userId,
       conversation.id,
       agentResponse.userMessageId,
       attachments,
@@ -463,6 +469,7 @@ export class ConversationService {
 
     const replyFiles = this.normalizeReplyFiles(agentResponse.file);
     await this.replaceMessageResourceMappings(
+      conversation.userId,
       conversation.id,
       agentResponse.assistantMessageId,
       replyFiles,
@@ -484,9 +491,12 @@ export class ConversationService {
     };
   }
 
-  private async getConversationByIdentifier(identifier: string) {
+  private async getConversationByIdentifier(identifier: string, requestUserId?: number) {
     const byAgentId = await this.conversationRepo.findOne({ where: { id: identifier } });
     if (byAgentId) {
+      if (requestUserId !== undefined && byAgentId.userId !== requestUserId) {
+        throw new ForbiddenException('You do not have access to this conversation');
+      }
       return byAgentId;
     }
 
@@ -494,6 +504,9 @@ export class ConversationService {
     if (Number.isInteger(numericId)) {
       const byCid = await this.conversationRepo.findOne({ where: { cid: numericId } });
       if (byCid) {
+        if (requestUserId !== undefined && byCid.userId !== requestUserId) {
+          throw new ForbiddenException('You do not have access to this conversation');
+        }
         return byCid;
       }
     }
@@ -541,6 +554,35 @@ export class ConversationService {
     }
 
     return attachments;
+  }
+
+  private async resolveImplicitAttachments(
+    conversation: ConversationEntity,
+    content: string,
+  ): Promise<MessageMedia[]> {
+    const normalized = content.toLowerCase();
+    const asksForDocument =
+      normalized.includes('pdf') ||
+      normalized.includes('paper') ||
+      normalized.includes('论文') ||
+      normalized.includes('文档') ||
+      normalized.includes('这篇') ||
+      normalized.includes('这个文件');
+
+    if (!asksForDocument) {
+      return [];
+    }
+
+    const manifest = await this.readConversationFileManifest(
+      conversation.userId,
+      conversation.id,
+    );
+    if (manifest.length === 0) {
+      return [];
+    }
+
+    const latest = manifest[manifest.length - 1];
+    return [this.toMessageMedia(latest)];
   }
 
   private toMessageMedia(asset: UploadedConversationFile): MessageMedia {
@@ -669,7 +711,7 @@ export class ConversationService {
 
     const messageOrder: string[] = [];
     const messageMap = new Map<string, ConversationMessage>();
-    const mediaByMessageId = await this.getMessageResourceMappings(sessionId);
+    const mediaByMessageId = await this.getMessageResourceMappings(sessionId, userId);
 
     for (const line of lines) {
       const event = JSON.parse(line) as RuntimeJsonlEvent;
@@ -945,9 +987,12 @@ export class ConversationService {
     await writeFile(manifestPath, JSON.stringify(assets, null, 2) + '\n', 'utf8');
   }
 
-  private async getMessageResourceMappings(conversationId: string) {
+  private async getMessageResourceMappings(conversationId: string, userId?: number) {
+    const where = userId !== undefined
+      ? { conversationId, userId }
+      : { conversationId };
     const rows = await this.messageResourceRepo.find({
-      where: { conversationId },
+      where,
       order: { createdAt: 'ASC', id: 'ASC' },
     });
     const mapping = new Map<string, MessageMedia[]>();
@@ -979,11 +1024,12 @@ export class ConversationService {
   }
 
   private async replaceMessageResourceMappings(
+    userId: number,
     conversationId: string,
     messageId: string,
     resources: MessageMedia[],
   ) {
-    await this.messageResourceRepo.delete({ conversationId, messageId });
+    await this.messageResourceRepo.delete({ userId, conversationId, messageId });
 
     if (!resources.length) {
       return;
@@ -991,6 +1037,7 @@ export class ConversationService {
 
     const rows = resources.map((resource) =>
       this.messageResourceRepo.create({
+        userId,
         messageId,
         conversationId,
         resourceId: resource.id,

@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  ForbiddenException,
   Get,
   Param,
   Post,
@@ -31,14 +32,21 @@ export class ConversationController {
 
   @Get(':id')
   getByUserId(@Req() req: Request, @Param('id') uid: string) {
-    const userId = Number(uid);
-    return this.conversationService.listConversations(userId);
+    const requestedUserId = Number(uid);
+    const currentUserId = req.userId;
+    if (!currentUserId) {
+      throw new ForbiddenException('Missing user identity');
+    }
+    if (Number.isInteger(requestedUserId) && requestedUserId !== currentUserId) {
+      throw new ForbiddenException('You do not have access to this user conversations');
+    }
+    return this.conversationService.listConversations(currentUserId);
   }
 
   @Get(':id/messages')
   @UseGuards(OwnershipGuard)
   listMessages(@Req() req: Request, @Param('id') conversationId: string) {
-    return this.conversationService.listMessages(conversationId);
+    return this.conversationService.listMessages(conversationId, req.userId);
   }
 
   @Post(':id/messages')
@@ -48,7 +56,7 @@ export class ConversationController {
     @Param('id') conversationId: string,
     @Body() dto: SendMultimodalMessageDto,
   ) {
-    return this.conversationService.sendMessage(conversationId, dto);
+    return this.conversationService.sendMessage(conversationId, dto, req.userId);
   }
 
   @Post(':id/files')
@@ -66,7 +74,7 @@ export class ConversationController {
     @Param('id') conversationId: string,
     @UploadedFile() file: Express.Multer.File,
   ) {
-    return this.conversationService.uploadConversationFile(conversationId, file);
+    return this.conversationService.uploadConversationFile(conversationId, file, req.userId);
   }
 
   @Get(':id/files/:fileName')
@@ -80,6 +88,7 @@ export class ConversationController {
     const { asset, absolutePath } = await this.conversationService.getConversationFile(
       conversationId,
       fileName,
+      req.userId,
     );
     const contentDisposition = require('content-disposition')
     response.setHeader('Content-Type', asset.mime_type);

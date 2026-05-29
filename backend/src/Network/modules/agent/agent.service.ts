@@ -154,6 +154,7 @@ export class AgentService {
       userId,
       content,
       mergedConfig,
+      input.attachments ?? [],
     );
 
     if (qeResult.success) {
@@ -297,6 +298,7 @@ export class AgentService {
     userId: string,
     content: string,
     config: ConversationConfig,
+    attachments: AgentAttachmentInput[] = [],
   ): Promise<
     | {
         success: true;
@@ -354,7 +356,13 @@ export class AgentService {
             const thinkingParts: string[] = [];
             let model: string | undefined;
 
-            const stream = queryEngine!.submitMessage(content);
+            const inputWithAttachments = this.buildPromptWithAttachmentMentions(
+              content,
+              userId,
+              conversationId,
+              attachments,
+            );
+            const stream = queryEngine!.submitMessage(inputWithAttachments);
 
             for await (const msg of stream) {
               const msgMessage = (msg as any).message;
@@ -449,5 +457,61 @@ export class AgentService {
       },
       pendingToolResponses: new Map(),
     } as unknown as SessionContext;
+  }
+
+  private buildPromptWithAttachmentMentions(
+    content: string,
+    userId: string,
+    conversationId: string,
+    attachments: AgentAttachmentInput[],
+  ): string {
+    if (!attachments.length) {
+      return content;
+    }
+
+    // Use native attachment ingestion chain:
+    // QueryEngine.submitMessage -> processUserInput -> getAttachmentMessages.
+    // Appending @paths allows the existing parser to generate structured
+    // attachment messages (including PDF/pdf_reference behavior).
+    const mentionLines = attachments.map((attachment) => {
+      const absPath = this.resolveAttachmentAbsolutePath(
+        attachment.path,
+        userId,
+        conversationId,
+      );
+      return `@${absPath}`;
+    });
+
+    return [content, '', ...mentionLines].join('\n');
+  }
+
+  private resolveAttachmentAbsolutePath(
+    inputPath: string,
+    userId: string,
+    conversationId: string,
+  ): string {
+    if (inputPath.startsWith('/api/career-agent/threads/')) {
+      const fileName = inputPath.split('/').pop() ?? '';
+      return join(networkRootDir, 'files', String(userId), conversationId, fileName);
+    }
+
+    const marker = '/src/Network/files/';
+    const normalized = inputPath.replaceAll('\\', '/');
+    const markerIndex = normalized.indexOf(marker);
+    if (markerIndex >= 0) {
+      const relative = normalized.slice(markerIndex + '/src/Network/'.length);
+      return join(networkRootDir, relative);
+    }
+
+    if (normalized.startsWith('./src/Network/files/')) {
+      const relative = normalized.replace('./src/Network/', '');
+      return join(networkRootDir, relative);
+    }
+
+    if (normalized.startsWith('files/')) {
+      return join(networkRootDir, normalized);
+    }
+
+    return normalized;
   }
 }

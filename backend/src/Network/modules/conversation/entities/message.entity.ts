@@ -5,6 +5,9 @@ export class MessageEntity {
   @PrimaryGeneratedColumn({ type: 'integer' })
   id!: number;
 
+  @Column({ type: 'integer' })
+  userId!: number;
+
   @Column({ type: 'varchar', nullable: true })
   messageId!: string;
 
