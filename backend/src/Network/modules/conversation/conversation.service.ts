@@ -5,7 +5,7 @@ import {
   UnsupportedMediaTypeException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { appendFile, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -419,6 +419,36 @@ export class ConversationService {
     };
   }
 
+  async deleteConversation(
+    conversationId: string,
+    authenticatedUserId?: number,
+  ) {
+    const conversation = await this.getConversationByIdentifier(
+      conversationId,
+      authenticatedUserId,
+    );
+
+    await this.messageResourceRepo.delete({ conversationId: conversation.id });
+    await this.conversationRepo.delete({
+      id: conversation.id,
+      userId: conversation.userId,
+    });
+
+    await rm(this.getRuntimeSessionFilePath(conversation.userId, conversation.id), {
+      force: true,
+    });
+    await rm(this.getConversationFilesDirectory(conversation.userId, conversation.id), {
+      recursive: true,
+      force: true,
+    });
+
+    return {
+      deleted: true,
+      conversation_id: conversation.id,
+      conversationId: conversation.id,
+    };
+  }
+
   private async getConversationByIdentifier(
     identifier: string,
     authenticatedUserId?: number,
@@ -603,6 +633,10 @@ export class ConversationService {
     );
   }
 
+  private getRuntimeSessionFilePath(userId: number, conversationId: string) {
+    return join(userDataRootDir, String(userId), `${conversationId}.jsonl`);
+  }
+
   private async readRuntimeSessionMessages(
     sessionId: string,
   ): Promise<ConversationMessage[]> {
@@ -629,11 +663,14 @@ export class ConversationService {
           return null;
         }
         const media = mediaByMessageId.get(id) ?? [];
-        return {
+        const normalized: ConversationMessage = {
           ...message,
-          media: media.length ? media : undefined,
-          attachments: media.length ? media : undefined,
         };
+        if (media.length) {
+          normalized.media = media;
+          normalized.attachments = media;
+        }
+        return normalized;
       })
       .filter((message): message is ConversationMessage => Boolean(message));
   }

@@ -1,4 +1,4 @@
-import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 
 @Entity('artifacts')
 export class ArtifactEntity {
@@ -26,6 +26,15 @@ export class ArtifactEntity {
   @Column({ nullable: true, type: 'text' })
   payloadPath?: string;
 
+  @Column({ default: 1, type: 'integer' })
+  revision!: number;
+
+  @Column({ nullable: true, type: 'text' })
+  payloadJson?: string;
+
   @Column({ nullable: true })
   createdAt?: Date;
+
+  @UpdateDateColumn({ nullable: true })
+  updatedAt?: Date;
 }

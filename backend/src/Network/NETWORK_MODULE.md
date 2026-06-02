@@ -199,6 +199,60 @@ backend/src/Network/modules/conversation
 - `AgentService` 写入一条失败的 assistant 事件，便于前端展示
 - 消息发送响应返回 `status: "failed"`，`reply/raw.error` 包含上游错误信息
 
+会话删除流程：
+
+1. `ConversationController` 接收 `DELETE /api/career-agent/threads/:id`
+2. `ConversationService` 校验会话属于当前登录用户
+3. 删除 `messages` 表中的消息资源映射
+4. 删除 `conversations` 表中的会话元数据
+5. 删除本地 JSONL 文件 `user/{userId}/{conversationId}.jsonl`
+6. 删除上传文件目录 `files/{userId}/{conversationId}`
+
+## 6A. 画像与工件模块
+
+画像模块位置：
+
+```txt
+backend/src/Network/modules/profile
+```
+
+接口：
+
+```txt
+GET /api/career-agent/profile
+PUT /api/career-agent/profile
+GET /api/career-agent/profile/suggestions
+```
+
+实现说明：
+
+- 画像数据保存在 `users.profileJson`
+- 更新画像时进行基础 JSON 与字段类型校验
+- `display_name` / `displayName` 会同步到用户展示名
+- suggestions 根据缺失关键字段返回轻量补全建议
+
+工件模块位置：
+
+```txt
+backend/src/Network/modules/artifact
+```
+
+接口：
+
+```txt
+GET /api/career-agent/artifacts
+GET /api/career-agent/artifacts/:artifactId
+POST /api/career-agent/artifacts/:artifactId/refresh
+POST /api/career-agent/artifacts/:artifactId/interactions
+```
+
+实现说明：
+
+- 所有工件接口按当前登录用户过滤 `uid`
+- 工件响应归一化为 `ArtifactRecord`
+- `refresh` 会递增 `revision` 并返回最新记录
+- `interactions` 当前返回接收确认事件
+
 ## 7. 数据表说明
 
 ### 7.1 users

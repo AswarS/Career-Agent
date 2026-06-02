@@ -15,6 +15,7 @@ import { SkillModule } from './modules/skill/skill.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UserSettingsModule } from './modules/user-settings/user-settings.module';
 import { UserSettingEntity } from './modules/user-settings/entities/user-setting.entity';
+import { ProfileModule } from './modules/profile/profile.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -43,6 +44,7 @@ const networkDir = dirname(fileURLToPath(import.meta.url));
     SkillModule,
     AuthModule,
     UserSettingsModule,
+    ProfileModule,
   ],
   providers: [AppService],
 })

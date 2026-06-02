@@ -361,16 +361,55 @@ Agent 运行时直接调用 Anthropic Messages API：
 
 如果用户没有配置 API Key，后端返回 400 `API_KEY_REQUIRED`。如果 Anthropic 返回鉴权或权限错误，发送消息响应会返回 `status: "failed"`，`reply/raw.error` 中包含上游错误信息。
 
-## 5. 错误码
+## 5. 会话、画像与工件接口
+
+### 5.1 会话接口
+
+- `GET /api/career-agent/threads/:userId`: 获取当前登录用户的会话列表
+- `POST /api/career-agent/threads`: 新建会话
+- `GET /api/career-agent/threads/:threadId/messages`: 获取会话消息
+- `POST /api/career-agent/threads/:threadId/messages`: 发送消息
+- `DELETE /api/career-agent/threads/:threadId`: 删除会话
+- `POST /api/career-agent/threads/:threadId/files`: 上传会话文件
+- `GET /api/career-agent/threads/:threadId/files/:fileName`: 读取已上传文件
+
+删除会话会清理：
+
+- `conversations` 会话元数据
+- `messages` 消息资源映射
+- `backend/src/Network/user/{userId}/{conversationId}.jsonl`
+- `backend/src/Network/files/{userId}/{conversationId}` 上传文件目录
+
+### 5.2 画像接口
+
+- `GET /api/career-agent/profile`: 获取当前用户画像
+- `PUT /api/career-agent/profile`: 更新当前用户画像
+- `GET /api/career-agent/profile/suggestions`: 获取画像补全建议
+
+画像保存在 `users.profileJson`，更新 `display_name` / `displayName` 时会同步更新用户展示名。
+画像响应会同时返回 snake_case 与 camelCase 兼容字段；数组字段缺省时返回空数组，例如 `target_industries` / `targetIndustries`、`work_preferences` / `workPreferences`。
+
+### 5.3 工件接口
+
+- `GET /api/career-agent/artifacts`: 获取当前用户工件列表
+- `GET /api/career-agent/artifacts/:artifactId`: 获取单个工件
+- `POST /api/career-agent/artifacts/:artifactId/refresh`: 刷新工件 revision
+- `POST /api/career-agent/artifacts/:artifactId/interactions`: 记录前端工件交互事件
+
+工件响应会归一化为 `ArtifactRecord`，同时返回 `render_mode/renderMode` 与 `updated_at/updatedAt` 兼容字段。
+
+## 6. 错误码
 
 | HTTP 状态码 | code | 含义 |
 | --- | --- | --- |
 | 400 | AUTH_VALIDATION_FAILED | 登录/注册参数错误 |
 | 400 | API_KEY_REQUIRED | 新建配置或测试连接时缺少 API Key |
 | 400 | API_BASE_URL_INVALID | base_url 不是合法 http/https URL |
+| 400 | PROFILE_VALIDATION_FAILED | 画像字段格式不合法 |
 | 400 | UNSUPPORTED_PROVIDER | 当前 provider 不支持 |
 | 401 | UNAUTHORIZED | 未认证或 Token 失效 |
 | 401 | INVALID_CREDENTIALS | 登录账号或密码错误 |
+| 404 | ARTIFACT_NOT_FOUND | 工件不存在或不属于当前用户 |
 | 404 | USER_NOT_FOUND | 用户不存在 |
 | 409 | USER_ALREADY_EXISTS | 注册邮箱或用户名已存在 |
 | 409 | USERNAME_ALREADY_EXISTS | 修改后的用户名已存在 |

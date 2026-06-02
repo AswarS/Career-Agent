@@ -1,7 +1,10 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Post,
   Req,
@@ -28,12 +31,6 @@ export class ConversationController {
       dto,
       Number(request.user!.id),
     );
-  }
-
-  @Get(':id')
-  getByUserId(@Param('id') uid: string, @Req() request: AuthenticatedRequest) {
-    const userId = Number(request.user?.id ?? uid);
-    return this.conversationService.listConversations(userId);
   }
 
   @Get(':id/messages')
@@ -98,5 +95,23 @@ export class ConversationController {
     response.setHeader('Content-Disposition', contentDisposition(asset.originalName, { type: 'inline' }));
 
     return new StreamableFile(await readFile(absolutePath));
+  }
+
+  @Get(':id')
+  getByUserId(@Param('id') uid: string, @Req() request: AuthenticatedRequest) {
+    const userId = Number(request.user?.id ?? uid);
+    return this.conversationService.listConversations(userId);
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.OK)
+  deleteConversation(
+    @Param('id') conversationId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.conversationService.deleteConversation(
+      conversationId,
+      Number(request.user!.id),
+    );
   }
 }

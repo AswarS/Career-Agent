@@ -205,6 +205,12 @@
 - risk_signals
 - portfolio_links
 
+兼容字段：
+
+- 后端会同时返回 snake_case 与 camelCase 字段，例如 `target_industries` / `targetIndustries`
+- 数组字段缺省时返回空数组：`targetIndustries`、`constraints`、`workPreferences`、`learningPreferences`、`keyStrengths`、`riskSignals`、`portfolioLinks`
+- 字符串字段缺省时返回空字符串，`locale` 默认 `zh-CN`，`timezone` 默认 `Asia/Shanghai`
+
 ### 4.6 ProfileSuggestion
 
 ```json
@@ -792,6 +798,11 @@ Agent 运行时直接调用 Anthropic Messages API：
 
 - 方法：DELETE
 - 路径：/api/career-agent/threads/:threadId
+- 鉴权：需要 `Authorization: Bearer <access_token>`
+- 响应 200：`{ "deleted": true, "conversation_id": string, "conversationId": string }`
+- 响应 404：THREAD_NOT_FOUND
+
+说明：后端会删除会话元数据、消息资源映射、本地 JSONL 会话文件，以及该会话目录下已上传文件。
 
 ### 6.2 多模态上传（当前后端直传方案）
 
