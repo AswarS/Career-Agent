@@ -18,6 +18,11 @@ export interface SkillHandlerResult {
     content: string;
     title?: string;
   }>;
+  outputFiles?: Array<{
+    path: string;
+    kind?: 'image' | 'video' | 'html' | 'app' | 'file';
+    title?: string;
+  }>;
 }
 
 export interface SkillExecutionContext {

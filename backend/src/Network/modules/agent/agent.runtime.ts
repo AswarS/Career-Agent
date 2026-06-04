@@ -42,6 +42,12 @@ export interface AgentSendMessageInput {
   model?: string;
 }
 
+export interface GeneratedFile {
+  path: string;
+  kind: 'image' | 'video' | 'html' | 'app' | 'file';
+  title?: string;
+}
+
 export interface AgentSendMessageResult {
   accepted: boolean;
   status: 'queued' | 'processing' | 'done' | 'failed';
@@ -50,6 +56,7 @@ export interface AgentSendMessageResult {
   assistantMessageId: string;
   reply: string;
   file?: AgentAttachmentInput | AgentAttachmentInput[];
+  generatedFiles?: GeneratedFile[];
   raw?: Record<string, unknown>;
 }
 

@@ -1,4 +1,4 @@
-import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,7 +12,6 @@ import { ArtifactModule } from './modules/artifact/artifact.module';
 import { TeamModule } from './modules/team/team.module';
 import { TeamEntity } from './modules/team/entities/team.entity';
 import { SkillModule } from './modules/skill/skill.module';
-import { AuthMiddleware } from './modules/auth/auth.middleware';
 import { AuthModule } from './modules/auth/auth.module';
 import { MemoryModule } from './modules/memory/memory.module';
 import { MemoryEntity } from './modules/memory/entities/memory.entity';
@@ -21,6 +20,7 @@ import { ApiSettingsEntity } from './modules/settings/entities/api-settings.enti
 import { UserModule } from './modules/user/user.module';
 import { ResourceEntity } from './modules/resource/entities/resource.entity';
 import { GeneratedAppEntity } from './modules/generated-app/entities/generated-app.entity';
+import { GeneratedModule } from './modules/generated/generated.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -54,11 +54,8 @@ const networkDir = dirname(fileURLToPath(import.meta.url));
     MemoryModule,
     SettingsModule,
     UserModule,
+    GeneratedModule,
   ],
   providers: [AppService],
 })
-export class AppModule implements NestModule {
-  configure(consumer: MiddlewareConsumer) {
-    consumer.apply(AuthMiddleware).forRoutes('*');
-  }
-}
+export class AppModule {}

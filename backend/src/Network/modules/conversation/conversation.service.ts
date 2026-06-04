@@ -8,7 +8,8 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { appendFile, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
-import { extname, join } from 'node:path';
+import { basename, extname, join } from 'node:path';
+import { detectOutputType } from '../../utils/detectOutputType.js';
 import { fileURLToPath } from 'node:url';
 import { Repository } from 'typeorm';
 import { AgentService } from '../agent/agent.service';
@@ -39,7 +40,7 @@ export interface MessageAction {
 
 export interface MessageMedia {
   id: string;
-  kind: 'image' | 'video' | 'file';
+  kind: 'image' | 'video' | 'html' | 'app' | 'file';
   url: string;
   title?: string;
   caption?: string;
@@ -80,7 +81,7 @@ export interface ConversationMessage {
 export interface UploadedConversationFile {
   asset_id: string;
   assetId: string;
-  kind: 'image' | 'video' | 'file';
+  kind: 'image' | 'video' | 'html' | 'app' | 'file';
   url: string;
   title: string;
   mime_type: string;
@@ -276,7 +277,7 @@ export class ConversationService {
       const skills = await this.skillService.listSkills(conversation.userId);
       const byCategory = new Map<string, typeof skills>();
       for (const s of skills) {
-        const cat = s.category ?? 'utility';
+        const cat = (s.category as string | undefined) ?? 'utility';
         if (!byCategory.has(cat)) byCategory.set(cat, []);
         byCategory.get(cat)!.push(s);
       }
@@ -293,8 +294,9 @@ export class ConversationService {
         const label = categoryLabels[cat] ?? cat;
         sections.push(`**${label}**`);
         for (const s of items) {
-          const paramHint = s.parameters?.length
-            ? ` — params: ${s.parameters.map((p) => p.name).join(', ')}`
+          const params = s.parameters as Array<{ name: string }> | undefined;
+          const paramHint = params?.length
+            ? ` — params: ${params.map((p) => p.name).join(', ')}`
             : '';
           sections.push(`- \`/${s.name}\` — ${s.description}${paramHint}`);
         }
@@ -365,6 +367,11 @@ export class ConversationService {
         'utf8',
       );
 
+      if (skillResult.outputFiles?.length) {
+        const media = this.skillOutputFilesToMedia(skillResult.outputFiles, conversation.userId);
+        await this.replaceMessageResourceMappings(conversation.userId, conversation.id, assistantMessageId, media);
+      }
+
       await this.touchConversation(conversation, dto.content);
 
       return {
@@ -421,6 +428,11 @@ export class ConversationService {
         'utf8',
       );
 
+      if (skillResult.outputFiles?.length) {
+        const media = this.skillOutputFilesToMedia(skillResult.outputFiles, conversation.userId);
+        await this.replaceMessageResourceMappings(conversation.userId, conversation.id, assistantMessageId, media);
+      }
+
       await this.touchConversation(conversation, dto.content);
 
       return {
@@ -468,11 +480,14 @@ export class ConversationService {
     );
 
     const replyFiles = this.normalizeReplyFiles(agentResponse.file);
+    const toolGeneratedMedia = agentResponse.generatedFiles?.length
+      ? this.skillOutputFilesToMedia(agentResponse.generatedFiles, conversation.userId)
+      : [];
     await this.replaceMessageResourceMappings(
       conversation.userId,
       conversation.id,
       agentResponse.assistantMessageId,
-      replyFiles,
+      [...replyFiles, ...toolGeneratedMedia],
     );
     await this.touchConversation(conversation, dto.content);
 
@@ -731,7 +746,7 @@ export class ConversationService {
           attachments: media.length ? media : undefined,
         };
       })
-      .filter((message): message is ConversationMessage => Boolean(message));
+      .filter(Boolean) as ConversationMessage[];
   }
 
   private consumeRuntimeEvent(
@@ -1021,6 +1036,33 @@ export class ConversationService {
     }
 
     return mapping;
+  }
+
+  private skillOutputFilesToMedia(
+    outputFiles: Array<{ path: string; kind?: string; title?: string }>,
+    userId?: number,
+  ): MessageMedia[] {
+    const media: MessageMedia[] = [];
+    const uid = userId ?? '';
+    for (const f of outputFiles) {
+      const kind = (f.kind ?? detectOutputType(f.path)) as MessageMedia['kind'];
+      const filename = basename(f.path);
+      const url =
+        kind === 'app'
+          ? `/api/career-agent/generated/${uid}/app/${filename}/`
+          : `/api/career-agent/generated/${uid}/${kind}/${filename}`;
+      media.push({
+        id: `asset-${randomUUID().replace(/-/g, '').slice(0, 16)}`,
+        kind,
+        url,
+        title: f.title ?? filename,
+        storage_path: f.path,
+        storagePath: f.path,
+        created_at: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+      });
+    }
+    return media;
   }
 
   private async replaceMessageResourceMappings(

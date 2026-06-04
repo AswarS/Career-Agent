@@ -240,6 +240,10 @@ export function createQueryEngineForSession(
     initialMessages: options.initialMessages ?? [],
     readFileCache: options.readFileCache ?? new Map() as FileStateCache,
     userSpecifiedModel: context.config.model,
+    // TODO: read thinking config from SessionContext.config.thinkingMode once the
+    // frontend setting is wired up (update-api-settings.dto.ts has the field stub).
+    // When enabling thinking, also remove DISABLE_INTERLEAVED_THINKING from main.ts.
+    // Options: { type: 'disabled' } | { type: 'adaptive' } | { type: 'enabled', budgetTokens: N }
     thinkingConfig: { type: 'disabled' },
     abortController: context.abortController,
   }

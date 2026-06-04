@@ -214,7 +214,7 @@ const helpSkill: BuiltinSkillDefinition = {
       '- `/help` — Show this help message',
       '- `/web-search <query>` — Search the web',
       '- `/code-analysis <code>` — Analyze code quality and security',
-      '- `/image-generation <description>` — Generate images from text',
+      '- 直接描述"生成一张...的图片"或"制作...视频" — AI 会自动调用图片/视频生成工具（需在设置中配置多模态 API）',
       '\nType any other message to chat with the AI assistant.',
     ];
     return { success: true, reply: lines.join('\n') };
@@ -224,7 +224,6 @@ const helpSkill: BuiltinSkillDefinition = {
 const builtinSkills: BuiltinSkillDefinition[] = [
   webSearchSkill,
   codeAnalysisSkill,
-  imageGenerationSkill,
   helpSkill,
 ];
 

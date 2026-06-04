@@ -1,9 +1,11 @@
 import { Injectable, Optional } from '@nestjs/common';
 import {
+  AgentAttachmentInput,
   AgentConversationMetadata,
   AgentCreateConversationInput,
   AgentSendMessageInput,
   AgentSendMessageResult,
+  type GeneratedFile,
   createConversation,
 } from './agent.runtime';
 import {
@@ -13,11 +15,12 @@ import {
 import { createIsolatedState } from '../../../bootstrap/state.js';
 import { createQueryEngineForSession } from '../../../server/queryEngineFactory.js';
 import { QueryEngine } from '../../../QueryEngine.js';
-import { appendFile, mkdir } from 'node:fs/promises';
-import { join } from 'node:path';
+import { appendFile, mkdir, readdir, stat } from 'node:fs/promises';
+import { join, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { SettingsService } from '../settings/settings.service';
+import { setSessionMultimodalConfig, removeSessionMultimodalConfig } from '../../../utils/multimodalConfig.js';
 
 // ---------------------------------------------------------------------------
 // JSONL helpers
@@ -137,7 +140,7 @@ export class AgentService {
     const convCfg = this.conversationConfigs.get(conversationId);
     let userSettings: ConversationConfig = {};
     if (this.settingsService) {
-      const saved = await this.settingsService.getSettings(Number(userId));
+      const saved = await this.settingsService.getApiSettings(Number(userId));
       if (saved) {
         userSettings = { apiKey: saved.apiKey ?? undefined, baseUrl: saved.baseUrl ?? undefined, model: saved.model ?? undefined };
       }
@@ -147,6 +150,38 @@ export class AgentService {
       baseUrl: input.baseUrl ?? convCfg?.baseUrl ?? userSettings.baseUrl,
       model: input.model ?? convCfg?.model ?? userSettings.model,
     };
+
+    if (!mergedConfig.apiKey?.trim()) {
+      const errorReply = 'API key is required. Please save an Anthropic API key in Settings before sending messages.';
+      const replyUuid = randomUUID();
+      await appendJsonlEvent(userId, conversationId, {
+        parentUuid: userEventUuid,
+        isSidechain: false,
+        type: 'assistant',
+        message: {
+          id: assistantMessageId,
+          type: 'message',
+          role: 'assistant',
+          model: mergedConfig.model ?? 'unknown',
+          content: [{ type: 'text', text: errorReply }],
+          stop_reason: 'end_turn',
+          stop_sequence: null,
+          usage: { input_tokens: 0, output_tokens: 0 },
+        },
+        uuid: replyUuid,
+        timestamp: new Date(now.getTime() + 100).toISOString(),
+        sessionId: conversationId,
+      });
+      return {
+        accepted: false,
+        status: 'failed',
+        conversationId,
+        userMessageId,
+        assistantMessageId,
+        reply: errorReply,
+        raw: { error: 'API_KEY_REQUIRED' },
+      };
+    }
 
     // 3. Run inference via QueryEngine
     const qeResult = await this.runQueryEngineInference(
@@ -220,6 +255,7 @@ export class AgentService {
         userMessageId,
         assistantMessageId,
         reply: qeResult.reply,
+        generatedFiles: qeResult.generatedFiles,
         raw: {
           model: qeResult.model,
           usage: qeResult.usage,
@@ -307,6 +343,7 @@ export class AgentService {
         model?: string;
         usage?: Record<string, unknown>;
         durationMs?: number;
+        generatedFiles?: GeneratedFile[];
       }
     | { success: false }
   > {
@@ -314,8 +351,29 @@ export class AgentService {
 
     try {
       const userWorkspaceDir = join(userDataRootDir, String(userId));
-      const userWorkspaceRelativeDir = `./src/Network/user/${String(userId)}`;
       await mkdir(userWorkspaceDir, { recursive: true });
+
+      // Inject per-user multimodal config BEFORE engine creation so isEnabled() sees it.
+      // Also refreshed on every request so updated DB settings take effect immediately.
+      if (this.settingsService) {
+        const saved = await this.settingsService.getApiSettings(Number(userId));
+        if (saved) {
+          setSessionMultimodalConfig(conversationId, {
+            image_url: saved.imageUrl,
+            image_key: saved.imageKey,
+            image_default_model: saved.imageDefaultModel,
+            image_models: saved.imageModels
+              ? saved.imageModels.split(',').map((s) => s.trim()).filter(Boolean)
+              : undefined,
+            video_url: saved.videoUrl,
+            video_key: saved.videoKey,
+            video_default_model: saved.videoDefaultModel,
+            video_models: saved.videoModels
+              ? saved.videoModels.split(',').map((s) => s.trim()).filter(Boolean)
+              : undefined,
+          });
+        }
+      }
 
       // Get or create per-conversation QueryEngine + SessionContext
       let queryEngine = this.queryEngines.get(conversationId);
@@ -324,7 +382,7 @@ export class AgentService {
           conversationId,
           userId,
           config,
-          userWorkspaceRelativeDir,
+          userWorkspaceDir,  // absolute path — relative paths double up after the first setCwd call
         );
         this.sessionContexts.set(conversationId, ctx);
         queryEngine = createQueryEngineForSession(ctx);
@@ -406,6 +464,7 @@ export class AgentService {
           } else {
             process.env.ANTHROPIC_MODEL = prevModel;
           }
+          removeSessionMultimodalConfig(conversationId);
         }
       })();
 
@@ -414,17 +473,66 @@ export class AgentService {
         return { success: false };
       }
 
+      const generatedFiles = await this.scanGeneratedFiles(
+        join(userDataRootDir, String(userId)),
+        startTime,
+      );
+
       return {
         success: true,
         reply: result.reply,
         thinking: result.thinking || undefined,
         model: result.model,
         durationMs: Date.now() - startTime,
+        generatedFiles: generatedFiles.length ? generatedFiles : undefined,
       };
     } catch (err: any) {
       console.error('[AgentService] QueryEngine inference FAILED:', err?.message ?? err);
       return { success: false };
     }
+  }
+
+  private async scanGeneratedFiles(
+    workspaceDir: string,
+    sinceMs: number,
+  ): Promise<GeneratedFile[]> {
+    const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp']);
+    const VIDEO_EXTS = new Set(['.mp4', '.webm', '.mov', '.avi', '.mkv']);
+    const dirs: Array<{ subdir: string; kind: GeneratedFile['kind'] }> = [
+      { subdir: 'image_generated', kind: 'image' },
+      { subdir: 'video_generated', kind: 'video' },
+      { subdir: 'html_generated', kind: 'html' },
+    ];
+    const results: GeneratedFile[] = [];
+
+    for (const { subdir, kind } of dirs) {
+      const dir = join(workspaceDir, subdir);
+      let entries: string[];
+      try {
+        entries = await readdir(dir);
+      } catch {
+        continue;
+      }
+
+      for (const name of entries) {
+        if (name.endsWith('.log')) continue;
+        const filePath = join(dir, name);
+        try {
+          const s = await stat(filePath);
+          if (s.mtimeMs >= sinceMs) {
+            const ext = extname(name).toLowerCase();
+            let resolvedKind = kind;
+            if (kind === 'image' && !IMAGE_EXTS.has(ext)) continue;
+            if (kind === 'video' && !VIDEO_EXTS.has(ext)) continue;
+            results.push({ path: filePath, kind: resolvedKind });
+          }
+        } catch {
+          continue;
+        }
+      }
+    }
+
+    return results;
   }
 
   private buildSessionContext(

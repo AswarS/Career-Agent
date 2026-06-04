@@ -2134,6 +2134,9 @@ async function* queryModel(
                     break
                   }
                   if (contentBlock.type !== 'thinking') {
+                    // Third-party providers (non-Anthropic proxies) may send
+                    // signature_delta for non-thinking blocks. Skip gracefully
+                    // instead of crashing the whole stream.
                     logEvent('tengu_streaming_error', {
                       error_type:
                         'content_block_type_mismatch_thinking_signature' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -2142,12 +2145,15 @@ async function* queryModel(
                       actual_type:
                         contentBlock.type as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
                     })
-                    throw new Error('Content block is not a thinking block')
+                    break
                   }
                   contentBlock.signature = delta.signature
                   break
                 case 'thinking_delta':
                   if (contentBlock.type !== 'thinking') {
+                    // Third-party providers (non-Anthropic proxies) may send
+                    // thinking_delta for non-thinking blocks. Skip gracefully
+                    // instead of crashing the whole stream.
                     logEvent('tengu_streaming_error', {
                       error_type:
                         'content_block_type_mismatch_thinking_delta' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -2156,7 +2162,7 @@ async function* queryModel(
                       actual_type:
                         contentBlock.type as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
                     })
-                    throw new Error('Content block is not a thinking block')
+                    break
                   }
                   contentBlock.thinking += delta.thinking
                   break

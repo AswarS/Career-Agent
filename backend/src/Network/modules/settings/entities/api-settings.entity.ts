@@ -17,6 +17,32 @@ export class ApiSettingsEntity {
   @Column({ type: 'text', nullable: true })
   model?: string;
 
+  // Multimodal: image generation
+  @Column({ type: 'text', nullable: true })
+  imageUrl?: string;
+
+  @Column({ type: 'text', nullable: true })
+  imageKey?: string;
+
+  @Column({ type: 'text', nullable: true })
+  imageDefaultModel?: string;
+
+  @Column({ type: 'text', nullable: true })
+  imageModels?: string; // JSON array string
+
+  // Multimodal: video generation
+  @Column({ type: 'text', nullable: true })
+  videoUrl?: string;
+
+  @Column({ type: 'text', nullable: true })
+  videoKey?: string;
+
+  @Column({ type: 'text', nullable: true })
+  videoDefaultModel?: string;
+
+  @Column({ type: 'text', nullable: true })
+  videoModels?: string; // JSON array string
+
   @CreateDateColumn()
   createdAt!: Date;
 

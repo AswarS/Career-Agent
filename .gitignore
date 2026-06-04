@@ -6,3 +6,4 @@ backend/src/Network/data/
 backend/src/Network/files/
 backend/src/Network/user/
 *.sqlite
+./.claude/

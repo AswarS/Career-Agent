@@ -186,7 +186,7 @@ export class SkillService implements OnModuleInit {
     const context: SkillExecutionContext = { userId, conversationId };
 
     if (this.settingsService && userId) {
-      const saved = await this.settingsService.getSettings(userId);
+      const saved = await this.settingsService.getApiSettings(userId);
       if (saved) {
         context.llmConfig = {
           apiKey: saved.apiKey ?? undefined,
@@ -206,7 +206,7 @@ export class SkillService implements OnModuleInit {
   ): Promise<SkillHandlerResult> {
     const mergedContext: SkillExecutionContext = { ...(context ?? {}) };
     if (!mergedContext.llmConfig && mergedContext.userId && this.settingsService) {
-      const saved = await this.settingsService.getSettings(mergedContext.userId);
+      const saved = await this.settingsService.getApiSettings(mergedContext.userId!);
       if (saved) {
         mergedContext.llmConfig = {
           apiKey: saved.apiKey ?? undefined,
@@ -391,7 +391,7 @@ export class SkillService implements OnModuleInit {
 
     let llmConfig: SkillExecutionContext['llmConfig'] | undefined;
     if (this.settingsService) {
-      const saved = await this.settingsService.getSettings(userId);
+      const saved = await this.settingsService.getApiSettings(userId);
       if (saved) {
         llmConfig = {
           apiKey: saved.apiKey ?? undefined,
