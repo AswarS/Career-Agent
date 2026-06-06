@@ -9,6 +9,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { appendFile, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { basename, extname, join } from 'node:path';
+import { TextDecoder } from 'node:util';
 import { detectOutputType } from '../../utils/detectOutputType.js';
 import { fileURLToPath } from 'node:url';
 import { Repository } from 'typeorm';
@@ -18,7 +19,7 @@ import { CreateConversationDto } from './dto/create-conversation.dto';
 import { SendMultimodalMessageDto } from './dto/send-multimodal-message.dto';
 import { ConversationEntity } from './entities/conversation.entity';
 import { ResourceEntity } from '../resource/entities/resource.entity';
-import {integer} from "vscode-languageserver-types";
+import { execFileNoThrow } from '../../../utils/execFileNoThrow.js';
 
 declare global {
   namespace Express {
@@ -117,6 +118,85 @@ const userDataRootDir = join(networkRootDir, 'user');
 const conversationFilesRootDir = join(networkRootDir, 'files');
 const maxUploadBytes = 20 * 1024 * 1024;
 const manifestFileName = '_manifest.json';
+const maxInjectedTextChars = 20_000;
+
+type SupportedUploadKind = 'image' | 'video' | 'text';
+
+interface UploadPolicy {
+  kind: SupportedUploadKind;
+  extension: string;
+  allowedMimeTypes: readonly string[];
+  maxBytes: number;
+}
+
+interface PreparedAttachmentPayload {
+  content: string;
+  attachmentsForAgent: Array<{
+    assetId: string;
+    path: string;
+    title?: string;
+    mimeType?: string;
+  }>;
+}
+
+const uploadPolicies: Record<string, UploadPolicy> = {
+  '.png': {
+    kind: 'image',
+    extension: '.png',
+    allowedMimeTypes: ['image/png'],
+    maxBytes: maxUploadBytes,
+  },
+  '.jpg': {
+    kind: 'image',
+    extension: '.jpg',
+    allowedMimeTypes: ['image/jpeg'],
+    maxBytes: maxUploadBytes,
+  },
+  '.jpeg': {
+    kind: 'image',
+    extension: '.jpeg',
+    allowedMimeTypes: ['image/jpeg'],
+    maxBytes: maxUploadBytes,
+  },
+  '.webp': {
+    kind: 'image',
+    extension: '.webp',
+    allowedMimeTypes: ['image/webp'],
+    maxBytes: maxUploadBytes,
+  },
+  '.gif': {
+    kind: 'image',
+    extension: '.gif',
+    allowedMimeTypes: ['image/gif'],
+    maxBytes: maxUploadBytes,
+  },
+  '.mp4': {
+    kind: 'video',
+    extension: '.mp4',
+    allowedMimeTypes: ['video/mp4'],
+    maxBytes: maxUploadBytes,
+  },
+  '.txt': {
+    kind: 'text',
+    extension: '.txt',
+    allowedMimeTypes: ['text/plain'],
+    maxBytes: maxUploadBytes,
+  },
+  '.md': {
+    kind: 'text',
+    extension: '.md',
+    allowedMimeTypes: ['text/markdown', 'text/plain'],
+    maxBytes: maxUploadBytes,
+  },
+  '.pdf': {
+    kind: 'text',
+    extension: '.pdf',
+    allowedMimeTypes: ['application/pdf'],
+    maxBytes: maxUploadBytes,
+  },
+};
+
+const genericUploadMimeTypes = new Set(['application/octet-stream', '']);
 
 @Injectable()
 export class ConversationService {
@@ -185,21 +265,21 @@ export class ConversationService {
     if (file.size > maxUploadBytes) {
       throw new BadRequestException('file is too large');
     }
-    file.originalname = Buffer.from(file.originalname, 'latin1').toString('utf8')
+    file.originalname = Buffer.from(file.originalname, 'latin1').toString('utf8');
     const originalName = file.originalname;
-    const mimeType = file.mimetype || 'application/octet-stream';
-    const extension = extname(originalName);
+    const mimeType = (file.mimetype || 'application/octet-stream').toLowerCase();
+    const validation = this.validateUpload(file, originalName, mimeType);
+    const extension = validation.policy.extension;
     const storedFileName = `${Date.now()}-${randomUUID()}${extension}`;
     const conversationDir = this.getConversationFilesDirectory(
       conversation.userId,
       conversation.id,
     );
     const absolutePath = join(conversationDir, storedFileName);
-    const relativePath = this.toLocalFilePath(conversation.id, storedFileName,conversation.userId);
-    const url = this.toPublicFilePath(conversation.id,storedFileName)
+    const relativePath = this.toLocalFilePath(conversation.id, storedFileName, conversation.userId);
+    const url = this.toPublicFilePath(conversation.id, storedFileName);
     const createdAt = new Date().toISOString();
 
-    this.resolveAssetKind(mimeType);
     await mkdir(conversationDir, { recursive: true });
     await writeFile(absolutePath, file.buffer);
 
@@ -208,7 +288,7 @@ export class ConversationService {
     const uploadedFile: UploadedConversationFile = {
       asset_id: assetId,
       assetId,
-      kind: this.resolveAssetKind(mimeType),
+      kind: this.resolveAssetKind(validation.policy.kind),
       url: url,
       title: file.originalname,
       mime_type: mimeType,
@@ -270,6 +350,56 @@ export class ConversationService {
     let attachments = await this.resolveAttachments(conversation.id, attachmentIds);
     if (attachments.length === 0) {
       attachments = await this.resolveImplicitAttachments(conversation, dto.content);
+    }
+
+    const createSkillCommand = this.parseCreateSkillCommand(dto.content);
+    if (createSkillCommand) {
+      const created = await this.skillService.createCustomSkill(
+        conversation.userId,
+        createSkillCommand.name,
+        createSkillCommand.description,
+        createSkillCommand.content,
+        createSkillCommand.category,
+        createSkillCommand.arguments,
+      );
+
+      const reply =
+        `Skill \`/${created.name}\` created successfully.\n\n` +
+        `You can now invoke it with \`/${created.name}\`.\n` +
+        `Stored at: ${created.filePath}`;
+
+      const userMessageId = `msg_user_skill_${Date.now()}`;
+      const assistantMessageId = `msg_assistant_skill_${Date.now()}`;
+      const now = new Date();
+      const sessionFilePath = await this.findOrCreateRuntimeSessionFile(
+        conversation.id,
+        conversation.userId,
+      );
+
+      await appendFile(
+        sessionFilePath,
+        `${JSON.stringify({ type: 'user', message: { id: userMessageId, role: 'user', content: dto.content }, uuid: randomUUID(), timestamp: now.toISOString(), sessionId: conversation.id })}\n`,
+        'utf8',
+      );
+      await appendFile(
+        sessionFilePath,
+        `${JSON.stringify({ type: 'assistant', message: { id: assistantMessageId, role: 'assistant', content: [{ type: 'text', text: reply }] }, uuid: randomUUID(), timestamp: new Date(now.getTime() + 100).toISOString(), sessionId: conversation.id })}\n`,
+        'utf8',
+      );
+      await this.touchConversation(conversation, dto.content);
+
+      return {
+        accepted: true,
+        status: 'done',
+        conversation_id: conversation.id,
+        conversationId: conversation.id,
+        message_id: userMessageId,
+        messageId: userMessageId,
+        assistant_message_id: assistantMessageId,
+        assistantMessageId: assistantMessageId,
+        reply,
+        raw: { source: 'skill:create', skillName: created.name, filePath: created.filePath },
+      };
     }
 
     const skillInvocation = this.skillService.parseSkillInvocation(dto.content);
@@ -454,17 +584,19 @@ export class ConversationService {
       };
     }
 
+    const preparedAttachments = await this.prepareAttachmentsForModel(
+      conversation,
+      dto.content,
+      attachments,
+    );
+
     const agentResponse = await this.agentService.sendMessage({
       conversationId: conversation.id,
       userId: String(conversation.userId),
-      content: dto.content,
+      content: preparedAttachments.content,
+      userVisibleContent: dto.content,
       kind: dto.kind,
-      attachments: attachments.map((attachment) => ({
-        assetId: attachment.id,
-        path: attachment.storage_path ?? attachment.storagePath ?? attachment.url,
-        title: attachment.title,
-        mimeType: attachment.mime_type ?? attachment.mimeType,
-      })),
+      attachments: preparedAttachments.attachmentsForAgent,
       context: dto.context,
       clientRequestId: dto.client_request_id ?? dto.clientRequestId,
       apiKey: undefined,
@@ -1097,40 +1229,415 @@ export class ConversationService {
     await this.messageResourceRepo.save(rows);
   }
 
+  private validateUpload(
+    file: Express.Multer.File,
+    originalName: string,
+    mimeType: string,
+  ) {
+    const extension = extname(originalName).toLowerCase();
+    const policy = uploadPolicies[extension];
+
+    if (!policy) {
+      throw new UnsupportedMediaTypeException(
+        'Unsupported file type. Allowed: image, mp4, txt, md, pdf.',
+      );
+    }
+
+    if (file.size > policy.maxBytes) {
+      throw new BadRequestException(
+        `File exceeds size limit for ${extension} uploads (${policy.maxBytes} bytes).`,
+      );
+    }
+
+    if (
+      mimeType &&
+      !genericUploadMimeTypes.has(mimeType) &&
+      !policy.allowedMimeTypes.includes(mimeType)
+    ) {
+      throw new UnsupportedMediaTypeException(
+        `Mime type ${mimeType} does not match file extension ${extension}.`,
+      );
+    }
+
+    return { policy };
+  }
+
+  private async prepareAttachmentsForModel(
+    conversation: ConversationEntity,
+    userContent: string,
+    attachments: MessageMedia[],
+  ): Promise<PreparedAttachmentPayload> {
+    if (!attachments.length) {
+      return { content: userContent, attachmentsForAgent: [] };
+    }
+
+    const textBlocks: string[] = [];
+    const attachmentsForAgent: PreparedAttachmentPayload['attachmentsForAgent'] = [];
+
+    for (const attachment of attachments) {
+      const descriptor = await this.describeAttachmentForModel(conversation, attachment);
+      if (descriptor.injectedText) {
+        textBlocks.push(descriptor.injectedText);
+      }
+      if (descriptor.forwardToAgent) {
+        attachmentsForAgent.push({
+          assetId: attachment.id,
+          path: attachment.storage_path ?? attachment.storagePath ?? attachment.url,
+          title: attachment.title,
+          mimeType: attachment.mime_type ?? attachment.mimeType,
+        });
+      }
+    }
+
+    if (!textBlocks.length) {
+      return { content: userContent, attachmentsForAgent };
+    }
+
+    const attachmentContext = [
+      '<attachment_context>',
+      ...textBlocks,
+      '</attachment_context>',
+    ].join('\n');
+
+    return {
+      content: [userContent, '', attachmentContext].join('\n').trim(),
+      attachmentsForAgent,
+    };
+  }
+
+  private async describeAttachmentForModel(
+    conversation: ConversationEntity,
+    attachment: MessageMedia,
+  ) {
+    const filePath = this.resolveAttachmentDiskPath(
+      conversation.userId,
+      conversation.id,
+      attachment,
+    );
+    const fileName = attachment.title ?? basename(filePath);
+    const mimeType = (attachment.mime_type ?? attachment.mimeType ?? '').toLowerCase();
+    const extension = extname(fileName).toLowerCase();
+    const policy = uploadPolicies[extension];
+    const fileStats = await stat(filePath);
+
+    if (!policy) {
+      return {
+        injectedText: this.createAttachmentFallbackBlock(
+          fileName,
+          mimeType,
+          fileStats.size,
+        ),
+        forwardToAgent: true,
+      };
+    }
+
+    if (policy.kind === 'image') {
+      return {
+        injectedText: '',
+        forwardToAgent: true,
+      };
+    }
+
+    if (policy.kind === 'video') {
+      return {
+        injectedText: [
+          `[Video attachment]`,
+          `name: ${fileName}`,
+          `mime: ${mimeType || 'unknown'}`,
+          `size_bytes: ${fileStats.size}`,
+          `The uploaded video is attached. Use this metadata and request additional details if direct video understanding is unavailable.`,
+        ].join('\n'),
+        forwardToAgent: true,
+      };
+    }
+
+    if (extension === '.pdf') {
+      return {
+        injectedText: '',
+        forwardToAgent: true,
+      };
+    }
+
+    const extractedText = await this.extractTextAttachmentContent(
+      filePath,
+      extension,
+      fileName,
+    );
+    return {
+      injectedText: [
+        `[Text attachment]`,
+        `name: ${fileName}`,
+        `mime: ${mimeType || 'unknown'}`,
+        `size_bytes: ${fileStats.size}`,
+        extractedText,
+      ].join('\n'),
+      forwardToAgent: false,
+    };
+  }
+
+  private async extractTextAttachmentContent(
+    filePath: string,
+    extension: string,
+    fileName: string,
+  ): Promise<string> {
+    if (extension === '.txt' || extension === '.md') {
+      const content = await this.readTextFileWithEncodingFallback(filePath);
+      return this.wrapExtractedText(content);
+    }
+
+    if (extension === '.docx') {
+      const content = await this.extractDocxText(filePath);
+      if (content.trim()) {
+        return this.wrapExtractedText(content);
+      }
+    }
+
+    if (extension === '.doc') {
+      const docSnippet = await this.extractBinaryTextSnippet(filePath, 10_000);
+      if (docSnippet.trim()) {
+        return this.wrapExtractedText(docSnippet);
+      }
+      return this.wrapExtractedText(
+        `[The legacy .doc file ${fileName} could not be fully decoded. Filename and file metadata were preserved for the model.]`,
+      );
+    }
+
+    const fallback = await this.extractBinaryTextSnippet(filePath, 8_000);
+    return this.wrapExtractedText(
+      fallback || `[No readable text could be extracted from ${fileName}.]`,
+    );
+  }
+
+  private async extractDocxText(filePath: string): Promise<string> {
+    const shell = process.platform === 'win32' ? 'powershell' : 'pwsh';
+    const escapedPath = filePath.replace(/'/g, "''");
+    const script = [
+      `Add-Type -AssemblyName System.IO.Compression.FileSystem`,
+      `$zip = [System.IO.Compression.ZipFile]::OpenRead('${escapedPath}')`,
+      `try {`,
+      `  $entry = $zip.GetEntry('word/document.xml')`,
+      `  if ($null -eq $entry) { exit 0 }`,
+      `  $reader = New-Object System.IO.StreamReader($entry.Open())`,
+      `  try {`,
+      `    $xml = $reader.ReadToEnd()`,
+      `    [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($xml))`,
+      `  } finally { $reader.Dispose() }`,
+      `} finally { $zip.Dispose() }`,
+    ].join('; ');
+
+    const result = await execFileNoThrow(shell, ['-NoProfile', '-NonInteractive', '-Command', script], {
+      timeout: 10_000,
+      useCwd: false,
+    });
+
+    if (result.code !== 0 || !result.stdout.trim()) {
+      return this.extractBinaryTextSnippet(filePath, 10_000);
+    }
+
+    let xmlContent = '';
+    try {
+      xmlContent = Buffer.from(result.stdout.trim(), 'base64').toString('utf8');
+    } catch {
+      xmlContent = result.stdout;
+    }
+
+    return this.decodeXmlEntities(
+      xmlContent
+        .replace(/<w:p[^>]*>/g, '\n')
+        .replace(/<w:tab\/>/g, '\t')
+        .replace(/<w:br\/>/g, '\n')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+\n/g, '\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim(),
+    );
+  }
+
+  private async extractBinaryTextSnippet(filePath: string, maxChars: number) {
+    const buffer = await readFile(filePath);
+    const asciiMatches = buffer
+      .toString('latin1')
+      .match(/[ -~\r\n\t]{4,}/g)
+      ?.map((chunk) => chunk.trim())
+      .filter(Boolean) ?? [];
+
+    const utf16Matches = buffer
+      .toString('utf16le')
+      .match(/[^\u0000-\u001f]{4,}/g)
+      ?.map((chunk) => chunk.trim())
+      .filter(Boolean) ?? [];
+
+    const unique = Array.from(new Set([...asciiMatches, ...utf16Matches]));
+    const joined = unique.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+    return this.truncateExtractedText(joined, maxChars);
+  }
+
+  private async readTextFileWithEncodingFallback(filePath: string) {
+    const buffer = await readFile(filePath);
+
+    if (buffer.length >= 2) {
+      if (buffer[0] === 0xff && buffer[1] === 0xfe) {
+        return buffer.toString('utf16le');
+      }
+      if (buffer[0] === 0xfe && buffer[1] === 0xff) {
+        const swapped = Buffer.allocUnsafe(buffer.length - 2);
+        for (let i = 2; i + 1 < buffer.length; i += 2) {
+          swapped[i - 2] = buffer[i + 1]!;
+          swapped[i - 1] = buffer[i]!;
+        }
+        return swapped.toString('utf16le');
+      }
+    }
+
+    const decoders = [
+      new TextDecoder('utf-8', { fatal: true }),
+      new TextDecoder('gb18030', { fatal: true }),
+      new TextDecoder('utf-16le', { fatal: true }),
+    ];
+
+    for (const decoder of decoders) {
+      try {
+        return decoder.decode(buffer);
+      } catch {}
+    }
+
+    return buffer.toString('utf8');
+  }
+
+  private wrapExtractedText(content: string) {
+    return ['<parsed_content>', this.truncateExtractedText(content, maxInjectedTextChars), '</parsed_content>'].join(
+      '\n',
+    );
+  }
+
+  private truncateExtractedText(content: string, limit: number) {
+    const normalized = content.replace(/\u0000/g, '').trim();
+    if (normalized.length <= limit) {
+      return normalized;
+    }
+    return `${normalized.slice(0, limit)}\n[truncated]`;
+  }
+
+  private decodeXmlEntities(content: string) {
+    return content
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'");
+  }
+
+  private createAttachmentFallbackBlock(
+    fileName: string,
+    mimeType: string,
+    sizeBytes: number,
+  ) {
+    return [
+      `[Attachment]`,
+      `name: ${fileName}`,
+      `mime: ${mimeType || 'unknown'}`,
+      `size_bytes: ${sizeBytes}`,
+      `The file was uploaded, but no specialized parser is registered for this type.`,
+    ].join('\n');
+  }
+
+  private resolveAttachmentDiskPath(
+    userId: number,
+    conversationId: string,
+    attachment: MessageMedia,
+  ) {
+    const storedPath = attachment.storage_path ?? attachment.storagePath ?? attachment.url;
+    if (storedPath.startsWith('/api/career-agent/threads/')) {
+      const fileName = storedPath.split('/').pop() ?? '';
+      return join(conversationFilesRootDir, String(userId), conversationId, fileName);
+    }
+
+    const normalized = storedPath.replaceAll('\\', '/');
+    const marker = '/src/Network/';
+    const markerIndex = normalized.indexOf(marker);
+    if (markerIndex >= 0) {
+      const relative = normalized.slice(markerIndex + marker.length);
+      return join(networkRootDir, relative);
+    }
+
+    if (normalized.startsWith('./src/Network/')) {
+      return join(networkRootDir, normalized.replace('./src/Network/', ''));
+    }
+
+    return normalized;
+  }
+
+  private parseCreateSkillCommand(content: string) {
+    const trimmed = content.trim();
+    if (!trimmed.toLowerCase().startsWith('/create-skill')) {
+      return null;
+    }
+
+    const args = trimmed.slice('/create-skill'.length).trim();
+    if (!args) {
+      throw new BadRequestException(
+        'Usage: /create-skill {"name":"...","description":"...","content":"...","category":"utility","arguments":"arg1 arg2"}',
+      );
+    }
+
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(args) as Record<string, unknown>;
+    } catch {
+      throw new BadRequestException(
+        'Invalid /create-skill payload. Expected JSON like {"name":"...","description":"...","content":"..."}',
+      );
+    }
+
+    const name = String(parsed.name ?? '').trim();
+    const description = String(parsed.description ?? '').trim();
+    const skillContent = String(parsed.content ?? '').trim();
+    const category = String(parsed.category ?? 'utility').trim() || 'utility';
+    const argumentNames =
+      parsed.arguments === undefined || parsed.arguments === null
+        ? undefined
+        : String(parsed.arguments).trim();
+
+    if (!name || !description || !skillContent) {
+      throw new BadRequestException(
+        'Invalid /create-skill payload. Fields "name", "description", and "content" are required.',
+      );
+    }
+
+    return {
+      name,
+      description,
+      content: skillContent,
+      category,
+      arguments: argumentNames,
+    };
+  }
+
   private sanitizeFileName(fileName: string) {
     const cleaned = fileName.trim().replace(/[^a-zA-Z0-9._-]/g, '_');
     return cleaned || `upload-${Date.now()}.bin`;
   }
 
-  private resolveAssetKind(mimeType: string): 'image' | 'video' | 'file' {
-    if (mimeType.startsWith('image/')) {
+  private resolveAssetKind(kind: SupportedUploadKind): 'image' | 'video' | 'file' {
+    if (kind === 'image') {
       return 'image';
     }
 
-    if (mimeType.startsWith('video/')) {
+    if (kind === 'video') {
       return 'video';
     }
 
-    if (
-      mimeType.startsWith('text/') ||
-      mimeType === 'application/pdf' ||
-      mimeType.includes('json') ||
-      mimeType.includes('word') ||
-      mimeType.includes('sheet') ||
-      mimeType.includes('presentation') ||
-      mimeType.includes('zip') ||
-      mimeType === 'application/octet-stream'
-    ) {
+    if (kind === 'text') {
       return 'file';
     }
 
-    throw new UnsupportedMediaTypeException(`Unsupported mime type: ${mimeType}`);
+    throw new UnsupportedMediaTypeException(`Unsupported upload kind: ${kind}`);
   }
 
   private toPublicFilePath(conversationId: string, storedFileName: string) {
     return `/api/career-agent/threads/${conversationId}/files/${storedFileName}`;
   }
-  private toLocalFilePath(conversationId: string, storedFileName: string,userId: integer) {
+  private toLocalFilePath(conversationId: string, storedFileName: string, userId: number) {
     return `./src/Network/files/${userId}/${conversationId}/${storedFileName}`;
   }
   private isEnoent(error: unknown) {

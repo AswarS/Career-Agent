@@ -61,6 +61,32 @@ export async function listUserSkills(userId: number): Promise<ParsedSkillFile[]>
   return results;
 }
 
+export async function listAllUserSkills(): Promise<
+  Array<{ userId: number; skill: ParsedSkillFile }>
+> {
+  let entries;
+  try {
+    entries = await readdir(userDataRootDir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+
+  const results: Array<{ userId: number; skill: ParsedSkillFile }> = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+
+    const userId = Number(entry.name);
+    if (!Number.isInteger(userId)) continue;
+
+    const skills = await listUserSkills(userId);
+    for (const skill of skills) {
+      results.push({ userId, skill });
+    }
+  }
+
+  return results;
+}
+
 export async function readSkillFile(
   userId: number,
   name: string,

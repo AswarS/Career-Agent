@@ -32,6 +32,10 @@ export class SettingsService {
             username: user.username,
             display_name: user.displayName,
             displayName: user.displayName,
+            created_at: user.createdAt?.toISOString() ?? null,
+            createdAt: user.createdAt?.toISOString() ?? null,
+            updated_at: user.updatedAt?.toISOString() ?? null,
+            updatedAt: user.updatedAt?.toISOString() ?? null,
           }
         : null,
       api_settings: apiSettings,
@@ -124,6 +128,10 @@ export class SettingsService {
         username: user.username,
         display_name: user.displayName,
         displayName: user.displayName,
+        created_at: user.createdAt?.toISOString() ?? null,
+        createdAt: user.createdAt?.toISOString() ?? null,
+        updated_at: user.updatedAt?.toISOString() ?? null,
+        updatedAt: user.updatedAt?.toISOString() ?? null,
       },
     };
   }

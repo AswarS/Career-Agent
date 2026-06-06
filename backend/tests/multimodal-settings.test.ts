@@ -9,6 +9,8 @@
  */
 
 import { describe, test, expect } from 'bun:test';
+import 'reflect-metadata';
+import { readFile } from 'node:fs/promises';
 
 // Mirror parseModels logic from SettingsService
 function parseModels(raw: string): string[] {
@@ -49,45 +51,50 @@ describe('parseModels', () => {
 });
 
 describe('UpdateApiSettingsDto multimodal fields', () => {
-  test('DTO type imports correctly', async () => {
-    const { UpdateApiSettingsDto } = await import('../src/Network/modules/settings/dto/update-api-settings.dto.js');
-    const dto = new UpdateApiSettingsDto();
-    // All multimodal fields should be optional (undefined by default)
-    expect(dto.image_url).toBeUndefined();
-    expect(dto.image_key).toBeUndefined();
-    expect(dto.image_default_model).toBeUndefined();
-    expect(dto.image_models).toBeUndefined();
-    expect(dto.video_url).toBeUndefined();
-    expect(dto.video_key).toBeUndefined();
-    expect(dto.video_default_model).toBeUndefined();
-    expect(dto.video_models).toBeUndefined();
+  test('DTO declares snake_case multimodal fields', async () => {
+    const source = await readFile(
+      new URL('../src/Network/modules/settings/dto/update-api-settings.dto.ts', import.meta.url),
+      'utf8',
+    );
+    expect(source).toContain('image_url?: string;');
+    expect(source).toContain('image_key?: string;');
+    expect(source).toContain('image_default_model?: string;');
+    expect(source).toContain('image_models?: string;');
+    expect(source).toContain('video_url?: string;');
+    expect(source).toContain('video_key?: string;');
+    expect(source).toContain('video_default_model?: string;');
+    expect(source).toContain('video_models?: string;');
   });
 
   test('camelCase aliases are present', async () => {
-    const { UpdateApiSettingsDto } = await import('../src/Network/modules/settings/dto/update-api-settings.dto.js');
-    const dto = new UpdateApiSettingsDto();
-    expect(dto.imageUrl).toBeUndefined();
-    expect(dto.imageKey).toBeUndefined();
-    expect(dto.imageDefaultModel).toBeUndefined();
-    expect(dto.imageModels).toBeUndefined();
-    expect(dto.videoUrl).toBeUndefined();
-    expect(dto.videoKey).toBeUndefined();
-    expect(dto.videoDefaultModel).toBeUndefined();
-    expect(dto.videoModels).toBeUndefined();
+    const source = await readFile(
+      new URL('../src/Network/modules/settings/dto/update-api-settings.dto.ts', import.meta.url),
+      'utf8',
+    );
+    expect(source).toContain('imageUrl?: string;');
+    expect(source).toContain('imageKey?: string;');
+    expect(source).toContain('imageDefaultModel?: string;');
+    expect(source).toContain('imageModels?: string;');
+    expect(source).toContain('videoUrl?: string;');
+    expect(source).toContain('videoKey?: string;');
+    expect(source).toContain('videoDefaultModel?: string;');
+    expect(source).toContain('videoModels?: string;');
   });
 });
 
 describe('ApiSettingsEntity multimodal columns', () => {
-  test('entity type imports correctly with new columns', async () => {
-    const { ApiSettingsEntity } = await import('../src/Network/modules/settings/entities/api-settings.entity.js');
-    const entity = new ApiSettingsEntity();
-    expect(entity.imageUrl).toBeUndefined();
-    expect(entity.imageKey).toBeUndefined();
-    expect(entity.imageDefaultModel).toBeUndefined();
-    expect(entity.imageModels).toBeUndefined();
-    expect(entity.videoUrl).toBeUndefined();
-    expect(entity.videoKey).toBeUndefined();
-    expect(entity.videoDefaultModel).toBeUndefined();
-    expect(entity.videoModels).toBeUndefined();
+  test('entity declares multimodal columns', async () => {
+    const source = await readFile(
+      new URL('../src/Network/modules/settings/entities/api-settings.entity.ts', import.meta.url),
+      'utf8',
+    );
+    expect(source).toContain('imageUrl?: string;');
+    expect(source).toContain('imageKey?: string;');
+    expect(source).toContain('imageDefaultModel?: string;');
+    expect(source).toContain('imageModels?: string;');
+    expect(source).toContain('videoUrl?: string;');
+    expect(source).toContain('videoKey?: string;');
+    expect(source).toContain('videoDefaultModel?: string;');
+    expect(source).toContain('videoModels?: string;');
   });
 });

@@ -15,6 +15,7 @@ import { SettingsService } from '../settings/settings.service';
 import { AgentService } from '../agent/agent.service';
 import {
   listUserSkills,
+  listAllUserSkills,
   readSkillFile,
   writeSkillFile,
   deleteSkillFile,
@@ -30,91 +31,71 @@ export class SkillService implements OnModuleInit {
     @Optional() private readonly agentService?: AgentService,
   ) {}
 
-  onModuleInit() {
+  async onModuleInit() {
     registerBuiltinSkills((entry) => {
       this.registry.register(entry);
     });
+    await this.loadCustomSkillsFromDisk();
     console.log(
-      '[SkillService] Built-in skills loaded:',
+      '[SkillService] Skills loaded:',
       this.registry.getAll().map((s) => s.name).join(', '),
     );
   }
-
-  // ---------------------------------------------------------------------------
-  // Listing
-  // ---------------------------------------------------------------------------
 
   async listSkills(
     userId?: number,
     category?: string,
   ): Promise<Array<Record<string, unknown>>> {
-    const builtin = category
-      ? this.registry.getByCategory(category as SkillEntry['category'])
-      : this.registry.getAll();
+    if (userId) {
+      await this.syncUserSkills(userId);
+    }
 
-    const result: Array<Record<string, unknown>> = builtin.map((entry) => ({
+    const loadedSkills = category
+      ? this.registry.getByCategory(category as SkillEntry['category'], userId)
+      : this.registry.getAll(userId);
+
+    return loadedSkills.map((entry) => ({
       name: entry.name,
       description: entry.description,
       category: entry.category,
-      parameters: entry.parameters,
+      parameters:
+        entry.source === 'builtin'
+          ? entry.parameters
+          : this.argumentNamesToParameters(entry.argumentNames),
       requiresLlm: entry.requiresLlm,
       status: entry.status,
-      source: 'builtin',
+      source: entry.source,
+      arguments: entry.argumentNames ?? [],
     }));
-
-    if (userId) {
-      const custom = await listUserSkills(userId);
-      for (const skill of custom) {
-        if (category && skill.category !== category) continue;
-        result.push({
-          name: skill.name,
-          description: skill.description,
-          category: skill.category,
-          source: 'custom',
-          arguments: skill.argumentNames,
-        });
-      }
-    }
-
-    return result;
   }
 
   async getSkillDetail(
     name: string,
     userId?: number,
   ): Promise<Record<string, unknown> | null> {
-    const builtin = this.registry.get(name);
-    if (builtin) {
-      return {
-        name: builtin.name,
-        description: builtin.description,
-        category: builtin.category,
-        parameters: builtin.parameters,
-        requiresLlm: builtin.requiresLlm,
-        status: builtin.status,
-        source: 'builtin',
-      };
-    }
-
     if (userId) {
-      const custom = await readSkillFile(userId, name);
-      if (custom) {
-        return {
-          name: custom.name,
-          description: custom.description,
-          category: custom.category,
-          arguments: custom.argumentNames,
-          source: 'custom',
-        };
-      }
+      await this.syncUserSkills(userId);
     }
 
-    return null;
-  }
+    const entry = this.registry.get(name, userId);
+    if (!entry) {
+      return null;
+    }
 
-  // ---------------------------------------------------------------------------
-  // Custom skill CRUD (SKILL.md files)
-  // ---------------------------------------------------------------------------
+    return {
+      name: entry.name,
+      description: entry.description,
+      category: entry.category,
+      parameters:
+        entry.source === 'builtin'
+          ? entry.parameters
+          : this.argumentNamesToParameters(entry.argumentNames),
+      arguments: entry.argumentNames ?? [],
+      requiresLlm: entry.requiresLlm,
+      status: entry.status,
+      source: entry.source,
+    };
+  }
 
   async createCustomSkill(
     userId: number,
@@ -126,8 +107,7 @@ export class SkillService implements OnModuleInit {
   ): Promise<{ name: string; filePath: string }> {
     const normalizedName = name.trim().toLowerCase().replace(/[\s_]+/g, '-');
 
-    // Check for conflict with builtin
-    if (this.registry.has(normalizedName)) {
+    if (this.registry.get(normalizedName)) {
       throw new ForbiddenException(
         `Cannot override built-in skill: ${normalizedName}`,
       );
@@ -146,6 +126,10 @@ export class SkillService implements OnModuleInit {
       fm,
       content,
     );
+    const savedSkill = await readSkillFile(userId, normalizedName);
+    if (savedSkill) {
+      this.registerCustomSkill(userId, savedSkill);
+    }
 
     return { name: normalizedName, filePath };
   }
@@ -153,7 +137,12 @@ export class SkillService implements OnModuleInit {
   async updateCustomSkill(
     userId: number,
     name: string,
-    updates: { description?: string; content?: string; category?: string; argNames?: string },
+    updates: {
+      description?: string;
+      content?: string;
+      category?: string;
+      argNames?: string;
+    },
   ): Promise<boolean> {
     const existing = await readSkillFile(userId, name);
     if (!existing) return false;
@@ -168,16 +157,20 @@ export class SkillService implements OnModuleInit {
       fm.arguments = existing.argumentNames.join(' ');
 
     await writeSkillFile(userId, name, fm, updates.content ?? existing.content);
+    const savedSkill = await readSkillFile(userId, name);
+    if (savedSkill) {
+      this.registerCustomSkill(userId, savedSkill);
+    }
     return true;
   }
 
   async deleteCustomSkill(userId: number, name: string): Promise<boolean> {
-    return deleteSkillFile(userId, name);
+    const deleted = await deleteSkillFile(userId, name);
+    if (deleted) {
+      this.registry.unregisterCustom(userId, name);
+    }
+    return deleted;
   }
-
-  // ---------------------------------------------------------------------------
-  // Invocation (native chain: expand prompt → send to LLM)
-  // ---------------------------------------------------------------------------
 
   async buildExecutionContext(
     userId?: number,
@@ -205,8 +198,11 @@ export class SkillService implements OnModuleInit {
     context?: SkillExecutionContext,
   ): Promise<SkillHandlerResult> {
     const mergedContext: SkillExecutionContext = { ...(context ?? {}) };
+    if (mergedContext.userId) {
+      await this.syncUserSkills(mergedContext.userId);
+    }
     if (!mergedContext.llmConfig && mergedContext.userId && this.settingsService) {
-      const saved = await this.settingsService.getApiSettings(mergedContext.userId!);
+      const saved = await this.settingsService.getApiSettings(mergedContext.userId);
       if (saved) {
         mergedContext.llmConfig = {
           apiKey: saved.apiKey ?? undefined,
@@ -225,37 +221,48 @@ export class SkillService implements OnModuleInit {
           model: input.model ?? mergedContext.llmConfig?.model,
           content: input.content,
         });
+      mergedContext.runInSession = async (callback) =>
+        this.agentService!.runInSessionContext({
+          userId: String(mergedContext.userId ?? 1),
+          conversationId: mergedContext.conversationId,
+          callback: async (sessionContext) =>
+            callback({ abortController: sessionContext.abortController }),
+        });
     }
 
-    // 1. Try builtin skill (hardcoded handler)
-    const builtin = this.registry.get(name);
-    if (builtin) {
-      console.log(
-        `[SkillService] invokeSkill source=builtin name=${name} userId=${mergedContext.userId ?? 'unknown'} conversationId=${mergedContext.conversationId ?? 'unknown'}`,
-      );
-      if (builtin.status !== 'loaded') {
-        throw new ForbiddenException({ error: 'Skill not loaded', skill: name });
-      }
+    const entry = this.registry.get(name, mergedContext.userId);
+    if (!entry) {
+      throw new ForbiddenException({ error: 'Skill not loaded', skill: name });
+    }
+
+    console.log(
+      `[SkillService] invokeSkill source=${entry.source} name=${name} userId=${mergedContext.userId ?? 'unknown'} conversationId=${mergedContext.conversationId ?? 'unknown'}`,
+    );
+
+    if (entry.status !== 'loaded') {
+      throw new ForbiddenException({ error: 'Skill not loaded', skill: name });
+    }
+
+    if (entry.source === 'builtin') {
       try {
-        return await builtin.handler(args, mergedContext);
+        return await entry.handler(args, mergedContext);
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         return { success: false, reply: `Skill execution failed: ${message}` };
       }
     }
 
-    // 2. Try custom skill (SKILL.md → expand → LLM)
-    if (mergedContext?.userId) {
-      const custom = await readSkillFile(mergedContext.userId, name);
-      if (custom) {
-        console.log(
-          `[SkillService] invokeSkill source=custom name=${name} userId=${mergedContext.userId} conversationId=${mergedContext.conversationId ?? 'unknown'}`,
-        );
-        return this.invokeCustomSkill(custom, args, mergedContext);
-      }
+    if (!mergedContext.userId) {
+      throw new ForbiddenException({ error: 'Skill not loaded', skill: name });
     }
 
-    throw new ForbiddenException({ error: 'Skill not found', skill: name });
+    const custom = await readSkillFile(mergedContext.userId, name);
+    if (!custom) {
+      this.registry.setStatus(name, 'unloaded', mergedContext.userId);
+      throw new ForbiddenException({ error: 'Skill not loaded', skill: name });
+    }
+
+    return this.invokeCustomSkill(custom, args, mergedContext);
   }
 
   private async invokeCustomSkill(
@@ -267,11 +274,10 @@ export class SkillService implements OnModuleInit {
     if (!llmConfig?.apiKey || !llmConfig?.baseUrl) {
       return {
         success: false,
-        reply: '此 skill 需要 LLM 配置。请在设置中配置 API Key。',
+        reply: 'This skill requires LLM configuration. Please set your API key first.',
       };
     }
 
-    // Native chain: substituteArguments (same as Claude Code)
     const expanded = substituteArguments(
       skill.content,
       args,
@@ -319,22 +325,12 @@ export class SkillService implements OnModuleInit {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Existence check (for conversation routing)
-  // ---------------------------------------------------------------------------
-
   async skillExists(name: string, userId?: number): Promise<boolean> {
-    if (this.registry.has(name)) return true;
     if (userId) {
-      const custom = await readSkillFile(userId, name);
-      return custom !== null;
+      await this.syncUserSkills(userId);
     }
-    return false;
+    return this.registry.has(name, userId);
   }
-
-  // ---------------------------------------------------------------------------
-  // Parsing
-  // ---------------------------------------------------------------------------
 
   parseSkillInvocation(
     content: string,
@@ -360,12 +356,10 @@ export class SkillService implements OnModuleInit {
     const parsed = this.parseSkillInvocation(content);
     if (!parsed) return false;
     if (parsed.skillName === 'skills') return true;
-    if (this.registry.has(parsed.skillName)) return true;
     if (userId) {
-      const custom = await readSkillFile(userId, parsed.skillName);
-      if (custom) return true;
+      await this.syncUserSkills(userId);
     }
-    return false;
+    return this.registry.has(parsed.skillName, userId);
   }
 
   async autoSelectSkill(
@@ -452,5 +446,62 @@ export class SkillService implements OnModuleInit {
     } catch {
       return { useSkill: false, reason: 'router_parse_failed' };
     }
+  }
+
+  private async loadCustomSkillsFromDisk(): Promise<void> {
+    const allSkills = await listAllUserSkills();
+    for (const { userId, skill } of allSkills) {
+      this.registerCustomSkill(userId, skill);
+    }
+  }
+
+  private async syncUserSkills(userId: number): Promise<void> {
+    const diskSkills = await listUserSkills(userId);
+    const diskNames = new Set(diskSkills.map((skill) => skill.name));
+
+    for (const skill of diskSkills) {
+      this.registerCustomSkill(userId, skill);
+    }
+
+    for (const entry of this.registry.getCustomForUser(userId)) {
+      if (!diskNames.has(entry.name)) {
+        this.registry.unregisterCustom(userId, entry.name);
+      }
+    }
+  }
+
+  private registerCustomSkill(userId: number, skill: ParsedSkillFile): void {
+    this.registry.registerCustom(userId, {
+      name: skill.name,
+      description: skill.description,
+      category: this.normalizeCategory(skill.category),
+      handler: async () => ({
+        success: false,
+        reply: `Custom skill "${skill.name}" should be executed through SkillService.`,
+      }),
+      parameters: this.argumentNamesToParameters(skill.argumentNames),
+      requiresLlm: true,
+      argumentNames: skill.argumentNames,
+      filePath: skill.filePath,
+    });
+  }
+
+  private normalizeCategory(category: string): SkillEntry['category'] {
+    if (
+      category === 'search' ||
+      category === 'analysis' ||
+      category === 'generation' ||
+      category === 'utility'
+    ) {
+      return category;
+    }
+    return 'utility';
+  }
+
+  private argumentNamesToParameters(argumentNames?: string[]) {
+    return (argumentNames ?? []).map((argumentName) => ({
+      name: argumentName,
+      description: `Argument: ${argumentName}`,
+    }));
   }
 }

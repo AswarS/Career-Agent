@@ -1,4 +1,6 @@
-import type { SkillHandler, SkillExecutionContext } from './skill.registry';
+import type { SkillHandler } from './skill.registry';
+import { ImageGenerateTool } from '../../../tools/ImageGenerateTool/ImageGenerateTool.js';
+import { VideoGenerateTool } from '../../../tools/VideoGenerateTool/VideoGenerateTool.js';
 
 function extractAssistantText(payload: any): string | null {
   const content = payload?.choices?.[0]?.message?.content;
@@ -31,58 +33,33 @@ function extractAssistantText(payload: any): string | null {
   return null;
 }
 
+function parseStructuredArgs<T extends Record<string, unknown>>(
+  args: string,
+  fallbackKey: string,
+): T | null {
+  const trimmed = args.trim();
+  if (!trimmed) return null;
+  if (!trimmed.startsWith('{')) {
+    return { [fallbackKey]: trimmed } as T;
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as T;
+    }
+  } catch {}
+  return { [fallbackKey]: trimmed } as T;
+}
+
 export interface BuiltinSkillDefinition {
   name: string;
   description: string;
-  category: 'search' | 'analysis' | 'generation' | 'utility';
+  category: 'analysis' | 'generation' | 'utility';
   parameters: Array<{ name: string; description: string; required?: boolean }>;
   requiresLlm?: boolean;
   handler: SkillHandler;
 }
-
-const webSearchSkill: BuiltinSkillDefinition = {
-  name: 'web-search',
-  description: 'Search the web for information and return results',
-  category: 'search',
-  parameters: [
-    { name: 'query', description: 'Search query', required: true },
-  ],
-  handler: async (args, context) => {
-    const query = args.trim();
-    if (!query) {
-      return { success: false, reply: 'Please provide a search query. Usage: /web-search <query>' };
-    }
-
-    try {
-      const encodedQuery = encodeURIComponent(query);
-      const url = `https://api.zhihu.com/search_v3?q=${encodedQuery}&t=general&correction=1&offset=0&limit=5`;
-      const response = await fetch(url, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) CareerAgent/1.0' },
-        signal: AbortSignal.timeout(10000),
-      });
-
-      if (!response.ok) {
-        // Fallback to a simpler approach - return the search query info
-        return {
-          success: true,
-          reply: `Web search for "${query}" was initiated. The external search API returned status ${response.status}. You may want to try a more specific query or try again later.`,
-          metadata: { query, status: response.status },
-        };
-      }
-
-      return {
-        success: true,
-        reply: `Search results for "${query}" have been collected. Results are being processed.`,
-        metadata: { query, resultCount: 0 },
-      };
-    } catch (err: any) {
-      return {
-        success: false,
-        reply: `Web search failed: ${err?.message ?? 'Unknown error'}. Query: "${query}"`,
-      };
-    }
-  },
-};
 
 const codeAnalysisSkill: BuiltinSkillDefinition = {
   name: 'code-analysis',
@@ -140,7 +117,7 @@ const codeAnalysisSkill: BuiltinSkillDefinition = {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${llmConfig.apiKey}`,
+          Authorization: `Bearer ${llmConfig.apiKey}`,
         },
         body: JSON.stringify({
           model: llmConfig.model ?? 'glm-4',
@@ -162,7 +139,7 @@ const codeAnalysisSkill: BuiltinSkillDefinition = {
         return { success: false, reply: `Code analysis API error (${response.status}): ${errorText}` };
       }
 
-      const data = await response.json() as any;
+      const data = (await response.json()) as any;
       const reply = extractAssistantText(data) ?? 'No analysis result returned.';
 
       return {
@@ -185,20 +162,138 @@ const imageGenerationSkill: BuiltinSkillDefinition = {
   name: 'image-generation',
   description: 'Generate images from text descriptions',
   category: 'generation',
-  parameters: [
-    { name: 'prompt', description: 'Image description', required: true },
-  ],
+  parameters: [{ name: 'prompt', description: 'Image description', required: true }],
   handler: async (args, context) => {
-    const prompt = args.trim();
+    const parsed = parseStructuredArgs<{
+      prompt?: string;
+      model?: string;
+      size?: string;
+      n?: number;
+      image_url?: string;
+    }>(args, 'prompt');
+    const prompt = parsed?.prompt?.trim() ?? '';
     if (!prompt) {
       return { success: false, reply: 'Please provide an image description. Usage: /image-generation <description>' };
     }
 
-    return {
-      success: true,
-      reply: `Image generation requested for: "${prompt}"\n\nImage generation requires an external image API (e.g., DALL-E, CogView). Please configure an image generation endpoint in Settings to enable this skill.`,
-      metadata: { prompt, status: 'not_configured' },
-    };
+    if (!context?.runInSession) {
+      return {
+        success: false,
+        reply: 'Image generation is unavailable because the session context is missing.',
+      };
+    }
+
+    try {
+      const result = await context.runInSession(async ({ abortController }) =>
+        ImageGenerateTool.call(
+          {
+            prompt,
+            model: typeof parsed?.model === 'string' ? parsed.model : undefined,
+            size: typeof parsed?.size === 'string' ? parsed.size : undefined,
+            n: typeof parsed?.n === 'number' ? parsed.n : undefined,
+            image_url: typeof parsed?.image_url === 'string' ? parsed.image_url : undefined,
+          },
+          { abortController } as any,
+          undefined as any,
+          undefined as any,
+        ),
+      );
+
+      const data = result?.data as
+        | { filePaths?: string[]; model?: string; error?: string }
+        | undefined;
+      if (data?.error) {
+        return { success: false, reply: data.error };
+      }
+      const filePaths = data?.filePaths ?? [];
+      if (!filePaths.length) {
+        return { success: false, reply: 'Image generation finished but no files were produced.' };
+      }
+
+      return {
+        success: true,
+        reply: `Generated ${filePaths.length} image(s) for "${prompt}".`,
+        metadata: { prompt, model: data?.model },
+        outputFiles: filePaths.map((path) => ({ path, kind: 'image' as const })),
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        reply: `Image generation failed: ${err?.message ?? 'Unknown error'}`,
+      };
+    }
+  },
+};
+
+const videoGenerationSkill: BuiltinSkillDefinition = {
+  name: 'video-generation',
+  description: 'Generate videos from text descriptions',
+  category: 'generation',
+  parameters: [{ name: 'prompt', description: 'Video description', required: true }],
+  handler: async (args, context) => {
+    const parsed = parseStructuredArgs<{
+      prompt?: string;
+      model?: string;
+      resolution?: string;
+      aspect_ratio?: string;
+      duration?: number;
+      generate_audio?: boolean;
+      frame_image?: string;
+    }>(args, 'prompt');
+    const prompt = parsed?.prompt?.trim() ?? '';
+    if (!prompt) {
+      return { success: false, reply: 'Please provide a video description. Usage: /video-generation <description>' };
+    }
+
+    if (!context?.runInSession) {
+      return {
+        success: false,
+        reply: 'Video generation is unavailable because the session context is missing.',
+      };
+    }
+
+    try {
+      const result = await context.runInSession(async ({ abortController }) =>
+        VideoGenerateTool.call(
+          {
+            prompt,
+            model: typeof parsed?.model === 'string' ? parsed.model : undefined,
+            resolution: typeof parsed?.resolution === 'string' ? parsed.resolution : undefined,
+            aspect_ratio: typeof parsed?.aspect_ratio === 'string' ? parsed.aspect_ratio : undefined,
+            duration: typeof parsed?.duration === 'number' ? parsed.duration : undefined,
+            generate_audio:
+              typeof parsed?.generate_audio === 'boolean' ? parsed.generate_audio : undefined,
+            frame_image:
+              typeof parsed?.frame_image === 'string' ? parsed.frame_image : undefined,
+          },
+          { abortController } as any,
+          undefined as any,
+          undefined as any,
+        ),
+      );
+
+      const data = result?.data as
+        | { filePath?: string; model?: string; error?: string }
+        | undefined;
+      if (data?.error) {
+        return { success: false, reply: data.error };
+      }
+      if (!data?.filePath) {
+        return { success: false, reply: 'Video generation finished but no file was produced.' };
+      }
+
+      return {
+        success: true,
+        reply: `Generated a video for "${prompt}".`,
+        metadata: { prompt, model: data?.model },
+        outputFiles: [{ path: data.filePath, kind: 'video' as const }],
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        reply: `Video generation failed: ${err?.message ?? 'Unknown error'}`,
+      };
+    }
   },
 };
 
@@ -207,23 +302,27 @@ const helpSkill: BuiltinSkillDefinition = {
   description: 'Show help information about available commands and skills',
   category: 'utility',
   parameters: [],
-  handler: async (_args, context) => {
+  handler: async () => {
     const lines = [
-      '**Career Agent Commands**\n',
-      '- `/skills` — List all available skills',
-      '- `/help` — Show this help message',
-      '- `/web-search <query>` — Search the web',
-      '- `/code-analysis <code>` — Analyze code quality and security',
-      '- 直接描述"生成一张...的图片"或"制作...视频" — AI 会自动调用图片/视频生成工具（需在设置中配置多模态 API）',
-      '\nType any other message to chat with the AI assistant.',
+      '**Career Agent Commands**',
+      '',
+      '- `/skills` - List all available skills',
+      '- `/help` - Show this help message',
+      '- `/create-skill <json>` - Create a custom skill for the current user',
+      '- `/code-analysis <code>` - Analyze code quality and security',
+      '- `/image-generation <prompt>` - Generate images using the configured multimodal image API',
+      '- `/video-generation <prompt>` - Generate videos using the configured multimodal video API',
+      '',
+      'Type any other message to chat with the AI assistant.',
     ];
     return { success: true, reply: lines.join('\n') };
   },
 };
 
 const builtinSkills: BuiltinSkillDefinition[] = [
-  webSearchSkill,
   codeAnalysisSkill,
+  imageGenerationSkill,
+  videoGenerationSkill,
   helpSkill,
 ];
 
@@ -235,6 +334,7 @@ export function registerBuiltinSkills(
       name: skill.name,
       description: skill.description,
       category: skill.category,
+      source: 'builtin',
       parameters: skill.parameters,
       requiresLlm: skill.requiresLlm,
       handler: skill.handler,

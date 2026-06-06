@@ -99,6 +99,63 @@ export class AgentService {
     }
   }
 
+  async runInSessionContext<T>(input: {
+    userId: string;
+    conversationId?: string;
+    config?: { apiKey?: string; baseUrl?: string; model?: string };
+    callback: (context: SessionContext) => Promise<T>;
+  }): Promise<T> {
+    const sessionId =
+      input.conversationId && input.conversationId.trim().length > 0
+        ? input.conversationId
+        : `skill-tool-${randomUUID()}`;
+    const isTemporarySession = !input.conversationId || input.conversationId.trim().length === 0;
+    const userWorkspaceDir = join(userDataRootDir, String(input.userId));
+    await mkdir(userWorkspaceDir, { recursive: true });
+
+    let ctx = this.sessionContexts.get(sessionId);
+    if (!ctx) {
+      ctx = this.buildSessionContext(
+        sessionId,
+        input.userId,
+        input.config ?? {},
+        userWorkspaceDir,
+      );
+      this.sessionContexts.set(sessionId, ctx);
+    }
+
+    if (this.settingsService) {
+      const saved = await this.settingsService.getApiSettings(Number(input.userId));
+      if (saved) {
+        setSessionMultimodalConfig(sessionId, {
+          image_url: saved.imageUrl,
+          image_key: saved.imageKey,
+          image_default_model: saved.imageDefaultModel,
+          image_models: saved.imageModels
+            ? saved.imageModels.split(',').map((s) => s.trim()).filter(Boolean)
+            : undefined,
+          video_url: saved.videoUrl,
+          video_key: saved.videoKey,
+          video_default_model: saved.videoDefaultModel,
+          video_models: saved.videoModels
+            ? saved.videoModels.split(',').map((s) => s.trim()).filter(Boolean)
+            : undefined,
+        });
+      }
+    }
+
+    try {
+      return await runWithSessionContext(ctx, async () => input.callback(ctx));
+    } finally {
+      removeSessionMultimodalConfig(sessionId);
+      if (isTemporarySession) {
+        this.sessionContexts.delete(sessionId);
+        this.queryEngines.delete(sessionId);
+        this.conversationConfigs.delete(sessionId);
+      }
+    }
+  }
+
   async createConversation(
     input: AgentCreateConversationInput,
   ): Promise<AgentConversationMetadata> {
@@ -115,6 +172,7 @@ export class AgentService {
 
   async sendMessage(input: AgentSendMessageInput): Promise<AgentSendMessageResult> {
     const { conversationId, userId, content, clientRequestId } = input;
+    const userVisibleContent = input.userVisibleContent ?? content;
     const userMessageId = `msg_user_${randomUUID().replace(/-/g, '')}`;
     const assistantMessageId = `msg_assistant_${randomUUID().replace(/-/g, '')}`;
     const now = new Date();
@@ -129,7 +187,7 @@ export class AgentService {
       message: {
         id: userMessageId,
         role: 'user',
-        content,
+        content: userVisibleContent,
       },
       uuid: userEventUuid,
       timestamp: now.toISOString(),
@@ -265,7 +323,7 @@ export class AgentService {
     }
 
     // 4. Fallback to stub if QueryEngine unavailable
-    const stubReply = `Stub agent reply: ${content}`;
+    const stubReply = `Stub agent reply: ${userVisibleContent}`;
     const thinkingUuid = randomUUID();
     const replyUuid = randomUUID();
     const thinkingTimestamp = new Date(now.getTime() + 300).toISOString();
@@ -280,7 +338,7 @@ export class AgentService {
         type: 'message',
         role: 'assistant',
         model: 'stub-agent',
-        content: [{ type: 'thinking', thinking: `Preparing a response for: ${content}`, signature: '' }],
+        content: [{ type: 'thinking', thinking: `Preparing a response for: ${userVisibleContent}`, signature: '' }],
         stop_reason: null,
         stop_sequence: null,
         usage: { input_tokens: 0, output_tokens: 0 },

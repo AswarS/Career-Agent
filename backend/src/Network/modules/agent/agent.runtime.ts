@@ -32,6 +32,7 @@ export interface AgentSendMessageInput {
   conversationId: string;
   userId: string;
   content: string;
+  userVisibleContent?: string;
   kind?: string;
   attachments?: AgentAttachmentInput[];
   context?: Record<string, unknown>;
