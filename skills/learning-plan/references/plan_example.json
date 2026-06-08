@@ -1,0 +1,108 @@
+{
+  "meta": {
+    "plan_id": "plan_20260421110000",
+    "title": "Python 数据结构与算法学习计划",
+    "created_at": "2026-04-21T11:00:00+08:00",
+    "version": "1.0.0",
+    "source_files": ["python_basics.txt", "data_structures.txt", "algorithms.txt"]
+  },
+  "overview": {
+    "goal": "系统掌握 Python 数据结构与常用算法，具备独立解决 LeetCode 中等难度题目的能力，为技术面试做好准备",
+    "target_audience": "有 Python 基础语法知识的求职者/学生",
+    "estimated_total_days": 60,
+    "difficulty_curve": [
+      { "phase_id": "phase_01", "difficulty": "beginner" },
+      { "phase_id": "phase_02", "difficulty": "intermediate" },
+      { "phase_id": "phase_03", "difficulty": "advanced" },
+      { "phase_id": "phase_04", "difficulty": "advanced" }
+    ],
+    "total_phases": 4,
+    "total_stages": 12,
+    "total_html_apps": 9,
+    "tags": ["Python", "数据结构", "算法", "求职", "面试"]
+  },
+  "phases": [
+    {
+      "phase_id": "phase_01",
+      "title": "数据结构基础",
+      "description": "掌握线性数据结构和基础排序算法，建立算法思维",
+      "goal": "理解数组、链表、栈、队列的原理与实现，掌握三种基础排序算法",
+      "milestone": "能够手写链表反转、用栈实现括号匹配、实现三种排序算法",
+      "estimated_days": 14,
+      "prerequisites": [],
+      "stages": [
+        {
+          "stage_id": "stage_0101",
+          "title": "数组与链表",
+          "knowledge_points": ["数组的内存模型", "链表的节点结构", "单链表操作", "双向链表", "数组 vs 链表的时间复杂度对比"],
+          "learning_activities": [
+            {
+              "activity_id": "act_010101",
+              "type": "text_reading",
+              "title": "数组与链表的基本概念",
+              "description": "阅读资料中关于数组内存连续存储和链表指针链接的基本原理，理解两者在内存层面的区别",
+              "estimated_minutes": 30
+            },
+            {
+              "activity_id": "act_010102",
+              "type": "html_interactive",
+              "title": "链表操作可视化",
+              "description": "通过交互式动画理解链表的插入、删除、反转操作，观察指针的变化过程",
+              "html_app_id": "app_0101_01",
+              "html_app_brief": "交互式链表操作动画，用户可以逐步执行插入/删除/反转操作，观察节点和指针的变化",
+              "estimated_minutes": 25
+            },
+            {
+              "activity_id": "act_010103",
+              "type": "practice",
+              "title": "链表基础练习",
+              "description": "完成 3 道链表基础题：反转链表、合并两个有序链表、删除链表倒数第 N 个节点",
+              "estimated_minutes": 60
+            }
+          ],
+          "assessment": {
+            "type": "html_interactive",
+            "html_app_id": "app_0101_assess",
+            "description": "数组与链表概念闯关测验：包含选择题、拖拽分类题（将操作拖到对应的数据结构）、时间复杂度配对",
+            "pass_criteria": "正确率 >= 80%"
+          }
+        },
+        {
+          "stage_id": "stage_0102",
+          "title": "排序算法",
+          "knowledge_points": ["冒泡排序", "选择排序", "插入排序", "排序算法的时间复杂度分析"],
+          "learning_activities": [
+            {
+              "activity_id": "act_010201",
+              "type": "text_reading",
+              "title": "三种基础排序算法原理",
+              "description": "阅读冒泡排序、选择排序、插入排序的算法描述和伪代码，理解各自的核心思想",
+              "estimated_minutes": 25
+            },
+            {
+              "activity_id": "act_010202",
+              "type": "html_interactive",
+              "title": "排序算法步骤模拟器",
+              "description": "逐步执行三种排序算法，观察每一步的比较和交换过程，对比不同算法的效率",
+              "html_app_id": "app_0102_01",
+              "html_app_brief": "排序算法可视化模拟器，支持逐步执行、自动播放、自定义数组，同步显示伪代码高亮",
+              "estimated_minutes": 30
+            },
+            {
+              "activity_id": "act_010203",
+              "type": "practice",
+              "title": "排序算法实现",
+              "description": "用 Python 手写三种排序算法，并对比不同规模数据下的运行时间",
+              "estimated_minutes": 45
+            }
+          ],
+          "assessment": {
+            "type": "quiz",
+            "description": "排序算法笔试：给定数组写出每轮排序结果、分析时间复杂度、选择最优排序策略",
+            "pass_criteria": "正确率 >= 75%"
+          }
+        }
+      ]
+    }
+  ]
+}

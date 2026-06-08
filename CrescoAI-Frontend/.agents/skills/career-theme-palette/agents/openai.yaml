@@ -1,0 +1,6 @@
+interface:
+  display_name: "Career Theme Palette"
+  short_description: "Define theme colors and semantic tokens for the career frontend."
+  default_prompt: "Use this skill to define or revise the frontend theme without changing application architecture."
+policy:
+  allow_implicit_invocation: false

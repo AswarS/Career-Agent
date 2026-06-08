@@ -1,0 +1,6 @@
+interface:
+  display_name: "Local Webapp Test Harness"
+  short_description: "Run local web apps with Python Playwright checks."
+  default_prompt: "Use $webapp-testing to run the local frontend and verify one realistic browser path."
+policy:
+  allow_implicit_invocation: false

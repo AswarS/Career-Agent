@@ -1,0 +1,213 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "LearningPlan",
+  "description": "长期学习计划结构定义",
+  "type": "object",
+  "required": ["meta", "overview", "phases"],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["plan_id", "title", "created_at", "version"],
+      "properties": {
+        "plan_id": {
+          "type": "string",
+          "description": "计划唯一标识，格式：plan_{timestamp}"
+        },
+        "title": {
+          "type": "string",
+          "description": "学习计划标题"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "生成时间 ISO 8601"
+        },
+        "version": {
+          "type": "string",
+          "default": "1.0.0"
+        },
+        "source_files": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "输入资料文件名列表"
+        }
+      }
+    },
+    "overview": {
+      "type": "object",
+      "required": ["goal", "target_audience", "estimated_total_days", "difficulty_curve", "total_phases", "total_html_apps"],
+      "properties": {
+        "goal": {
+          "type": "string",
+          "description": "学习计划的总体目标"
+        },
+        "target_audience": {
+          "type": "string",
+          "description": "目标受众描述"
+        },
+        "estimated_total_days": {
+          "type": "integer",
+          "description": "预计总学习天数"
+        },
+        "difficulty_curve": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "phase_id": { "type": "string" },
+              "difficulty": {
+                "type": "string",
+                "enum": ["beginner", "elementary", "intermediate", "advanced", "expert"]
+              }
+            }
+          },
+          "description": "各阶段难度曲线"
+        },
+        "total_phases": { "type": "integer" },
+        "total_stages": { "type": "integer" },
+        "total_html_apps": { "type": "integer" },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "学习计划标签，如 ['Python', '数据结构', '求职']"
+        }
+      }
+    },
+    "phases": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Phase"
+      }
+    }
+  },
+  "definitions": {
+    "Phase": {
+      "type": "object",
+      "required": ["phase_id", "title", "description", "goal", "milestone", "estimated_days", "stages"],
+      "properties": {
+        "phase_id": {
+          "type": "string",
+          "pattern": "^phase_\\d{2}$",
+          "description": "大阶段 ID，如 phase_01"
+        },
+        "title": { "type": "string" },
+        "description": {
+          "type": "string",
+          "description": "阶段概述"
+        },
+        "goal": {
+          "type": "string",
+          "description": "本阶段学习目标"
+        },
+        "milestone": {
+          "type": "string",
+          "description": "里程碑：完成本阶段的标志"
+        },
+        "estimated_days": {
+          "type": "integer",
+          "description": "预计学习天数"
+        },
+        "prerequisites": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "前置阶段 ID 列表",
+          "default": []
+        },
+        "stages": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Stage"
+          }
+        }
+      }
+    },
+    "Stage": {
+      "type": "object",
+      "required": ["stage_id", "title", "knowledge_points", "learning_activities"],
+      "properties": {
+        "stage_id": {
+          "type": "string",
+          "pattern": "^stage_\\d{4}$",
+          "description": "小阶段 ID，如 stage_0101（大阶段01的第01小阶段）"
+        },
+        "title": { "type": "string" },
+        "knowledge_points": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "本小阶段涉及的知识点列表"
+        },
+        "learning_activities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/LearningActivity"
+          }
+        },
+        "assessment": {
+          "$ref": "#/definitions/Assessment"
+        }
+      }
+    },
+    "LearningActivity": {
+      "type": "object",
+      "required": ["activity_id", "type", "title", "description", "estimated_minutes"],
+      "properties": {
+        "activity_id": {
+          "type": "string",
+          "description": "活动 ID"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["text_reading", "html_interactive", "practice", "review"],
+          "description": "活动类型"
+        },
+        "title": { "type": "string" },
+        "description": {
+          "type": "string",
+          "description": "学什么、怎么学的具体描述"
+        },
+        "html_app_id": {
+          "type": "string",
+          "pattern": "^app_\\d{4}_\\d{2}$",
+          "description": "仅 type=html_interactive 时存在，关联 html_specs/ 下的需求文档"
+        },
+        "html_app_brief": {
+          "type": "string",
+          "description": "仅 type=html_interactive 时存在，简述交互应用要完成什么"
+        },
+        "estimated_minutes": {
+          "type": "integer",
+          "description": "预计学习时长（分钟）"
+        }
+      },
+      "if": {
+        "properties": { "type": { "const": "html_interactive" } }
+      },
+      "then": {
+        "required": ["html_app_id", "html_app_brief"]
+      }
+    },
+    "Assessment": {
+      "type": "object",
+      "required": ["type", "description"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["quiz", "project", "html_interactive"],
+          "description": "评估类型"
+        },
+        "html_app_id": {
+          "type": "string",
+          "description": "交互式评估时关联的应用 ID，格式 app_{phase}{stage}_assess"
+        },
+        "description": {
+          "type": "string",
+          "description": "评估方式描述"
+        },
+        "pass_criteria": {
+          "type": "string",
+          "description": "通过标准"
+        }
+      }
+    }
+  }
+}

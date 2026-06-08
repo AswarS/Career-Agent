@@ -1,0 +1,35 @@
+:root {
+  color-scheme: light;
+  --font-sans: "Inter Variable", "Noto Sans SC Variable", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-display: var(--font-sans);
+
+  --color-bg: #f7f7f5;
+  --color-bg-subtle: #f0efec;
+  --color-surface: #fbfbfa;
+  --color-surface-strong: #ffffff;
+  --color-text: #20242a;
+  --color-text-muted: #6c7076;
+  --color-primary: #315f58;
+  --color-primary-hover: #264b46;
+  --color-primary-soft: #e4ebe8;
+  --color-secondary: #8c7968;
+  --color-secondary-strong: #594c40;
+  --color-secondary-soft: #ece7e1;
+  --color-accent: #9a846c;
+  --color-accent-soft: #eee9e2;
+  --color-success: #34675e;
+  --color-warning: #8a6d43;
+  --color-warning-strong: #604b2e;
+  --color-warning-soft: #eee7da;
+  --color-danger: #9a4d48;
+  --color-border: rgba(32, 36, 42, 0.12);
+  --color-border-strong: rgba(32, 36, 42, 0.2);
+  --color-focus-ring: rgba(49, 95, 88, 0.24);
+  --color-on-primary: #ffffff;
+
+  --chart-growth: #5f8f86;
+  --chart-balance: #80858b;
+  --chart-opportunity: #9a846c;
+
+  --shadow-card: 0 1px 2px rgba(32, 36, 42, 0.05), 0 8px 24px rgba(32, 36, 42, 0.04);
+}
