@@ -91,6 +91,12 @@ async function handleMessageAction(action: MessageAction) {
             :multi-agent-mode="multiAgentMode"
             @action="handleMessageAction"
           />
+
+          <div v-if="messageSubmitStatus === 'loading'" class="typing-indicator" aria-label="AI 正在生成回复">
+            <span class="typing-dot"></span>
+            <span class="typing-dot"></span>
+            <span class="typing-dot"></span>
+          </div>
         </section>
       </div>
     </section>
@@ -213,6 +219,49 @@ async function handleMessageAction(action: MessageAction) {
 @media (max-width: 640px) {
   .composer-dock :deep(.composer-card) {
     width: calc(100vw - 24px);
+  }
+}
+
+.typing-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 18px;
+  border-radius: 16px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+  width: fit-content;
+}
+
+.typing-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-text-muted);
+  animation: typing-bounce 1.4s infinite ease-in-out both;
+}
+
+.typing-dot:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.typing-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.typing-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes typing-bounce {
+  0%, 80%, 100% {
+    transform: scale(0.6);
+    opacity: 0.4;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
   }
 }
 

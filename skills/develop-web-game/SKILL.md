@@ -125,6 +125,25 @@ If a `progress.md` file already exists, read it first, including the original us
 Update `progress.md` after each meaningful chunk of work (feature added, bug found, test run, or decision made).
 At the end of your work, leave TODOs and suggestions for the next agent in `progress.md`.
 
+## Output Format
+
+**MANDATORY — YOUR RESPONSE WILL BE REJECTED IF THIS IS MISSING.**
+
+After completing the project, your response MUST end with EXACTLY this line (no code fences, no extra text after it):
+
+OUTPUT_ARTIFACT: {"url":"<absolute_path_to_main_file>","type":"<html|app>","description":"<what was built>"}
+
+Rules:
+- `url`: The ABSOLUTE filesystem path to the generated entry file (e.g., `/home/user/projects/snake.html` or `D:/projects/game/index.html`). Use the actual path where you wrote the file.
+- `type`: Use `html` for single-file HTML. Use `app` for multi-file projects with an index.html entry.
+- `description`: One sentence in the user's language describing what was built.
+- This must be a RAW line at the very end of your response — NOT inside a code block, NOT in markdown.
+
+Example — if you wrote the game to `/tmp/workspace/snake.html`:
+OUTPUT_ARTIFACT: {"url":"/tmp/workspace/snake.html","type":"html","description":"极简贪吃蛇游戏，支持方向键控制和计分"}
+
+**DO NOT FORGET THIS LINE. The system cannot display your work without it.**
+
 ## Playwright Prerequisites
 
 - Prefer a local `playwright` dependency if the project already has it.

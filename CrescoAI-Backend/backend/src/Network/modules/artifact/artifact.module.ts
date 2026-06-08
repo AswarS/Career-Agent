@@ -9,5 +9,6 @@ import { ArtifactController } from './artifact.controller';
   imports: [TypeOrmModule.forFeature([ArtifactEntity]), AgentModule],
   controllers: [ArtifactController],
   providers: [ArtifactService],
+  exports: [ArtifactService],
 })
 export class ArtifactModule {}

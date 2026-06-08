@@ -4,7 +4,7 @@
  * NestJS controller (which requires @nestjs/common decorators at import time).
  */
 
-import { join, normalize } from 'node:path';
+import { join, normalize, sep } from 'node:path';
 
 const VALID_SINGLE_KINDS = new Set(['image', 'video', 'html']);
 
@@ -35,7 +35,7 @@ export function resolveGeneratedPath(
 
   // Guard against path traversal that bypasses the simple string checks
   const userDir = normalize(join(baseDir, userId));
-  if (!normalized.startsWith(userDir + '/') && normalized !== userDir) {
+  if (!normalized.startsWith(userDir + sep) && normalized !== userDir) {
     return { ok: false, error: 'path traversal detected' };
   }
 
@@ -68,7 +68,7 @@ export function resolveAppPath(
   const resolved = join(baseDir, userId, 'app_generated', appId, safePart);
   const normalized = normalize(resolved);
   const userDir = normalize(join(baseDir, userId));
-  if (!normalized.startsWith(userDir + '/') && normalized !== userDir) {
+  if (!normalized.startsWith(userDir + sep) && normalized !== userDir) {
     return { ok: false, error: 'path traversal detected' };
   }
 

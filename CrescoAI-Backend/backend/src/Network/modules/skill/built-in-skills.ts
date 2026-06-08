@@ -1,6 +1,10 @@
-import type { SkillHandler } from './skill.registry';
+import type { SkillHandler, SkillHandlerResult } from './skill.registry';
 import { ImageGenerateTool } from '../../../tools/ImageGenerateTool/ImageGenerateTool.js';
 import { VideoGenerateTool } from '../../../tools/VideoGenerateTool/VideoGenerateTool.js';
+import { skillLogger } from '../../utils/skillLogger.js';
+import { readFile, copyFile, mkdir } from 'node:fs/promises';
+import { join, basename, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 function extractAssistantText(payload: any): string | null {
   const content = payload?.choices?.[0]?.message?.content;
@@ -193,9 +197,7 @@ const imageGenerationSkill: BuiltinSkillDefinition = {
             n: typeof parsed?.n === 'number' ? parsed.n : undefined,
             image_url: typeof parsed?.image_url === 'string' ? parsed.image_url : undefined,
           },
-          { abortController } as any,
-          undefined as any,
-          undefined as any,
+          { abortController } as any
         ),
       );
 
@@ -266,9 +268,7 @@ const videoGenerationSkill: BuiltinSkillDefinition = {
             frame_image:
               typeof parsed?.frame_image === 'string' ? parsed.frame_image : undefined,
           },
-          { abortController } as any,
-          undefined as any,
-          undefined as any,
+          { abortController } as any
         ),
       );
 
@@ -312,6 +312,8 @@ const helpSkill: BuiltinSkillDefinition = {
       '- `/code-analysis <code>` - Analyze code quality and security',
       '- `/image-generation <prompt>` - Generate images using the configured multimodal image API',
       '- `/video-generation <prompt>` - Generate videos using the configured multimodal video API',
+      '- `/learning-plan <topic>` - Generate structured long-term learning plan with interactive HTML apps',
+      '- `/develop-web-game <description>` - Build visual/interactive web programs (games, animations, simulations)',
       '',
       'Type any other message to chat with the AI assistant.',
     ];
@@ -319,10 +321,300 @@ const helpSkill: BuiltinSkillDefinition = {
   },
 };
 
+// Resolve the skills directory relative to this file.
+// This file lives at: CrescoAI-Backend/backend/src/Network/modules/skill/built-in-skills.ts
+// Project skills at:  <project-root>/skills/
+// Path: skill → modules → Network → src → backend → CrescoAI-Backend → project-root
+const __skillFileDir = fileURLToPath(new URL('.', import.meta.url));
+const SKILLS_DIR = join(__skillFileDir, '..', '..', '..', '..', '..', '..', 'skills');
+
+// Network user data directory: CrescoAI-Backend/backend/src/Network/user/
+const USER_DATA_DIR = join(__skillFileDir, '..', '..', 'user');
+
+// Helper function to load skill content from project skills directory
+async function loadSkillContent(skillName: string): Promise<string | null> {
+  try {
+    const skillFilePath = join(SKILLS_DIR, skillName, 'SKILL.md');
+    const content = await readFile(skillFilePath, 'utf-8');
+
+    // Parse frontmatter and extract markdown content
+    const frontmatterRegex = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/;
+    const match = content.match(frontmatterRegex);
+    if (match) {
+      return match[2].trim(); // Return only the markdown content after frontmatter
+    }
+    return content.trim();
+  } catch (err: any) {
+    return null;
+  }
+}
+
+/**
+ * Parse the OUTPUT_ARTIFACT line from the AI's reply.
+ * Expected format: OUTPUT_ARTIFACT: {"url":"...","type":"html|app|image|video","description":"..."}
+ */
+function parseOutputArtifact(reply: string): {
+  url: string;
+  type: 'html' | 'app' | 'image' | 'video';
+  description: string;
+} | null {
+  const regex = /OUTPUT_ARTIFACT:\s*(\{[\s\S]*?\})\s*$/m;
+  const match = reply.match(regex);
+  if (!match) return null;
+
+  try {
+    const parsed = JSON.parse(match[1]);
+    if (parsed && typeof parsed.url === 'string' && typeof parsed.type === 'string') {
+      return {
+        url: parsed.url,
+        type: parsed.type as 'html' | 'app' | 'image' | 'video',
+        description: parsed.description ?? '',
+      };
+    }
+  } catch {}
+  return null;
+}
+
+/**
+ * Strip the OUTPUT_ARTIFACT line from the reply text shown to the user.
+ */
+function stripArtifactLine(reply: string): string {
+  return reply.replace(/\n*OUTPUT_ARTIFACT:\s*\{[\s\S]*?\}\s*$/m, '').trim();
+}
+
+/**
+ * Fallback: try to extract a file path from the AI reply when OUTPUT_ARTIFACT is missing.
+ * Looks for common patterns like absolute paths ending in .html or directory paths.
+ */
+function extractFilePathFromReply(reply: string): string | null {
+  // Match absolute paths (Unix or Windows) ending in .html
+  const absHtmlMatch = reply.match(/(?:["'`]|wrote to |saved to |created |file:\s*)((?:\/|[A-Z]:\\)[^\s"'`\n]+\.html)\b/i);
+  if (absHtmlMatch) return absHtmlMatch[1];
+
+  // Match absolute paths to directories containing index.html
+  const absDirMatch = reply.match(/(?:["'`]|wrote to |saved to |created )((?:\/|[A-Z]:\\)[^\s"'`\n]+[/\\]index\.html)\b/i);
+  if (absDirMatch) return absDirMatch[1];
+
+  // Match backtick-wrapped paths that look like filesystem paths
+  const backtickMatch = reply.match(/`((?:\/|[A-Z]:\\)[^`\n]+\.html)`/i);
+  if (backtickMatch) return backtickMatch[1];
+
+  return null;
+}
+
+const learningPlanSkill: BuiltinSkillDefinition = {
+  name: 'learning-plan',
+  description: '生成结构化长期学习计划（JSON）与配套 HTML 交互应用需求文档（Markdown）。当用户提到学习计划、学习路线、备考、怎么学某个主题、求职准备、技能提升、考试复习、知识体系梳理、课程规划时触发此技能。',
+  category: 'utility',
+  parameters: [
+    { name: 'topic', description: 'Learning topic or goal description', required: true },
+  ],
+  requiresLlm: true,
+  handler: async (args, context) => {
+    const topic = args.trim();
+    if (!topic) {
+      return {
+        success: false,
+        reply: 'Please provide a learning topic or goal. Usage: /learning-plan <topic>'
+      };
+    }
+
+    const llmConfig = context?.llmConfig;
+    if (!llmConfig?.apiKey || !llmConfig?.baseUrl) {
+      return {
+        success: false,
+        reply: 'Learning plan skill requires LLM configuration. Please set your API key in Settings first.',
+      };
+    }
+
+    // Load the skill content
+    const skillContent = await loadSkillContent('learning-plan');
+    if (!skillContent) {
+      return {
+        success: false,
+        reply: 'Failed to load learning-plan skill content. Please ensure skills/learning-plan/SKILL.md exists.',
+      };
+    }
+
+    if (context?.runUnifiedPrompt) {
+      const result = await context.runUnifiedPrompt({
+        userId: context.userId,
+        conversationId: context.conversationId,
+        apiKey: llmConfig.apiKey,
+        baseUrl: llmConfig.baseUrl,
+        model: llmConfig.model,
+        content: `${skillContent}\n\nUser request:\n${topic}`,
+      });
+
+      if (!result.success || !result.reply) {
+        return { success: false, reply: 'Learning plan generation failed via unified query engine.' };
+      }
+
+      return {
+        success: true,
+        reply: result.reply,
+        metadata: { model: result.model ?? llmConfig.model },
+      };
+    }
+
+    return { success: false, reply: 'Learning plan execution requires AgentService.' };
+  },
+};
+
+const developWebGameSkill: BuiltinSkillDefinition = {
+  name: 'develop-web-game',
+  description: 'Build visual/interactive programs in small steps. Trigger on ANY request whose subject has a spatial, temporal, structural, or quantitative dimension that benefits from visual presentation. This includes web games, interactive diagrams, simulations, data dashboards, generative art, UI prototypes.',
+  category: 'generation',
+  parameters: [
+    { name: 'description', description: 'Description of the visual/interactive program to build', required: true },
+  ],
+  requiresLlm: true,
+  handler: async (args, context) => {
+    const description = args.trim();
+    if (!description) {
+      return {
+        success: false,
+        reply: 'Please provide a description of what to build. Usage: /develop-web-game <description>'
+      };
+    }
+
+    const llmConfig = context?.llmConfig;
+    if (!llmConfig?.apiKey || !llmConfig?.baseUrl) {
+      return {
+        success: false,
+        reply: 'Web game development skill requires LLM configuration. Please set your API key in Settings first.',
+      };
+    }
+
+    // Load the skill content
+    const skillContent = await loadSkillContent('develop-web-game');
+    if (!skillContent) {
+      return {
+        success: false,
+        reply: 'Failed to load develop-web-game skill content. Please ensure skills/develop-web-game/SKILL.md exists.',
+      };
+    }
+
+    skillLogger.info('develop-web-game', `Skill content loaded (${skillContent.length} chars), invoking LLM...`);
+
+    if (context?.runUnifiedPrompt) {
+      const result = await context.runUnifiedPrompt({
+        userId: context.userId,
+        conversationId: context.conversationId,
+        apiKey: llmConfig.apiKey,
+        baseUrl: llmConfig.baseUrl,
+        model: llmConfig.model,
+        content: `${skillContent}\n\nUser request:\n${description}`,
+      });
+
+      if (!result.success || !result.reply) {
+        skillLogger.error('develop-web-game', 'LLM call failed', { success: result.success, replyLength: result.reply?.length ?? 0 });
+        return { success: false, reply: 'Web game development failed via unified query engine.' };
+      }
+
+      skillLogger.info('develop-web-game', `LLM reply received (${result.reply.length} chars)`);
+      skillLogger.info('develop-web-game', `Reply tail (last 500 chars):`, result.reply.slice(-500));
+
+      // Parse the OUTPUT_ARTIFACT line from AI's response
+      const artifact = parseOutputArtifact(result.reply);
+      skillLogger.info('develop-web-game', `OUTPUT_ARTIFACT parsed:`, artifact ?? 'NOT FOUND');
+
+      const cleanReply = artifact ? stripArtifactLine(result.reply) : result.reply;
+
+      const response: SkillHandlerResult = {
+        success: true,
+        reply: cleanReply,
+        metadata: { model: result.model ?? llmConfig.model },
+      };
+
+      if (artifact && artifact.url) {
+        // AI wrote files to disk and reported the path
+        const originalPath = artifact.url;
+        const kind = artifact.type === 'app' ? 'app' : 'html';
+        skillLogger.info('develop-web-game', `Artifact found: kind=${kind} path=${originalPath}`);
+
+        // Copy file to the expected directory structure (html_generated or app_generated)
+        if (context.userId) {
+          try {
+            const filename = basename(originalPath);
+            const targetDir = join(USER_DATA_DIR, String(context.userId), `${kind}_generated`);
+            await mkdir(targetDir, { recursive: true });
+            const targetPath = join(targetDir, filename);
+            await copyFile(originalPath, targetPath);
+            skillLogger.info('develop-web-game', `File copied to: ${targetPath}`);
+
+            response.outputFiles = [{
+              path: targetPath,
+              kind,
+              title: artifact.description ?? description,
+            }];
+          } catch (err: any) {
+            skillLogger.error('develop-web-game', `Failed to copy file: ${err.message}`);
+            // Fallback: use original path
+            response.outputFiles = [{
+              path: originalPath,
+              kind,
+              title: artifact.description ?? description,
+            }];
+          }
+        } else {
+          response.outputFiles = [{
+            path: originalPath,
+            kind,
+            title: artifact.description ?? description,
+          }];
+        }
+      } else {
+        // Fallback: try to find a file path in the reply (e.g., "/path/to/snake.html")
+        const fallbackPath = extractFilePathFromReply(result.reply);
+        if (fallbackPath && context.userId) {
+          skillLogger.info('develop-web-game', `Fallback path detected: ${fallbackPath}`);
+          const kind = fallbackPath.endsWith('.html') ? 'html' : 'app';
+
+          try {
+            const filename = basename(fallbackPath);
+            const targetDir = join(USER_DATA_DIR, String(context.userId), `${kind}_generated`);
+            await mkdir(targetDir, { recursive: true });
+            const targetPath = join(targetDir, filename);
+            await copyFile(fallbackPath, targetPath);
+            skillLogger.info('develop-web-game', `File copied to: ${targetPath}`);
+
+            response.outputFiles = [{
+              path: targetPath,
+              kind,
+              title: description,
+            }];
+          } catch (err: any) {
+            skillLogger.error('develop-web-game', `Failed to copy fallback file: ${err.message}`);
+            // Use original path as last resort
+            response.outputFiles = [{
+              path: fallbackPath,
+              kind,
+              title: description,
+            }];
+          }
+        } else {
+          skillLogger.warn('develop-web-game', 'No artifact path found in AI reply. Last 300 chars:', result.reply.slice(-300));
+        }
+      }
+
+      if (response.outputFiles?.length) {
+        skillLogger.info('develop-web-game', 'Returning outputFiles:', response.outputFiles);
+      }
+
+      return response;
+    }
+
+    return { success: false, reply: 'Web game development execution requires AgentService.' };
+  },
+};
+
 const builtinSkills: BuiltinSkillDefinition[] = [
   codeAnalysisSkill,
   imageGenerationSkill,
   videoGenerationSkill,
+  learningPlanSkill,
+  developWebGameSkill,
   helpSkill,
 ];
 

@@ -142,7 +142,7 @@ async function handleFileDownload(file: MessageFileAttachment) {
     </div>
 
     <details v-if="visibleReasoning" class="reasoning-block">
-      <summary>Thought Process</summary>
+      <summary>思考过程</summary>
       <MarkdownContent :source="visibleReasoning" />
     </details>
 

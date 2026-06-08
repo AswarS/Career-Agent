@@ -1,4 +1,4 @@
-import { Controller, ForbiddenException, Get, Param, Req } from '@nestjs/common';
+import { Controller, ForbiddenException, Get, Param, Post, Req } from '@nestjs/common';
 import type { Request } from 'express';
 import { ArtifactService } from './artifact.service';
 
@@ -6,16 +6,57 @@ import { ArtifactService } from './artifact.service';
 export class ArtifactController {
   constructor(private readonly artifactService: ArtifactService) {}
 
-  @Get(':id')
-  getById(@Req() req: Request, @Param('id') uid: string) {
-    const requestedUserId = Number(uid);
+  @Get()
+  listArtifacts(@Req() req: Request) {
     const currentUserId = req.userId;
     if (!currentUserId) {
       throw new ForbiddenException('Missing user identity');
     }
-    if (Number.isInteger(requestedUserId) && requestedUserId !== currentUserId) {
-      throw new ForbiddenException('You do not have access to this user artifacts');
-    }
     return this.artifactService.listArtifacts(currentUserId);
+  }
+
+  @Get(':artifactId')
+  async getById(@Req() req: Request, @Param('artifactId') artifactId: string) {
+    const currentUserId = req.userId;
+    if (!currentUserId) {
+      throw new ForbiddenException('Missing user identity');
+    }
+
+    const id = Number(artifactId);
+    if (!Number.isFinite(id)) {
+      // If the param isn't numeric, treat it as a list-for-user request (backward compat)
+      return this.artifactService.listArtifacts(currentUserId);
+    }
+
+    const artifact = await this.artifactService.getArtifactById(id);
+
+    // Verify ownership
+    if (artifact.userId !== currentUserId) {
+      throw new ForbiddenException('You do not have access to this artifact');
+    }
+
+    return artifact;
+  }
+
+  @Post(':artifactId/refresh')
+  async refreshArtifact(@Req() req: Request, @Param('artifactId') artifactId: string) {
+    const currentUserId = req.userId;
+    if (!currentUserId) {
+      throw new ForbiddenException('Missing user identity');
+    }
+
+    const id = Number(artifactId);
+    if (!Number.isFinite(id)) {
+      return null;
+    }
+
+    const artifact = await this.artifactService.getArtifactById(id);
+
+    if (artifact.userId !== currentUserId) {
+      throw new ForbiddenException('You do not have access to this artifact');
+    }
+
+    // For now, just return the existing artifact (no dynamic refresh logic yet)
+    return artifact;
   }
 }

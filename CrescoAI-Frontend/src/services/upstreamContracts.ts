@@ -299,6 +299,7 @@ function normalizeOptionalText(value: string | null | undefined): string | undef
 
 function normalizeMessageMedia(media: UpstreamMessageMedia[] | null | undefined): MessageMedia[] | undefined {
   const nextMedia: MessageMedia[] = [];
+  const supportedKinds = new Set(['image', 'video', 'html', 'app']);
 
   for (const item of media ?? []) {
     const kind = item.kind ?? item.type;
@@ -316,7 +317,7 @@ function normalizeMessageMedia(media: UpstreamMessageMedia[] | null | undefined)
       storedFileName,
     });
 
-    if ((kind !== 'image' && kind !== 'video') || !url) {
+    if (!kind || !supportedKinds.has(kind) || !url) {
       continue;
     }
 
@@ -637,11 +638,13 @@ export function normalizeArtifactRecord(input: UpstreamArtifactRecord): Artifact
   };
 
   if (renderMode === 'url') {
+    const rawUrl = input.payload?.url?.trim() ?? payloadPath ?? '';
+    const resolvedUrl = resolveUpstreamAssetUrl(rawUrl) ?? rawUrl;
     return {
       ...baseRecord,
       renderMode,
       payload: {
-        url: input.payload?.url?.trim() ?? payloadPath ?? '',
+        url: resolvedUrl,
       },
     };
   }

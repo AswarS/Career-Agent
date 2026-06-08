@@ -29,4 +29,25 @@ export class ArtifactService {
       order: { createdAt: 'ASC' },
     });
   }
+
+  async createArtifact(dto: {
+    userId: number;
+    type: string;
+    title: string;
+    renderMode: string;
+    payloadPath?: string;
+    summary?: string;
+  }): Promise<ArtifactEntity> {
+    const artifact = this.artifactRepo.create({
+      userId: dto.userId,
+      type: dto.type,
+      title: dto.title,
+      status: 'ready',
+      renderMode: dto.renderMode,
+      payloadPath: dto.payloadPath,
+      summary: dto.summary,
+      createdAt: new Date(),
+    });
+    return this.artifactRepo.save(artifact);
+  }
 }

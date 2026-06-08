@@ -8,9 +8,10 @@ import { ResourceEntity } from '../resource/entities/resource.entity';
 import { AgentModule } from '../agent/agent.module';
 import { SkillModule } from '../skill/skill.module';
 import { AuthModule } from '../auth/auth.module';
+import { ArtifactModule } from '../artifact/artifact.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([ConversationEntity, MessageEntity, ResourceEntity]), AgentModule, SkillModule, AuthModule],
+  imports: [TypeOrmModule.forFeature([ConversationEntity, MessageEntity, ResourceEntity]), AgentModule, SkillModule, AuthModule, ArtifactModule],
   controllers: [ConversationController],
   providers: [ConversationService],
 })

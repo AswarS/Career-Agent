@@ -11,10 +11,12 @@ import { randomUUID } from 'node:crypto';
 import { basename, extname, join } from 'node:path';
 import { TextDecoder } from 'node:util';
 import { detectOutputType } from '../../utils/detectOutputType.js';
+import { skillLogger } from '../../utils/skillLogger.js';
 import { fileURLToPath } from 'node:url';
 import { Repository } from 'typeorm';
 import { AgentService } from '../agent/agent.service';
 import { SkillService } from '../skill/skill.service';
+import { ArtifactService } from '../artifact/artifact.service';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { SendMultimodalMessageDto } from './dto/send-multimodal-message.dto';
 import { ConversationEntity } from './entities/conversation.entity';
@@ -110,6 +112,7 @@ interface RuntimeJsonlEvent {
     id?: string;
     role?: 'user' | 'assistant' | 'system';
     content?: unknown;
+    actions?: MessageAction[];
   };
 }
 
@@ -207,6 +210,7 @@ export class ConversationService {
     private readonly messageResourceRepo: Repository<ResourceEntity>,
     private readonly agentService: AgentService,
     private readonly skillService: SkillService,
+    private readonly artifactService: ArtifactService,
   ) {}
 
   async createConversation(dto: CreateConversationDto, requestUserId?: number) {
@@ -491,15 +495,81 @@ export class ConversationService {
         'utf8',
       );
 
+      // For skill results with output files (e.g. games), show a concise description
+      // and tuck the full AI reply into a collapsible "thinking" block.
+      const hasOutputFiles = Boolean(skillResult.outputFiles?.length);
+      const visibleReply = hasOutputFiles
+        ? (skillResult.outputFiles![0].title ?? '应用已生成，请点击「打开应用」查看。')
+        : skillResult.reply;
+      const thinkingContent = hasOutputFiles ? skillResult.reply : undefined;
+
+      const assistantContentBlocks: Array<Record<string, unknown>> = [];
+      if (thinkingContent) {
+        assistantContentBlocks.push({ type: 'thinking', thinking: thinkingContent });
+      }
+      assistantContentBlocks.push({ type: 'text', text: visibleReply });
+
       await appendFile(
         sessionFilePath,
-        `${JSON.stringify({ type: 'assistant', message: { id: assistantMessageId, role: 'assistant', content: [{ type: 'text', text: skillResult.reply }] }, uuid: replyEventUuid, timestamp: new Date(now.getTime() + 500).toISOString(), sessionId: conversation.id })}\n`,
+        `${JSON.stringify({ type: 'assistant', message: { id: assistantMessageId, role: 'assistant', content: assistantContentBlocks }, uuid: replyEventUuid, timestamp: new Date(now.getTime() + 500).toISOString(), sessionId: conversation.id })}\n`,
         'utf8',
       );
 
       if (skillResult.outputFiles?.length) {
+        skillLogger.info('ConversationService', 'Skill outputFiles:', skillResult.outputFiles);
         const media = this.skillOutputFilesToMedia(skillResult.outputFiles, conversation.userId);
+        skillLogger.info('ConversationService', 'Mapped media:', media.map(m => ({ id: m.id, kind: m.kind, url: m.url })));
         await this.replaceMessageResourceMappings(conversation.userId, conversation.id, assistantMessageId, media);
+
+        // Create artifact and add "open-artifact" action to the message
+        const firstFile = skillResult.outputFiles[0];
+        const artifactKind = firstFile.kind ?? 'html';
+        const artifactUrl = media[0]?.url ?? '';
+        try {
+          const artifact = await this.artifactService.createArtifact({
+            userId: conversation.userId,
+            type: artifactKind === 'app' ? 'app-example' : 'generated-html',
+            title: firstFile.title ?? basename(firstFile.path),
+            renderMode: 'url',
+            payloadPath: artifactUrl,
+            summary: `Generated ${artifactKind} application`,
+          });
+          skillLogger.info('ConversationService', `Artifact created: id=${artifact.id} url=${artifactUrl}`);
+
+          // Re-write assistant event with actions
+          const actionsPayload = [{
+            id: `action-open-artifact-${artifact.id}`,
+            kind: 'open_artifact',
+            label: '打开应用',
+            artifact_id: String(artifact.id),
+            artifactId: String(artifact.id),
+            view_mode: 'focus',
+            viewMode: 'focus',
+          }];
+          const updatedEvent = JSON.stringify({
+            type: 'assistant',
+            message: { id: assistantMessageId, role: 'assistant', content: assistantContentBlocks, actions: actionsPayload },
+            uuid: replyEventUuid,
+            timestamp: new Date(now.getTime() + 500).toISOString(),
+            sessionId: conversation.id,
+          });
+          const sessionContent = await readFile(sessionFilePath, 'utf8');
+          const lines = sessionContent.trimEnd().split('\n');
+          for (let i = lines.length - 1; i >= 0; i--) {
+            try {
+              const parsed = JSON.parse(lines[i]);
+              if (parsed.type === 'assistant' && parsed.message?.id === assistantMessageId) {
+                lines[i] = updatedEvent;
+                break;
+              }
+            } catch { /* skip */ }
+          }
+          await writeFile(sessionFilePath, lines.join('\n') + '\n', 'utf8');
+        } catch (err: any) {
+          skillLogger.error('ConversationService', `Failed to create artifact: ${err.message}`);
+        }
+      } else {
+        skillLogger.warn('ConversationService', 'No outputFiles returned from skill');
       }
 
       await this.touchConversation(conversation, dto.content);
@@ -513,7 +583,7 @@ export class ConversationService {
         messageId: userMessageId,
         assistant_message_id: assistantMessageId,
         assistantMessageId: assistantMessageId,
-        reply: skillResult.reply,
+        reply: visibleReply,
         raw: { source: 'skill', skillName: skillInvocation.skillName, ...skillResult.metadata },
       };
     }
@@ -552,15 +622,81 @@ export class ConversationService {
         'utf8',
       );
 
+      // For skill results with output files (e.g. games), show a concise description
+      // and tuck the full AI reply into a collapsible "thinking" block.
+      const hasOutputFiles = Boolean(skillResult.outputFiles?.length);
+      const visibleReply = hasOutputFiles
+        ? (skillResult.outputFiles![0].title ?? '应用已生成，请点击「打开应用」查看。')
+        : skillResult.reply;
+      const thinkingContent = hasOutputFiles ? skillResult.reply : undefined;
+
+      const assistantContentBlocks: Array<Record<string, unknown>> = [];
+      if (thinkingContent) {
+        assistantContentBlocks.push({ type: 'thinking', thinking: thinkingContent });
+      }
+      assistantContentBlocks.push({ type: 'text', text: visibleReply });
+
       await appendFile(
         sessionFilePath,
-        `${JSON.stringify({ type: 'assistant', message: { id: assistantMessageId, role: 'assistant', content: [{ type: 'text', text: skillResult.reply }] }, uuid: replyEventUuid, timestamp: new Date(now.getTime() + 500).toISOString(), sessionId: conversation.id })}\n`,
+        `${JSON.stringify({ type: 'assistant', message: { id: assistantMessageId, role: 'assistant', content: assistantContentBlocks }, uuid: replyEventUuid, timestamp: new Date(now.getTime() + 500).toISOString(), sessionId: conversation.id })}\n`,
         'utf8',
       );
 
       if (skillResult.outputFiles?.length) {
+        skillLogger.info('ConversationService', 'Skill outputFiles:', skillResult.outputFiles);
         const media = this.skillOutputFilesToMedia(skillResult.outputFiles, conversation.userId);
+        skillLogger.info('ConversationService', 'Mapped media:', media.map(m => ({ id: m.id, kind: m.kind, url: m.url })));
         await this.replaceMessageResourceMappings(conversation.userId, conversation.id, assistantMessageId, media);
+
+        // Create artifact and add "open-artifact" action to the message
+        const firstFile = skillResult.outputFiles[0];
+        const artifactKind = firstFile.kind ?? 'html';
+        const artifactUrl = media[0]?.url ?? '';
+        try {
+          const artifact = await this.artifactService.createArtifact({
+            userId: conversation.userId,
+            type: artifactKind === 'app' ? 'app-example' : 'generated-html',
+            title: firstFile.title ?? basename(firstFile.path),
+            renderMode: 'url',
+            payloadPath: artifactUrl,
+            summary: `Generated ${artifactKind} application`,
+          });
+          skillLogger.info('ConversationService', `Artifact created: id=${artifact.id} url=${artifactUrl}`);
+
+          // Re-write assistant event with actions
+          const actionsPayload = [{
+            id: `action-open-artifact-${artifact.id}`,
+            kind: 'open_artifact',
+            label: '打开应用',
+            artifact_id: String(artifact.id),
+            artifactId: String(artifact.id),
+            view_mode: 'focus',
+            viewMode: 'focus',
+          }];
+          const updatedEvent = JSON.stringify({
+            type: 'assistant',
+            message: { id: assistantMessageId, role: 'assistant', content: assistantContentBlocks, actions: actionsPayload },
+            uuid: replyEventUuid,
+            timestamp: new Date(now.getTime() + 500).toISOString(),
+            sessionId: conversation.id,
+          });
+          const sessionContent = await readFile(sessionFilePath, 'utf8');
+          const lines = sessionContent.trimEnd().split('\n');
+          for (let i = lines.length - 1; i >= 0; i--) {
+            try {
+              const parsed = JSON.parse(lines[i]);
+              if (parsed.type === 'assistant' && parsed.message?.id === assistantMessageId) {
+                lines[i] = updatedEvent;
+                break;
+              }
+            } catch { /* skip */ }
+          }
+          await writeFile(sessionFilePath, lines.join('\n') + '\n', 'utf8');
+        } catch (err: any) {
+          skillLogger.error('ConversationService', `Failed to create artifact: ${err.message}`);
+        }
+      } else {
+        skillLogger.warn('ConversationService', 'No outputFiles returned from skill');
       }
 
       await this.touchConversation(conversation, dto.content);
@@ -574,7 +710,7 @@ export class ConversationService {
         messageId: userMessageId,
         assistant_message_id: assistantMessageId,
         assistantMessageId: assistantMessageId,
-        reply: skillResult.reply,
+        reply: visibleReply,
         raw: {
           source: 'skill:auto',
           skillName: autoRoute.skillName,
@@ -1019,6 +1155,9 @@ export class ConversationService {
       kind: content ? 'markdown' : 'status',
       content: content || 'Assistant is thinking...',
       reasoning: reasoning || undefined,
+      actions: Array.isArray(event.message?.actions) && event.message.actions.length
+        ? event.message.actions
+        : undefined,
       created_at: createdAt,
       createdAt,
     };
