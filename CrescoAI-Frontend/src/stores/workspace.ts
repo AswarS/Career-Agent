@@ -115,6 +115,7 @@ interface WorkspaceState {
   profileSaveStatus: LoadState;
   artifactsStatus: LoadState;
   messageSubmitStatus: LoadState;
+  messageSubmitThreadId: string | null;
   errorMessage: string | null;
 }
 
@@ -141,6 +142,7 @@ export const useWorkspaceStore = defineStore('workspace', {
     profileSaveStatus: 'idle',
     artifactsStatus: 'idle',
     messageSubmitStatus: 'idle',
+    messageSubmitThreadId: null,
     errorMessage: null,
   }),
   getters: {
@@ -594,6 +596,7 @@ export const useWorkspaceStore = defineStore('workspace', {
         this.messagesStatus = 'ready';
       }
       this.messageSubmitStatus = 'loading';
+      this.messageSubmitThreadId = targetThreadId;
       this.errorMessage = null;
       this.messages.push({
         id: pendingMessageId,
@@ -610,6 +613,9 @@ export const useWorkspaceStore = defineStore('workspace', {
         stage: 'upload' | 'send' | 'refresh',
         error: unknown,
       ) => {
+        this.messageSubmitStatus = 'error';
+        this.messageSubmitThreadId = null;
+
         if (this.activeThreadId !== targetThreadId) {
           return;
         }
@@ -622,7 +628,6 @@ export const useWorkspaceStore = defineStore('workspace', {
             : '消息已发送，但刷新消息列表失败';
 
         this.messagesStatus = 'ready';
-        this.messageSubmitStatus = 'error';
         this.errorMessage = rawMessage;
         this.messages.push({
           id: createMessageId('send-error'),
@@ -678,6 +683,8 @@ export const useWorkspaceStore = defineStore('workspace', {
       }
 
       if (this.activeThreadId !== targetThreadId) {
+        this.messageSubmitStatus = 'ready';
+        this.messageSubmitThreadId = null;
         return;
       }
 
@@ -685,6 +692,7 @@ export const useWorkspaceStore = defineStore('workspace', {
       this.messages = nextMessages;
       this.messagesStatus = 'ready';
       this.messageSubmitStatus = 'ready';
+      this.messageSubmitThreadId = null;
     },
     closeArtifact() {
       this.artifactPaneOpen = false;
