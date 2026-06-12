@@ -365,4 +365,72 @@ describe('useWorkspaceStore createThread upstream state', () => {
     expect(workspaceStore.messageSubmitStatus).toBe('error');
     expect(workspaceStore.errorMessage).toBe('upload failed');
   });
+
+  it('clears submission loading state when the user switches threads before completion', async () => {
+    let resolveSend!: (value: {
+      accepted: true;
+      messageId: string;
+      assistantMessageId: string;
+      status: 'done';
+    }) => void;
+    const sendMessage = vi.fn(() => new Promise<{
+      accepted: true;
+      messageId: string;
+      assistantMessageId: string;
+      status: 'done';
+    }>((resolve) => {
+      resolveSend = resolve;
+    }));
+    const client = createClient({ sendMessage });
+    const workspaceStore = await createStoreWithClient(client);
+
+    workspaceStore.activeThreadId = '1';
+    const submission = workspaceStore.submitDraftMessage({
+      content: '异步消息',
+      attachments: [],
+    });
+
+    await vi.waitFor(() => {
+      expect(workspaceStore.messageSubmitStatus).toBe('loading');
+      expect(workspaceStore.messageSubmitThreadId).toBe('1');
+    });
+
+    workspaceStore.activeThreadId = 'another-thread';
+    resolveSend({
+      accepted: true,
+      messageId: 'message-user',
+      assistantMessageId: 'message-assistant',
+      status: 'done',
+    });
+    await submission;
+
+    expect(workspaceStore.messageSubmitStatus).toBe('ready');
+    expect(workspaceStore.messageSubmitThreadId).toBeNull();
+  });
+
+  it('clears submission loading state after an inactive thread request fails', async () => {
+    let rejectSend!: (error: Error) => void;
+    const sendMessage = vi.fn(() => new Promise<never>((_resolve, reject) => {
+      rejectSend = reject;
+    }));
+    const client = createClient({ sendMessage });
+    const workspaceStore = await createStoreWithClient(client);
+
+    workspaceStore.activeThreadId = '1';
+    const submission = workspaceStore.submitDraftMessage({
+      content: '异步消息',
+      attachments: [],
+    });
+
+    await vi.waitFor(() => {
+      expect(workspaceStore.messageSubmitStatus).toBe('loading');
+    });
+
+    workspaceStore.activeThreadId = 'another-thread';
+    rejectSend(new Error('send failed'));
+    await submission;
+
+    expect(workspaceStore.messageSubmitStatus).toBe('error');
+    expect(workspaceStore.messageSubmitThreadId).toBeNull();
+  });
 });

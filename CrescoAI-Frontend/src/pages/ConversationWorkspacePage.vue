@@ -12,13 +12,24 @@ import type { DraftMessageSubmission, MessageAction } from '../types/entities';
 const route = useRoute();
 const router = useRouter();
 const workspaceStore = useWorkspaceStore();
-const { activeThread, errorMessage, messages, messagesStatus, messageSubmitStatus } = storeToRefs(workspaceStore);
+const {
+  activeThread,
+  errorMessage,
+  messages,
+  messagesStatus,
+  messageSubmitStatus,
+  messageSubmitThreadId,
+} = storeToRefs(workspaceStore);
 const minimumRunningIndicatorMs = 360;
 
 const threadId = computed(() => String(route.params.threadId ?? 'thread-001'));
 const multiAgentMode = computed(() => shouldUseMultiAgentPresentation(messages.value));
 const localSubmitRunning = ref(false);
-const isConversationRunning = computed(() => messageSubmitStatus.value === 'loading' || localSubmitRunning.value);
+const localSubmitThreadId = ref<string | null>(null);
+const isConversationRunning = computed(() => (
+  messageSubmitThreadId.value === threadId.value
+  || (localSubmitRunning.value && localSubmitThreadId.value === threadId.value)
+));
 const conversationScrollRegion = ref<HTMLElement | null>(null);
 let submitRunToken = 0;
 
@@ -77,6 +88,7 @@ async function handleSubmit(submission: DraftMessageSubmission) {
   const currentToken = ++submitRunToken;
   const startedAt = Date.now();
   localSubmitRunning.value = true;
+  localSubmitThreadId.value = threadId.value;
 
   try {
     await workspaceStore.submitDraftMessage(submission);
@@ -85,6 +97,7 @@ async function handleSubmit(submission: DraftMessageSubmission) {
 
     if (currentToken === submitRunToken) {
       localSubmitRunning.value = false;
+      localSubmitThreadId.value = null;
     }
   }
 }
