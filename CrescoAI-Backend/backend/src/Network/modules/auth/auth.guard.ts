@@ -3,6 +3,7 @@ import { Reflector } from '@nestjs/core';
 import { AuthService } from './auth.service';
 import type { AuthenticatedRequest } from './auth.types';
 import { IS_PUBLIC_ROUTE } from './public.decorator';
+import { verifyFileDownloadToken } from '../../utils/fileDownloadToken.js';
 
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -24,6 +25,13 @@ export class AuthGuard implements CanActivate {
 
     const token = this.getBearerToken(request.headers.authorization);
     if (!token) {
+      const downloadUser = this.getDownloadTokenUser(request);
+      if (downloadUser) {
+        request.user = { id: String(downloadUser.userId) };
+        request.userId = downloadUser.userId;
+        return true;
+      }
+
       throw new UnauthorizedException({
         code: 'UNAUTHORIZED',
         message: 'authorization bearer token is required',
@@ -49,5 +57,36 @@ export class AuthGuard implements CanActivate {
     }
 
     return token;
+  }
+
+  private getDownloadTokenUser(request: AuthenticatedRequest) {
+    if (request.method?.toUpperCase() !== 'GET') {
+      return undefined;
+    }
+
+    const path = request.path ?? request.url?.split('?', 1)[0] ?? '';
+    const match = path.match(/^\/api\/career-agent\/threads\/([^/]+)\/files\/([^/]+)$/);
+    if (!match) {
+      return undefined;
+    }
+
+    const token = this.getQueryValue(request.query?.download_token ?? request.query?.token);
+    if (!token) {
+      return undefined;
+    }
+
+    const conversationId = decodeURIComponent(match[1]);
+    const fileName = decodeURIComponent(match[2]);
+    return verifyFileDownloadToken(token, { conversationId, fileName });
+  }
+
+  private getQueryValue(value: unknown) {
+    if (typeof value === 'string') {
+      return value;
+    }
+    if (Array.isArray(value) && typeof value[0] === 'string') {
+      return value[0];
+    }
+    return undefined;
   }
 }

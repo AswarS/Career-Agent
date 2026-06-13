@@ -20,9 +20,12 @@ export interface SkillHandlerResult {
     title?: string;
   }>;
   outputFiles?: Array<{
-    path: string;
-    kind?: 'image' | 'video' | 'html' | 'app' | 'file';
+    path?: string;
+    url?: string;
+    kind?: 'image' | 'audio' | 'video' | 'html' | 'app' | 'file';
     title?: string;
+    mimeType?: string;
+    sizeBytes?: number;
   }>;
 }
 

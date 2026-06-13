@@ -200,7 +200,7 @@ export function createUpstreamCareerAgentClient(
       return normalizeThreadSummary(payload);
     },
     async deleteThread(threadId: string) {
-      await requestOptionalJson<unknown>(
+      await requestJson<unknown>(
         CAREER_AGENT_API_ROUTES.thread(threadId),
         { method: 'DELETE' },
       );

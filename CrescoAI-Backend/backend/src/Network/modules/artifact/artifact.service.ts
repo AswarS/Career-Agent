@@ -32,19 +32,35 @@ export class ArtifactService {
 
   async createArtifact(dto: {
     userId: number;
+    conversationId?: string;
+    messageId?: string;
     type: string;
+    kind?: string;
     title: string;
     renderMode: string;
     payloadPath?: string;
+    url?: string;
+    storagePath?: string;
+    mimeType?: string;
+    sizeBytes?: number;
+    metadata?: Record<string, unknown>;
     summary?: string;
   }): Promise<ArtifactEntity> {
     const artifact = this.artifactRepo.create({
       userId: dto.userId,
+      conversationId: dto.conversationId,
+      messageId: dto.messageId,
       type: dto.type,
+      kind: dto.kind,
       title: dto.title,
       status: 'ready',
       renderMode: dto.renderMode,
       payloadPath: dto.payloadPath,
+      url: dto.url ?? dto.payloadPath,
+      storagePath: dto.storagePath,
+      mimeType: dto.mimeType,
+      sizeBytes: dto.sizeBytes,
+      metadataJson: dto.metadata ? JSON.stringify(dto.metadata) : undefined,
       summary: dto.summary,
       createdAt: new Date(),
     });

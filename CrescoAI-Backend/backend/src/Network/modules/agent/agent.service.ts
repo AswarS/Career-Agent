@@ -313,6 +313,7 @@ export class AgentService {
         userMessageId,
         assistantMessageId,
         reply: qeResult.reply,
+        reasoning: qeResult.thinking,
         generatedFiles: qeResult.generatedFiles,
         raw: {
           model: qeResult.model,
@@ -374,6 +375,7 @@ export class AgentService {
       userMessageId,
       assistantMessageId,
       reply: stubReply,
+      reasoning: `Preparing a response for: ${userVisibleContent}`,
       raw: {
         kind: input.kind ?? 'markdown',
         attachmentCount: input.attachments?.length ?? 0,
@@ -555,11 +557,15 @@ export class AgentService {
     sinceMs: number,
   ): Promise<GeneratedFile[]> {
     const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp']);
+    const AUDIO_EXTS = new Set(['.mp3', '.wav', '.ogg', '.flac', '.aac', '.m4a', '.wma', '.aiff', '.opus']);
     const VIDEO_EXTS = new Set(['.mp4', '.webm', '.mov', '.avi', '.mkv']);
+    const HTML_EXTS = new Set(['.html', '.htm']);
     const dirs: Array<{ subdir: string; kind: GeneratedFile['kind'] }> = [
       { subdir: 'image_generated', kind: 'image' },
+      { subdir: 'audio_generated', kind: 'audio' },
       { subdir: 'video_generated', kind: 'video' },
       { subdir: 'html_generated', kind: 'html' },
+      { subdir: 'app_generated', kind: 'app' },
     ];
     const results: GeneratedFile[] = [];
 
@@ -581,7 +587,10 @@ export class AgentService {
             const ext = extname(name).toLowerCase();
             let resolvedKind = kind;
             if (kind === 'image' && !IMAGE_EXTS.has(ext)) continue;
+            if (kind === 'audio' && !AUDIO_EXTS.has(ext)) continue;
             if (kind === 'video' && !VIDEO_EXTS.has(ext)) continue;
+            if (kind === 'html' && !HTML_EXTS.has(ext)) continue;
+            if (kind === 'app' && !s.isDirectory()) continue;
             results.push({ path: filePath, kind: resolvedKind });
           }
         } catch {

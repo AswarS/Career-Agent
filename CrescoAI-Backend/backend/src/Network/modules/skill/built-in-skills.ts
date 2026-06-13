@@ -2,7 +2,7 @@ import type { SkillHandler, SkillHandlerResult } from './skill.registry';
 import { ImageGenerateTool } from '../../../tools/ImageGenerateTool/ImageGenerateTool.js';
 import { VideoGenerateTool } from '../../../tools/VideoGenerateTool/VideoGenerateTool.js';
 import { skillLogger } from '../../utils/skillLogger.js';
-import { readFile, copyFile, mkdir } from 'node:fs/promises';
+import { readFile, copyFile, cp, mkdir, stat } from 'node:fs/promises';
 import { join, basename, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -351,11 +351,14 @@ async function loadSkillContent(skillName: string): Promise<string | null> {
 
 /**
  * Parse the OUTPUT_ARTIFACT line from the AI's reply.
- * Expected format: OUTPUT_ARTIFACT: {"url":"...","type":"html|app|image|video","description":"..."}
+ * Expected format: OUTPUT_ARTIFACT: {"url":"...","type":"html|app|image|audio|video","description":"..."}
  */
+type OutputArtifactKind = 'html' | 'app' | 'image' | 'audio' | 'video';
+const OUTPUT_ARTIFACT_KINDS = new Set<OutputArtifactKind>(['html', 'app', 'image', 'audio', 'video']);
+
 function parseOutputArtifact(reply: string): {
   url: string;
-  type: 'html' | 'app' | 'image' | 'video';
+  type: OutputArtifactKind;
   description: string;
 } | null {
   const regex = /OUTPUT_ARTIFACT:\s*(\{[\s\S]*?\})\s*$/m;
@@ -364,10 +367,15 @@ function parseOutputArtifact(reply: string): {
 
   try {
     const parsed = JSON.parse(match[1]);
-    if (parsed && typeof parsed.url === 'string' && typeof parsed.type === 'string') {
+    if (
+      parsed &&
+      typeof parsed.url === 'string' &&
+      typeof parsed.type === 'string' &&
+      OUTPUT_ARTIFACT_KINDS.has(parsed.type as OutputArtifactKind)
+    ) {
       return {
         url: parsed.url,
-        type: parsed.type as 'html' | 'app' | 'image' | 'video',
+        type: parsed.type as OutputArtifactKind,
         description: parsed.description ?? '',
       };
     }
@@ -380,6 +388,34 @@ function parseOutputArtifact(reply: string): {
  */
 function stripArtifactLine(reply: string): string {
   return reply.replace(/\n*OUTPUT_ARTIFACT:\s*\{[\s\S]*?\}\s*$/m, '').trim();
+}
+
+async function copyGeneratedArtifactToUserDir(
+  originalPath: string,
+  kind: OutputArtifactKind,
+  userId: number,
+): Promise<string> {
+  const originalStat = await stat(originalPath);
+  const sourcePath =
+    kind === 'app' && !originalStat.isDirectory() && basename(originalPath).toLowerCase() === 'index.html'
+      ? dirname(originalPath)
+      : originalPath;
+  const sourceStat = sourcePath === originalPath ? originalStat : await stat(sourcePath);
+  const targetDir = join(USER_DATA_DIR, String(userId), `${kind}_generated`);
+  await mkdir(targetDir, { recursive: true });
+  const targetPath = join(targetDir, basename(sourcePath));
+
+  if (sourceStat.isDirectory()) {
+    await cp(sourcePath, targetPath, { recursive: true, force: true });
+  } else {
+    await copyFile(sourcePath, targetPath);
+  }
+
+  return targetPath;
+}
+
+function isHttpUrl(value: string): boolean {
+  return /^https?:\/\//i.test(value);
 }
 
 /**
@@ -530,18 +566,19 @@ const developWebGameSkill: BuiltinSkillDefinition = {
       if (artifact && artifact.url) {
         // AI wrote files to disk and reported the path
         const originalPath = artifact.url;
-        const kind = artifact.type === 'app' ? 'app' : 'html';
+        const kind = artifact.type;
         skillLogger.info('develop-web-game', `Artifact found: kind=${kind} path=${originalPath}`);
 
-        // Copy file to the expected directory structure (html_generated or app_generated)
-        if (context.userId) {
+        if (isHttpUrl(originalPath)) {
+          response.outputFiles = [{
+            url: originalPath,
+            kind,
+            title: artifact.description ?? description,
+          }];
+        } else if (context.userId) {
           try {
-            const filename = basename(originalPath);
-            const targetDir = join(USER_DATA_DIR, String(context.userId), `${kind}_generated`);
-            await mkdir(targetDir, { recursive: true });
-            const targetPath = join(targetDir, filename);
-            await copyFile(originalPath, targetPath);
-            skillLogger.info('develop-web-game', `File copied to: ${targetPath}`);
+            const targetPath = await copyGeneratedArtifactToUserDir(originalPath, kind, context.userId);
+            skillLogger.info('develop-web-game', `Artifact copied to: ${targetPath}`);
 
             response.outputFiles = [{
               path: targetPath,
@@ -569,15 +606,11 @@ const developWebGameSkill: BuiltinSkillDefinition = {
         const fallbackPath = extractFilePathFromReply(result.reply);
         if (fallbackPath && context.userId) {
           skillLogger.info('develop-web-game', `Fallback path detected: ${fallbackPath}`);
-          const kind = fallbackPath.endsWith('.html') ? 'html' : 'app';
+          const kind: OutputArtifactKind = fallbackPath.endsWith('.html') ? 'html' : 'app';
 
           try {
-            const filename = basename(fallbackPath);
-            const targetDir = join(USER_DATA_DIR, String(context.userId), `${kind}_generated`);
-            await mkdir(targetDir, { recursive: true });
-            const targetPath = join(targetDir, filename);
-            await copyFile(fallbackPath, targetPath);
-            skillLogger.info('develop-web-game', `File copied to: ${targetPath}`);
+            const targetPath = await copyGeneratedArtifactToUserDir(fallbackPath, kind, context.userId);
+            skillLogger.info('develop-web-game', `Fallback artifact copied to: ${targetPath}`);
 
             response.outputFiles = [{
               path: targetPath,

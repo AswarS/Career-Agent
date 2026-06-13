@@ -1,8 +1,10 @@
 import {
   Body,
   Controller,
+  Delete,
   ForbiddenException,
   Get,
+  HttpCode,
   Param,
   Post,
   Req,
@@ -14,6 +16,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
+import contentDisposition from 'content-disposition';
 import { readFile } from 'node:fs/promises';
 import type { Request, Response } from 'express';
 import { ConversationService } from './conversation.service';
@@ -41,6 +44,17 @@ export class ConversationController {
       throw new ForbiddenException('You do not have access to this user conversations');
     }
     return this.conversationService.listConversations(currentUserId);
+  }
+
+  @Delete(':id')
+  @HttpCode(204)
+  @UseGuards(OwnershipGuard)
+  async delete(@Req() req: Request, @Param('id') conversationId: string) {
+    if (!req.userId) {
+      throw new ForbiddenException('Missing user identity');
+    }
+
+    await this.conversationService.deleteConversation(conversationId, req.userId);
   }
 
   @Get(':id/messages')
@@ -90,7 +104,6 @@ export class ConversationController {
       fileName,
       req.userId,
     );
-    const contentDisposition = require('content-disposition')
     response.setHeader('Content-Type', asset.mime_type);
     response.setHeader('Content-Disposition', contentDisposition(asset.originalName, { type: 'inline' }));
 

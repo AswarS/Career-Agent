@@ -15,7 +15,7 @@ const userDataRootDir = join(networkRootDir, 'user');
 @Controller('api/career-agent/generated')
 export class GeneratedController {
   /**
-   * Serve a single generated file (image / video / html).
+   * Serve a single generated file (image / audio / video / html).
    *
    * GET /api/career-agent/generated/:userId/:kind/:filename
    *

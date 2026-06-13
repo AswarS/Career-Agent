@@ -44,9 +44,12 @@ export interface AgentSendMessageInput {
 }
 
 export interface GeneratedFile {
-  path: string;
-  kind: 'image' | 'video' | 'html' | 'app' | 'file';
+  path?: string;
+  url?: string;
+  kind: 'image' | 'audio' | 'video' | 'html' | 'app' | 'file';
   title?: string;
+  mimeType?: string;
+  sizeBytes?: number;
 }
 
 export interface AgentSendMessageResult {
@@ -56,6 +59,7 @@ export interface AgentSendMessageResult {
   userMessageId: string;
   assistantMessageId: string;
   reply: string;
+  reasoning?: string;
   file?: AgentAttachmentInput | AgentAttachmentInput[];
   generatedFiles?: GeneratedFile[];
   raw?: Record<string, unknown>;

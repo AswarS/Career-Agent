@@ -6,15 +6,15 @@
 
 import { join, normalize, sep } from 'node:path';
 
-const VALID_SINGLE_KINDS = new Set(['image', 'video', 'html']);
+const VALID_SINGLE_KINDS = new Set(['image', 'audio', 'video', 'html']);
 
 /**
- * Validates and resolves the absolute path for a generated file (image / video / html).
+ * Validates and resolves the absolute path for a generated file (image / audio / video / html).
  * Does NOT handle app files — those use resolveAppPath.
  *
  * @param baseDir  - The base user-data root directory (i.e. Network/user/)
  * @param userId   - The requesting user's ID (string)
- * @param kind     - One of "image" | "video" | "html"
+ * @param kind     - One of "image" | "audio" | "video" | "html"
  * @param filename - The bare filename (no slashes, no traversal)
  */
 export function resolveGeneratedPath(

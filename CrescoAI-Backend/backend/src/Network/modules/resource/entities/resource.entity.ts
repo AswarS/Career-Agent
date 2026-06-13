@@ -17,6 +17,9 @@ export class ResourceEntity {
   @Column({ type: 'varchar' })
   resourceId!: string;
 
+  @Column({ type: 'varchar', nullable: true })
+  artifactId?: string;
+
   @Column({ type: 'varchar' })
   resourceKind!: string;
 

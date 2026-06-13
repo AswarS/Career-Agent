@@ -179,7 +179,7 @@ describe('createUpstreamCareerAgentClient', () => {
     expect(thread.id).toBe('2');
   });
 
-  it('deletes a thread through the optional delete endpoint', async () => {
+  it('deletes a thread through the required delete endpoint', async () => {
     const request = vi.fn(async () => ({ data: {} }));
     const client = createUpstreamCareerAgentClient({
       baseUrl: 'https://agent.example.com',
@@ -195,7 +195,7 @@ describe('createUpstreamCareerAgentClient', () => {
     });
   });
 
-  it('treats an unimplemented thread delete endpoint as an optional capability', async () => {
+  it('surfaces an unimplemented thread delete endpoint instead of faking success', async () => {
     const request = vi.fn(async () => {
       throw {
         isAxiosError: true,
@@ -211,7 +211,9 @@ describe('createUpstreamCareerAgentClient', () => {
       httpClient: createHttpClient(request),
     });
 
-    await expect(client.deleteThread('12')).resolves.toBeUndefined();
+    await expect(client.deleteThread('12')).rejects.toThrow(
+      'Upstream request failed (405) for /api/career-agent/threads/12',
+    );
   });
 
   it('uploads a file with the backend direct upload endpoint', async () => {
