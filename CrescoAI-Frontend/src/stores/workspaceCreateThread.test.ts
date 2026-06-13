@@ -404,7 +404,8 @@ describe('useWorkspaceStore createThread upstream state', () => {
     });
     await submission;
 
-    expect(workspaceStore.messageSubmitStatus).toBe('ready');
+    expect(workspaceStore.messageSubmitStatus).toBe('idle');
+    expect(workspaceStore.messageSubmitStatusByThread['1']).toBe('ready');
     expect(workspaceStore.messageSubmitThreadId).toBeNull();
   });
 
@@ -423,6 +424,7 @@ describe('useWorkspaceStore createThread upstream state', () => {
     });
 
     await vi.waitFor(() => {
+      expect(sendMessage).toHaveBeenCalledTimes(1);
       expect(workspaceStore.messageSubmitStatus).toBe('loading');
     });
 
@@ -430,7 +432,225 @@ describe('useWorkspaceStore createThread upstream state', () => {
     rejectSend(new Error('send failed'));
     await submission;
 
-    expect(workspaceStore.messageSubmitStatus).toBe('error');
+    expect(workspaceStore.messageSubmitStatus).toBe('idle');
+    expect(workspaceStore.messageSubmitStatusByThread['1']).toBe('error');
     expect(workspaceStore.messageSubmitThreadId).toBeNull();
+  });
+
+  it('restores the pending message and running state after switching away and back', async () => {
+    let resolveSend!: (value: {
+      accepted: true;
+      messageId: string;
+      assistantMessageId: string;
+      status: 'done';
+    }) => void;
+    const sendMessage = vi.fn(() => new Promise<{
+      accepted: true;
+      messageId: string;
+      assistantMessageId: string;
+      status: 'done';
+    }>((resolve) => {
+      resolveSend = resolve;
+    }));
+    const client = createClient({
+      sendMessage,
+      listThreads: vi.fn(async () => [
+        {
+          id: '1',
+          title: '会话一',
+          preview: '',
+          updatedAt: '2026-04-20T00:00:00.000Z',
+          status: 'active' as const,
+        },
+        {
+          id: '2',
+          title: '会话二',
+          preview: '',
+          updatedAt: '2026-04-20T00:00:01.000Z',
+          status: 'active' as const,
+        },
+      ]),
+    });
+    const workspaceStore = await createStoreWithClient(client);
+
+    await workspaceStore.initialize();
+    workspaceStore.activeThreadId = '1';
+    workspaceStore.messagesStatus = 'ready';
+    const submission = workspaceStore.submitDraftMessage({
+      content: '仍在生成的消息',
+      attachments: [],
+    });
+
+    await vi.waitFor(() => {
+      expect(sendMessage).toHaveBeenCalledTimes(1);
+      expect(workspaceStore.messageSubmitStatus).toBe('loading');
+    });
+
+    await workspaceStore.setActiveThread('2');
+    expect(workspaceStore.messageSubmitStatus).toBe('idle');
+    expect(workspaceStore.messages).toEqual([]);
+
+    await workspaceStore.setActiveThread('1');
+    expect(workspaceStore.messageSubmitStatus).toBe('loading');
+    expect(workspaceStore.messageSubmitThreadId).toBe('1');
+    expect(workspaceStore.messages).toEqual([
+      expect.objectContaining({
+        threadId: '1',
+        role: 'user',
+        content: '仍在生成的消息',
+      }),
+    ]);
+
+    resolveSend({
+      accepted: true,
+      messageId: 'message-user',
+      assistantMessageId: 'message-assistant',
+      status: 'done',
+    });
+    await submission;
+
+    expect(workspaceStore.messageSubmitStatus).toBe('ready');
+    expect(workspaceStore.transientMessagesByThread['1']).toBeUndefined();
+  });
+
+  it('does not duplicate a pending user turn when a rapid switch loads its server copy', async () => {
+    let resolveSend!: (value: {
+      accepted: true;
+      messageId: string;
+      assistantMessageId: string;
+      status: 'done';
+    }) => void;
+    const sendMessage = vi.fn(() => new Promise<{
+      accepted: true;
+      messageId: string;
+      assistantMessageId: string;
+      status: 'done';
+    }>((resolve) => {
+      resolveSend = resolve;
+    }));
+    const submittedAt = new Date().toISOString();
+    const getThreadMessages = vi.fn(async (threadId: string) => {
+      if (threadId !== '1' || sendMessage.mock.calls.length === 0) {
+        return [];
+      }
+
+      return [
+        {
+          id: 'server-user-message',
+          threadId: '1',
+          role: 'user' as const,
+          kind: 'markdown' as const,
+          content: '快速切换测试',
+          createdAt: submittedAt,
+        },
+      ];
+    });
+    const client = createClient({
+      sendMessage,
+      getThreadMessages,
+      listThreads: vi.fn(async () => [
+        {
+          id: '1',
+          title: '会话一',
+          preview: '',
+          updatedAt: submittedAt,
+          status: 'active' as const,
+        },
+        {
+          id: '2',
+          title: '会话二',
+          preview: '',
+          updatedAt: submittedAt,
+          status: 'active' as const,
+        },
+      ]),
+    });
+    const workspaceStore = await createStoreWithClient(client);
+
+    await workspaceStore.initialize();
+    workspaceStore.activeThreadId = '1';
+    workspaceStore.messagesStatus = 'ready';
+    const submission = workspaceStore.submitDraftMessage({
+      content: '快速切换测试',
+      attachments: [],
+    });
+    await vi.waitFor(() => {
+      expect(sendMessage).toHaveBeenCalledTimes(1);
+    });
+
+    await workspaceStore.setActiveThread('2');
+    await workspaceStore.setActiveThread('1');
+
+    expect(workspaceStore.messages.filter((message) => (
+      message.role === 'user' && message.content === '快速切换测试'
+    ))).toHaveLength(1);
+    expect(workspaceStore.messages[0]?.id).toBe('server-user-message');
+
+    resolveSend({
+      accepted: true,
+      messageId: 'server-user-message',
+      assistantMessageId: 'server-assistant-message',
+      status: 'done',
+    });
+    await submission;
+  });
+
+  it('allows another thread to submit while the first thread is still running', async () => {
+    let resolveFirstSend!: (value: {
+      accepted: true;
+      messageId: string;
+      assistantMessageId: string;
+      status: 'done';
+    }) => void;
+    const sendMessage = vi.fn((threadId: string) => {
+      if (threadId === '1') {
+        return new Promise<{
+          accepted: true;
+          messageId: string;
+          assistantMessageId: string;
+          status: 'done';
+        }>((resolve) => {
+          resolveFirstSend = resolve;
+        });
+      }
+
+      return Promise.resolve({
+        accepted: true as const,
+        messageId: 'message-user-2',
+        assistantMessageId: 'message-assistant-2',
+        status: 'done' as const,
+      });
+    });
+    const client = createClient({ sendMessage });
+    const workspaceStore = await createStoreWithClient(client);
+
+    workspaceStore.activeThreadId = '1';
+    const firstSubmission = workspaceStore.submitDraftMessage({
+      content: '第一会话',
+      attachments: [],
+    });
+    await vi.waitFor(() => {
+      expect(workspaceStore.messageSubmitStatusByThread['1']).toBe('loading');
+    });
+
+    workspaceStore.activeThreadId = '2';
+    await workspaceStore.submitDraftMessage({
+      content: '第二会话',
+      attachments: [],
+    });
+
+    expect(sendMessage).toHaveBeenCalledWith('2', expect.objectContaining({
+      content: '第二会话',
+    }));
+    expect(workspaceStore.messageSubmitStatusByThread['1']).toBe('loading');
+    expect(workspaceStore.messageSubmitStatusByThread['2']).toBe('ready');
+
+    resolveFirstSend({
+      accepted: true,
+      messageId: 'message-user-1',
+      assistantMessageId: 'message-assistant-1',
+      status: 'done',
+    });
+    await firstSubmission;
   });
 });

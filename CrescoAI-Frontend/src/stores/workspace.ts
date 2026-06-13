@@ -56,6 +56,70 @@ function revokeLocalMessageResources(messages: ThreadMessage[]) {
   }
 }
 
+function revokeUnpreservedMessageResources(
+  messages: ThreadMessage[],
+  preservedMessagesByThread: Record<string, ThreadMessage[]>,
+) {
+  const preservedMessageIds = new Set(
+    Object.values(preservedMessagesByThread)
+      .flat()
+      .map((message) => message.id),
+  );
+
+  revokeLocalMessageResources(messages.filter((message) => !preservedMessageIds.has(message.id)));
+}
+
+function messageAttachmentNames(message: ThreadMessage) {
+  return [
+    ...(message.media ?? []).map((media) => media.title ?? ''),
+    ...(message.files ?? []).map((file) => file.name),
+  ].filter(Boolean).sort();
+}
+
+function representsSamePendingUserTurn(
+  serverMessage: ThreadMessage,
+  transientMessage: ThreadMessage,
+) {
+  if (
+    !transientMessage.id.startsWith('pending-user-')
+    || serverMessage.role !== 'user'
+    || transientMessage.role !== 'user'
+    || serverMessage.threadId !== transientMessage.threadId
+    || normalizeInlineText(serverMessage.content) !== normalizeInlineText(transientMessage.content)
+  ) {
+    return false;
+  }
+
+  const serverTimestamp = Date.parse(serverMessage.createdAt);
+  const transientTimestamp = Date.parse(transientMessage.createdAt);
+  if (
+    !Number.isFinite(serverTimestamp)
+    || !Number.isFinite(transientTimestamp)
+    || Math.abs(serverTimestamp - transientTimestamp) > 5 * 60 * 1000
+  ) {
+    return false;
+  }
+
+  const serverAttachmentNames = messageAttachmentNames(serverMessage);
+  const transientAttachmentNames = messageAttachmentNames(transientMessage);
+  return serverAttachmentNames.length === transientAttachmentNames.length
+    && serverAttachmentNames.every((name, index) => name === transientAttachmentNames[index]);
+}
+
+function mergeThreadMessages(
+  serverMessages: ThreadMessage[],
+  transientMessages: ThreadMessage[],
+) {
+  const serverMessageIds = new Set(serverMessages.map((message) => message.id));
+  return [
+    ...serverMessages,
+    ...transientMessages.filter((message) => (
+      !serverMessageIds.has(message.id)
+      && !serverMessages.some((serverMessage) => representsSamePendingUserTurn(serverMessage, message))
+    )),
+  ];
+}
+
 function normalizeInlineText(value: string) {
   return value.replace(/\s+/g, ' ').trim();
 }
@@ -165,8 +229,8 @@ interface WorkspaceState {
   profileSuggestionsStatus: LoadState;
   profileSaveStatus: LoadState;
   artifactsStatus: LoadState;
-  messageSubmitStatus: LoadState;
-  messageSubmitThreadId: string | null;
+  messageSubmitStatusByThread: Record<string, LoadState>;
+  transientMessagesByThread: Record<string, ThreadMessage[]>;
   errorMessage: string | null;
 }
 
@@ -192,8 +256,8 @@ export const useWorkspaceStore = defineStore('workspace', {
     profileSuggestionsStatus: 'idle',
     profileSaveStatus: 'idle',
     artifactsStatus: 'idle',
-    messageSubmitStatus: 'idle',
-    messageSubmitThreadId: null,
+    messageSubmitStatusByThread: {},
+    transientMessagesByThread: {},
     errorMessage: null,
   }),
   getters: {
@@ -208,6 +272,22 @@ export const useWorkspaceStore = defineStore('workspace', {
     },
     artifactImmersiveMode(state) {
       return state.artifactPaneOpen && state.artifactViewMode === 'immersive';
+    },
+    messageSubmitStatus(state): LoadState {
+      if (!state.activeThreadId) {
+        return 'idle';
+      }
+
+      return state.messageSubmitStatusByThread[state.activeThreadId] ?? 'idle';
+    },
+    messageSubmitThreadId(state) {
+      if (!state.activeThreadId) {
+        return null;
+      }
+
+      return state.messageSubmitStatusByThread[state.activeThreadId] === 'loading'
+        ? state.activeThreadId
+        : null;
     },
   },
   actions: {
@@ -230,7 +310,8 @@ export const useWorkspaceStore = defineStore('workspace', {
       this.mobileSideRailOpen = !this.mobileSideRailOpen;
     },
     resetWorkspace() {
-      revokeLocalMessageResources(this.messages);
+      revokeUnpreservedMessageResources(this.messages, {});
+      revokeLocalMessageResources(Object.values(this.transientMessagesByThread).flat());
       initializePromise = null;
       threadLoadRequestToken += 1;
       artifactRefreshRequestToken += 1;
@@ -336,7 +417,7 @@ export const useWorkspaceStore = defineStore('workspace', {
 
       this.messagesStatus = 'loading';
       this.errorMessage = null;
-      revokeLocalMessageResources(this.messages);
+      revokeUnpreservedMessageResources(this.messages, this.transientMessagesByThread);
       this.messages = [];
 
       await this.initialize();
@@ -369,8 +450,11 @@ export const useWorkspaceStore = defineStore('workspace', {
           return null;
         }
 
-        revokeLocalMessageResources(this.messages);
-        this.messages = nextMessages;
+        revokeUnpreservedMessageResources(this.messages, this.transientMessagesByThread);
+        this.messages = mergeThreadMessages(
+          nextMessages,
+          this.transientMessagesByThread[targetThreadId] ?? [],
+        );
         this.messagesStatus = 'ready';
 
         return targetThreadId;
@@ -379,7 +463,7 @@ export const useWorkspaceStore = defineStore('workspace', {
           return null;
         }
 
-        revokeLocalMessageResources(this.messages);
+        revokeUnpreservedMessageResources(this.messages, this.transientMessagesByThread);
         this.messages = [];
         this.messagesStatus = 'error';
         this.errorMessage = error instanceof Error ? error.message : 'Unknown message loading error';
@@ -409,7 +493,7 @@ export const useWorkspaceStore = defineStore('workspace', {
         this.activeThreadId = nextThread.id;
         this.closeMobileSideRail();
         this.closeArtifact();
-        revokeLocalMessageResources(this.messages);
+        revokeUnpreservedMessageResources(this.messages, this.transientMessagesByThread);
         this.messages = [];
         this.messagesStatus = 'idle';
         this.threadCreateStatus = 'ready';
@@ -456,9 +540,12 @@ export const useWorkspaceStore = defineStore('workspace', {
         await client.deleteThread(threadId);
 
         this.threads = this.threads.filter((thread) => thread.id !== threadId);
+        revokeLocalMessageResources(this.transientMessagesByThread[threadId] ?? []);
+        delete this.transientMessagesByThread[threadId];
+        delete this.messageSubmitStatusByThread[threadId];
 
         if (this.activeThreadId === threadId) {
-          revokeLocalMessageResources(this.messages);
+          revokeUnpreservedMessageResources(this.messages, this.transientMessagesByThread);
           this.messages = [];
           this.activeThreadId = this.threads[0]?.id ?? null;
           this.messagesStatus = 'idle';
@@ -615,11 +702,12 @@ export const useWorkspaceStore = defineStore('workspace', {
         return;
       }
 
-      if (this.messageSubmitStatus === 'loading') {
+      const targetThreadId = this.activeThreadId;
+
+      if (this.messageSubmitStatusByThread[targetThreadId] === 'loading') {
         return;
       }
 
-      const targetThreadId = this.activeThreadId;
       const timestamp = formatLocalTimestamp(new Date());
       const pendingMessageId = createMessageId('pending-user');
       const media = attachments
@@ -646,10 +734,9 @@ export const useWorkspaceStore = defineStore('workspace', {
       if (this.messagesStatus !== 'ready') {
         this.messagesStatus = 'ready';
       }
-      this.messageSubmitStatus = 'loading';
-      this.messageSubmitThreadId = targetThreadId;
+      this.messageSubmitStatusByThread[targetThreadId] = 'loading';
       this.errorMessage = null;
-      this.messages.push({
+      const pendingMessage: ThreadMessage = {
         id: pendingMessageId,
         threadId: targetThreadId,
         role: 'user',
@@ -658,19 +745,18 @@ export const useWorkspaceStore = defineStore('workspace', {
         media: media.length ? media : undefined,
         files: files.length ? files : undefined,
         createdAt: timestamp,
-      });
+      };
+      this.transientMessagesByThread[targetThreadId] = [
+        ...(this.transientMessagesByThread[targetThreadId] ?? []),
+        pendingMessage,
+      ];
+      this.messages.push(pendingMessage);
 
       const reportSubmissionError = (
         stage: 'upload' | 'send' | 'refresh',
         error: unknown,
       ) => {
-        this.messageSubmitStatus = 'error';
-        this.messageSubmitThreadId = null;
-
-        if (this.activeThreadId !== targetThreadId) {
-          return;
-        }
-
+        this.messageSubmitStatusByThread[targetThreadId] = 'error';
         const rawMessage = error instanceof Error ? error.message : 'Unknown message sending error';
         const stageMessage = stage === 'upload'
           ? '附件上传失败'
@@ -678,16 +764,26 @@ export const useWorkspaceStore = defineStore('workspace', {
             ? '消息发送失败'
             : '消息已发送，但刷新消息列表失败';
 
-        this.messagesStatus = 'ready';
-        this.errorMessage = rawMessage;
-        this.messages.push({
+        const errorMessage: ThreadMessage = {
           id: createMessageId('send-error'),
           threadId: targetThreadId,
           role: 'system',
           kind: 'status',
           content: `${stageMessage}：${rawMessage}`,
           createdAt: formatLocalTimestamp(new Date()),
-        });
+        };
+        this.transientMessagesByThread[targetThreadId] = [
+          ...(this.transientMessagesByThread[targetThreadId] ?? []),
+          errorMessage,
+        ];
+
+        if (this.activeThreadId !== targetThreadId) {
+          return;
+        }
+
+        this.messagesStatus = 'ready';
+        this.errorMessage = rawMessage;
+        this.messages.push(errorMessage);
       };
 
       let uploadedFiles: UploadedConversationFile[];
@@ -902,6 +998,19 @@ export const useWorkspaceStore = defineStore('workspace', {
           );
           return;
         }
+
+        const acknowledgePendingMessage = (message: ThreadMessage) => (
+          message.id === pendingMessageId
+            ? { ...message, id: sendResult.messageId }
+            : message
+        );
+        this.transientMessagesByThread[targetThreadId] = (
+          this.transientMessagesByThread[targetThreadId] ?? []
+        ).map(acknowledgePendingMessage);
+
+        if (this.activeThreadId === targetThreadId) {
+          this.messages = this.messages.map(acknowledgePendingMessage);
+        }
       } catch (error) {
         reportSubmissionError('send', error);
         return;
@@ -916,16 +1025,22 @@ export const useWorkspaceStore = defineStore('workspace', {
       }
 
       if (this.activeThreadId !== targetThreadId) {
-        this.messageSubmitStatus = 'ready';
-        this.messageSubmitThreadId = null;
+        revokeLocalMessageResources(this.transientMessagesByThread[targetThreadId] ?? []);
+        delete this.transientMessagesByThread[targetThreadId];
+        this.messageSubmitStatusByThread[targetThreadId] = 'ready';
         return;
       }
 
-      revokeLocalMessageResources(this.messages);
+      // A route-driven refresh for this thread may have started before the
+      // submission completed. Prevent that older response from replacing the
+      // newly fetched post-send history.
+      threadLoadRequestToken += 1;
+      revokeLocalMessageResources(this.transientMessagesByThread[targetThreadId] ?? []);
+      delete this.transientMessagesByThread[targetThreadId];
+      revokeUnpreservedMessageResources(this.messages, this.transientMessagesByThread);
       this.messages = nextMessages;
       this.messagesStatus = 'ready';
-      this.messageSubmitStatus = 'ready';
-      this.messageSubmitThreadId = null;
+      this.messageSubmitStatusByThread[targetThreadId] = 'ready';
     },
     closeArtifact() {
       this.artifactPaneOpen = false;
