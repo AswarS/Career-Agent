@@ -16,7 +16,7 @@ export type ArtifactStatus = 'idle' | 'loading' | 'streaming' | 'ready' | 'stale
 export type ArtifactRenderMode = 'html' | 'markdown' | 'cards' | 'url';
 export type ArtifactViewMode = 'pane' | 'focus' | 'immersive';
 export type MessageActionKind = 'open-artifact';
-export type MessageMediaKind = 'image' | 'video' | 'html' | 'app' | 'file';
+export type MessageMediaKind = 'image' | 'audio' | 'video' | 'html' | 'app' | 'file';
 export type DraftMessageAttachmentKind = 'image' | 'file';
 
 export interface MessageAction {
@@ -87,6 +87,50 @@ export interface SendThreadMessageResult {
   assistantMessageId: string;
   status: 'queued' | 'processing' | 'done' | 'failed' | string;
 }
+
+export type ThreadMessageStreamEvent =
+  | {
+      type: 'message.created';
+      threadId: string;
+      messageId: string;
+      assistantMessageId: string;
+      createdAt: string;
+    }
+  | {
+      type: 'reasoning.delta';
+      messageId: string;
+      delta: string;
+    }
+  | {
+      type: 'reply.delta';
+      messageId: string;
+      delta: string;
+    }
+  | {
+      type: 'artifact.created';
+      messageId: string;
+      actions?: MessageAction[];
+      media?: MessageMedia[];
+      files?: MessageFileAttachment[];
+    }
+  | {
+      type: 'message.completed';
+      accepted: boolean;
+      status: SendThreadMessageResult['status'];
+      threadId: string;
+      messageId: string;
+      assistantMessageId: string;
+      reply: string;
+      reasoning?: string | null;
+      actions?: MessageAction[];
+      media?: MessageMedia[];
+      files?: MessageFileAttachment[];
+    }
+  | {
+      type: 'error';
+      message: string;
+      code?: string;
+    };
 
 export interface ThreadMessage {
   id: string;

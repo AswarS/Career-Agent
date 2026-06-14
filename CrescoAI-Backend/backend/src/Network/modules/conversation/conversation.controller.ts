@@ -63,6 +63,59 @@ export class ConversationController {
     return this.conversationService.listMessages(conversationId, req.userId);
   }
 
+  @Post(':id/messages/stream')
+  @UseGuards(OwnershipGuard)
+  async streamMessage(
+    @Req() req: Request,
+    @Param('id') conversationId: string,
+    @Body() dto: SendMultimodalMessageDto,
+    @Res() response: Response,
+  ) {
+    const abortController = new AbortController();
+    let sequence = 0;
+
+    req.on('close', () => {
+      abortController.abort();
+    });
+
+    response.status(200);
+    response.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+    response.setHeader('Cache-Control', 'no-cache, no-transform');
+    response.setHeader('Connection', 'keep-alive');
+    response.setHeader('X-Accel-Buffering', 'no');
+    response.flushHeaders?.();
+
+    const writeEvent = (event: Record<string, unknown> & { type: string }) => {
+      sequence += 1;
+      response.write(`id: ${sequence}\n`);
+      response.write(`event: ${event.type}\n`);
+      response.write(`data: ${JSON.stringify({ sequence, ...event })}\n\n`);
+    };
+
+    try {
+      for await (const event of this.conversationService.sendMessageStream(
+        conversationId,
+        dto,
+        req.userId,
+        abortController.signal,
+      )) {
+        if (abortController.signal.aborted || response.destroyed) {
+          break;
+        }
+        writeEvent(event);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'message stream failed';
+      if (!response.destroyed) {
+        writeEvent({ type: 'error', message });
+      }
+    } finally {
+      if (!response.destroyed) {
+        response.end();
+      }
+    }
+  }
+
   @Post(':id/messages')
   @UseGuards(OwnershipGuard)
   sendMessage(

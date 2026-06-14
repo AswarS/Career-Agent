@@ -5,6 +5,7 @@ export const CAREER_AGENT_API_ROUTE_PATTERNS = {
   listThreads: `${CAREER_AGENT_API_BASE_PATH}/threads/:userId`,
   thread: `${CAREER_AGENT_API_BASE_PATH}/threads/:threadId`,
   threadMessages: `${CAREER_AGENT_API_BASE_PATH}/threads/:threadId/messages`,
+  threadMessagesStream: `${CAREER_AGENT_API_BASE_PATH}/threads/:threadId/messages/stream`,
   threadFiles: `${CAREER_AGENT_API_BASE_PATH}/threads/:threadId/files`,
   threadFile: `${CAREER_AGENT_API_BASE_PATH}/threads/:threadId/files/:fileName`,
   profile: `${CAREER_AGENT_API_BASE_PATH}/profile`,
@@ -126,6 +127,9 @@ export const CAREER_AGENT_API_ROUTES = {
   },
   sendThreadMessage(threadId: string) {
     return CAREER_AGENT_API_ROUTE_PATTERNS.threadMessages.replace(':threadId', encodeURIComponent(threadId));
+  },
+  streamThreadMessage(threadId: string) {
+    return CAREER_AGENT_API_ROUTE_PATTERNS.threadMessagesStream.replace(':threadId', encodeURIComponent(threadId));
   },
   threadFiles(threadId: string) {
     return CAREER_AGENT_API_ROUTE_PATTERNS.threadFiles.replace(':threadId', encodeURIComponent(threadId));

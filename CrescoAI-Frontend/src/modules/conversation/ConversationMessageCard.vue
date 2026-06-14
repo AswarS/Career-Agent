@@ -177,6 +177,17 @@ async function handleFileDownload(file: MessageFileAttachment) {
           当前浏览器不支持视频播放。
         </video>
 
+        <audio
+          v-else-if="media.kind === 'audio'"
+          class="message-audio"
+          :src="media.url"
+          :aria-label="formatMediaAlt(media)"
+          controls
+          preload="metadata"
+        >
+          当前浏览器不支持音频播放。
+        </audio>
+
         <template v-else-if="media.kind === 'html'">
           <iframe
             class="message-iframe"
@@ -509,7 +520,8 @@ async function handleFileDownload(file: MessageFileAttachment) {
 }
 
 .message-image,
-.message-video {
+.message-video,
+.message-audio {
   display: block;
   width: 100%;
   height: 100%;
@@ -522,6 +534,10 @@ async function handleFileDownload(file: MessageFileAttachment) {
 
 .message-video {
   object-fit: cover;
+}
+
+.message-audio {
+  min-height: 54px;
 }
 
 .message-iframe {

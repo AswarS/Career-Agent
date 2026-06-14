@@ -17,6 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { DataSource, Repository } from 'typeorm';
 import { AgentService } from '../agent/agent.service';
 import { SkillService } from '../skill/skill.service';
+import type { SkillHandlerResult } from '../skill/skill.registry';
 import { ArtifactService } from '../artifact/artifact.service';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { SendMultimodalMessageDto } from './dto/send-multimodal-message.dto';
@@ -116,6 +117,60 @@ export interface UploadedConversationFile {
   originalName: string;
 }
 
+export type ConversationStreamEvent =
+  | {
+      type: 'message.created';
+      conversation_id: string;
+      conversationId: string;
+      message_id: string;
+      messageId: string;
+      assistant_message_id: string;
+      assistantMessageId: string;
+      created_at: string;
+      createdAt: string;
+    }
+  | {
+      type: 'reasoning.delta';
+      message_id: string;
+      messageId: string;
+      delta: string;
+    }
+  | {
+      type: 'reply.delta';
+      message_id: string;
+      messageId: string;
+      delta: string;
+    }
+  | {
+      type: 'artifact.created';
+      message_id: string;
+      messageId: string;
+      media: MessageMedia[];
+      actions?: MessageAction[];
+    }
+  | {
+      type: 'message.completed';
+      accepted: boolean;
+      status: string;
+      conversation_id: string;
+      conversationId: string;
+      message_id: string;
+      messageId: string;
+      assistant_message_id: string;
+      assistantMessageId: string;
+      reply: string;
+      reasoning?: string;
+      think?: string;
+      media?: MessageMedia[];
+      actions?: MessageAction[];
+      raw?: Record<string, unknown>;
+    }
+  | {
+      type: 'error';
+      message: string;
+      code?: string;
+    };
+
 interface RuntimeJsonlEvent {
   type?: string;
   uuid?: string;
@@ -158,6 +213,30 @@ interface PreparedAttachmentPayload {
     title?: string;
     mimeType?: string;
   }>;
+}
+
+interface SkillCreateCommand {
+  name: string;
+  description: string;
+  content: string;
+  category: string;
+  arguments?: string;
+}
+
+type SkillStreamRoute =
+  | { kind: 'create'; command: SkillCreateCommand }
+  | { kind: 'list' }
+  | {
+      kind: 'invoke';
+      source: 'skill' | 'skill:auto';
+      skillName: string;
+      args: string;
+      routerReason?: string;
+    };
+
+interface StreamMessageIds {
+  userMessageId: string;
+  assistantMessageId: string;
 }
 
 const uploadPolicies: Record<string, UploadPolicy> = {
@@ -471,7 +550,7 @@ export class ConversationService {
       );
       await appendFile(
         sessionFilePath,
-        `${JSON.stringify({ type: 'assistant', message: { id: assistantMessageId, role: 'assistant', content: [{ type: 'text', text: reply }] }, uuid: randomUUID(), timestamp: new Date(now.getTime() + 100).toISOString(), sessionId: conversation.id })}\n`,
+        `${JSON.stringify({ type: 'assistant', message: { id: assistantMessageId, role: 'assistant', content: this.createAssistantContentBlocks(reply) }, uuid: randomUUID(), timestamp: new Date(now.getTime() + 100).toISOString(), sessionId: conversation.id })}\n`,
         'utf8',
       );
       await this.linkUploadedResourcesToMessage(
@@ -542,7 +621,7 @@ export class ConversationService {
       );
       await appendFile(
         sessionFilePath,
-        `${JSON.stringify({ type: 'assistant', message: { id: assistantMessageId, role: 'assistant', content: [{ type: 'text', text: reply }] }, uuid: randomUUID(), timestamp: new Date(now.getTime() + 100).toISOString(), sessionId: conversation.id })}\n`,
+        `${JSON.stringify({ type: 'assistant', message: { id: assistantMessageId, role: 'assistant', content: this.createAssistantContentBlocks(reply) }, uuid: randomUUID(), timestamp: new Date(now.getTime() + 100).toISOString(), sessionId: conversation.id })}\n`,
         'utf8',
       );
       await this.linkUploadedResourcesToMessage(
@@ -599,11 +678,10 @@ export class ConversationService {
         : skillResult.reply;
       const thinkingContent = hasOutputFiles ? skillResult.reply : undefined;
 
-      const assistantContentBlocks: Array<Record<string, unknown>> = [];
-      if (thinkingContent) {
-        assistantContentBlocks.push({ type: 'thinking', thinking: thinkingContent });
-      }
-      assistantContentBlocks.push({ type: 'text', text: visibleReply });
+      const assistantContentBlocks = this.createAssistantContentBlocks(
+        visibleReply,
+        thinkingContent,
+      );
 
       await appendFile(
         sessionFilePath,
@@ -699,11 +777,10 @@ export class ConversationService {
         : skillResult.reply;
       const thinkingContent = hasOutputFiles ? skillResult.reply : undefined;
 
-      const assistantContentBlocks: Array<Record<string, unknown>> = [];
-      if (thinkingContent) {
-        assistantContentBlocks.push({ type: 'thinking', thinking: thinkingContent });
-      }
-      assistantContentBlocks.push({ type: 'text', text: visibleReply });
+      const assistantContentBlocks = this.createAssistantContentBlocks(
+        visibleReply,
+        thinkingContent,
+      );
 
       await appendFile(
         sessionFilePath,
@@ -834,6 +911,621 @@ export class ConversationService {
       actions: persistedAssistantResources.actions,
       raw: agentResponse.raw,
     };
+  }
+
+  async *sendMessageStream(
+    conversationId: string,
+    dto: SendMultimodalMessageDto,
+    requestUserId?: number,
+    abortSignal?: AbortSignal,
+  ): AsyncGenerator<ConversationStreamEvent> {
+    const conversation = await this.getConversationByIdentifier(conversationId, requestUserId);
+    const attachmentIds = dto.attachment_asset_ids ?? dto.attachmentAssetIds ?? [];
+    let attachments = await this.resolveAttachments(conversation.id, attachmentIds);
+    if (attachments.length === 0) {
+      attachments = await this.resolveImplicitAttachments(conversation, dto.content);
+    }
+
+    const skillStreamRoute = await this.resolveSkillStreamRoute(conversation, dto);
+    if (skillStreamRoute) {
+      yield* this.streamSkillMessage(conversation, dto, attachments, skillStreamRoute);
+      return;
+    }
+
+    const preparedAttachments = await this.prepareAttachmentsForModel(
+      conversation,
+      dto.content,
+      attachments,
+    );
+
+    let userMessageId = '';
+    let assistantMessageId = '';
+
+    for await (const event of this.agentService.sendMessageStream({
+      conversationId: conversation.id,
+      userId: String(conversation.userId),
+      content: preparedAttachments.content,
+      userVisibleContent: dto.content,
+      kind: dto.kind,
+      attachments: preparedAttachments.attachmentsForAgent,
+      context: dto.context,
+      clientRequestId: dto.client_request_id ?? dto.clientRequestId,
+      abortSignal,
+      apiKey: undefined,
+      baseUrl: undefined,
+      model: undefined,
+    })) {
+      if (event.type === 'message.created') {
+        userMessageId = event.userMessageId;
+        assistantMessageId = event.assistantMessageId;
+        await this.linkUploadedResourcesToMessage(
+          conversation.userId,
+          conversation.id,
+          userMessageId,
+          attachments,
+        );
+        yield {
+          type: 'message.created',
+          conversation_id: event.conversationId,
+          conversationId: event.conversationId,
+          message_id: event.userMessageId,
+          messageId: event.userMessageId,
+          assistant_message_id: event.assistantMessageId,
+          assistantMessageId: event.assistantMessageId,
+          created_at: event.createdAt,
+          createdAt: event.createdAt,
+        };
+        continue;
+      }
+
+      if (event.type === 'reasoning.delta') {
+        yield {
+          type: 'reasoning.delta',
+          message_id: event.messageId,
+          messageId: event.messageId,
+          delta: event.delta,
+        };
+        continue;
+      }
+
+      if (event.type === 'reply.delta') {
+        yield {
+          type: 'reply.delta',
+          message_id: event.messageId,
+          messageId: event.messageId,
+          delta: event.delta,
+        };
+        continue;
+      }
+
+      if (event.type === 'error') {
+        yield {
+          type: 'error',
+          message: event.message,
+          code: event.code,
+        };
+        continue;
+      }
+
+      if (event.type === 'message.completed') {
+        userMessageId = event.userMessageId || userMessageId;
+        assistantMessageId = event.assistantMessageId || assistantMessageId;
+        const replyFiles = this.normalizeReplyFiles(event.file);
+        const toolGeneratedMedia = event.generatedFiles?.length
+          ? this.skillOutputFilesToMedia(event.generatedFiles, conversation.userId)
+          : [];
+        const assistantResources = [...replyFiles, ...toolGeneratedMedia];
+        const persistedAssistantResources = await this.persistAssistantGeneratedResources(
+          conversation.userId,
+          conversation.id,
+          assistantMessageId,
+          assistantResources,
+        );
+        const sessionFilePath = await this.findOrCreateRuntimeSessionFile(conversation.id, conversation.userId);
+
+        if (persistedAssistantResources.media.length) {
+          await this.replaceMessageResourceMappings(
+            conversation.userId,
+            conversation.id,
+            assistantMessageId,
+            persistedAssistantResources.media,
+          );
+          yield {
+            type: 'artifact.created',
+            message_id: assistantMessageId,
+            messageId: assistantMessageId,
+            media: persistedAssistantResources.media,
+            actions: persistedAssistantResources.actions,
+          };
+        }
+
+        await this.mergeAssistantMessageActions(
+          sessionFilePath,
+          assistantMessageId,
+          persistedAssistantResources.actions,
+        );
+        await this.touchConversation(conversation, dto.content);
+
+        yield {
+          type: 'message.completed',
+          accepted: event.accepted,
+          status: event.status,
+          conversation_id: event.conversationId,
+          conversationId: event.conversationId,
+          message_id: userMessageId,
+          messageId: userMessageId,
+          assistant_message_id: assistantMessageId,
+          assistantMessageId: assistantMessageId,
+          reply: event.reply,
+          reasoning: event.reasoning,
+          think: event.reasoning,
+          media: persistedAssistantResources.media.length ? persistedAssistantResources.media : undefined,
+          actions: persistedAssistantResources.actions.length ? persistedAssistantResources.actions : undefined,
+          raw: event.raw,
+        };
+      }
+    }
+  }
+
+  private async resolveSkillStreamRoute(
+    conversation: ConversationEntity,
+    dto: SendMultimodalMessageDto,
+  ): Promise<SkillStreamRoute | null> {
+    const createSkillCommand = this.parseCreateSkillCommand(dto.content);
+    if (createSkillCommand) {
+      return { kind: 'create', command: createSkillCommand };
+    }
+
+    const skillInvocation = this.skillService.parseSkillInvocation(dto.content);
+    if (skillInvocation) {
+      if (skillInvocation.skillName === 'skills') {
+        return { kind: 'list' };
+      }
+      if (await this.skillService.skillExists(skillInvocation.skillName, conversation.userId)) {
+        return {
+          kind: 'invoke',
+          source: 'skill',
+          skillName: skillInvocation.skillName,
+          args: skillInvocation.args,
+        };
+      }
+    }
+
+    const autoRoute = await this.skillService.autoSelectSkill(
+      dto.content,
+      conversation.userId,
+      conversation.id,
+    );
+    console.log(
+      `[ConversationService] autoSkill useSkill=${autoRoute.useSkill} skillName=${autoRoute.skillName ?? 'none'} reason=${autoRoute.reason ?? 'n/a'} userId=${conversation.userId} conversationId=${conversation.id}`,
+    );
+
+    if (autoRoute.useSkill && autoRoute.skillName) {
+      return {
+        kind: 'invoke',
+        source: 'skill:auto',
+        skillName: autoRoute.skillName,
+        args: autoRoute.args ?? dto.content,
+        routerReason: autoRoute.reason,
+      };
+    }
+
+    return null;
+  }
+
+  private async *streamSkillMessage(
+    conversation: ConversationEntity,
+    dto: SendMultimodalMessageDto,
+    attachments: MessageMedia[],
+    route: SkillStreamRoute,
+  ): AsyncGenerator<ConversationStreamEvent> {
+    if (route.kind === 'create') {
+      yield* this.streamCreateSkillMessage(conversation, dto, attachments, route.command);
+      return;
+    }
+
+    if (route.kind === 'list') {
+      yield* this.streamSkillListMessage(conversation, dto, attachments);
+      return;
+    }
+
+    yield* this.streamInvokedSkillMessage(conversation, dto, attachments, route);
+  }
+
+  private async *streamCreateSkillMessage(
+    conversation: ConversationEntity,
+    dto: SendMultimodalMessageDto,
+    attachments: MessageMedia[],
+    command: SkillCreateCommand,
+  ): AsyncGenerator<ConversationStreamEvent> {
+    const ids = this.createStreamMessageIds('skill_create');
+    const now = new Date();
+    const sessionFilePath = await this.findOrCreateRuntimeSessionFile(conversation.id, conversation.userId);
+    const processTrace = `Creating skill /${command.name}.`;
+
+    await this.appendRuntimeUserMessage(sessionFilePath, conversation.id, ids.userMessageId, dto.content, now);
+    await this.linkUploadedResourcesToMessage(conversation.userId, conversation.id, ids.userMessageId, attachments);
+
+    yield this.createMessageCreatedStreamEvent(conversation.id, ids, now.toISOString());
+    yield* this.streamReasoningDeltaEvents(ids.assistantMessageId, `${processTrace}\n`);
+
+    const created = await this.skillService.createCustomSkill(
+      conversation.userId,
+      command.name,
+      command.description,
+      command.content,
+      command.category,
+      command.arguments,
+    );
+
+    const reply =
+      `Skill \`/${created.name}\` created successfully.\n\n` +
+      `You can now invoke it with \`/${created.name}\`.\n` +
+      `Stored at: ${created.filePath}`;
+
+    await this.appendRuntimeAssistantMessage(
+      sessionFilePath,
+      conversation.id,
+      ids.assistantMessageId,
+      this.createAssistantContentBlocks(reply, processTrace),
+      new Date(now.getTime() + 500),
+    );
+    yield* this.streamReplyDeltaEvents(ids.assistantMessageId, reply);
+
+    await this.touchConversation(conversation, dto.content);
+
+    yield this.createMessageCompletedStreamEvent(conversation.id, ids, reply, {
+      reasoning: processTrace,
+      raw: { source: 'skill:create', skillName: created.name, filePath: created.filePath },
+    });
+  }
+
+  private async *streamSkillListMessage(
+    conversation: ConversationEntity,
+    dto: SendMultimodalMessageDto,
+    attachments: MessageMedia[],
+  ): AsyncGenerator<ConversationStreamEvent> {
+    const ids = this.createStreamMessageIds('skill_list');
+    const now = new Date();
+    const sessionFilePath = await this.findOrCreateRuntimeSessionFile(conversation.id, conversation.userId);
+    const processTrace = 'Listing available skills.';
+
+    await this.appendRuntimeUserMessage(sessionFilePath, conversation.id, ids.userMessageId, dto.content, now);
+    await this.linkUploadedResourcesToMessage(conversation.userId, conversation.id, ids.userMessageId, attachments);
+
+    yield this.createMessageCreatedStreamEvent(conversation.id, ids, now.toISOString());
+    yield* this.streamReasoningDeltaEvents(ids.assistantMessageId, `${processTrace}\n`);
+
+    const skills = await this.skillService.listSkills(conversation.userId);
+    const reply = this.formatSkillListReply(skills);
+
+    await this.appendRuntimeAssistantMessage(
+      sessionFilePath,
+      conversation.id,
+      ids.assistantMessageId,
+      this.createAssistantContentBlocks(reply, processTrace),
+      new Date(now.getTime() + 500),
+    );
+    yield* this.streamReplyDeltaEvents(ids.assistantMessageId, reply);
+
+    await this.touchConversation(conversation, dto.content);
+
+    yield this.createMessageCompletedStreamEvent(conversation.id, ids, reply, {
+      reasoning: processTrace,
+      raw: { source: 'skill-list', skillCount: skills.length },
+    });
+  }
+
+  private async *streamInvokedSkillMessage(
+    conversation: ConversationEntity,
+    dto: SendMultimodalMessageDto,
+    attachments: MessageMedia[],
+    route: Extract<SkillStreamRoute, { kind: 'invoke' }>,
+  ): AsyncGenerator<ConversationStreamEvent> {
+    const ids = this.createStreamMessageIds(route.source === 'skill:auto' ? 'skill_auto' : 'skill');
+    const now = new Date();
+    const sessionFilePath = await this.findOrCreateRuntimeSessionFile(conversation.id, conversation.userId);
+    const routeTrace = this.formatSkillRouteTrace(route);
+
+    await this.appendRuntimeUserMessage(sessionFilePath, conversation.id, ids.userMessageId, dto.content, now);
+    await this.linkUploadedResourcesToMessage(conversation.userId, conversation.id, ids.userMessageId, attachments);
+
+    yield this.createMessageCreatedStreamEvent(conversation.id, ids, now.toISOString());
+    yield* this.streamReasoningDeltaEvents(ids.assistantMessageId, `${routeTrace}\n`);
+
+    const skillContext = await this.skillService.buildExecutionContext(
+      conversation.userId,
+      conversation.id,
+    );
+    const skillResult = await this.skillService.invokeSkill(
+      route.skillName,
+      route.args,
+      { ...dto.context, ...skillContext },
+    );
+    const presentation = this.buildSkillReplyPresentation(skillResult, routeTrace);
+
+    await this.appendRuntimeAssistantMessage(
+      sessionFilePath,
+      conversation.id,
+      ids.assistantMessageId,
+      presentation.assistantContentBlocks,
+      new Date(now.getTime() + 500),
+    );
+
+    const persisted = await this.persistSkillOutputFilesForStream(
+      conversation.userId,
+      conversation.id,
+      ids.assistantMessageId,
+      sessionFilePath,
+      skillResult,
+    );
+
+    if (persisted.media.length) {
+      yield {
+        type: 'artifact.created',
+        message_id: ids.assistantMessageId,
+        messageId: ids.assistantMessageId,
+        media: persisted.media,
+        actions: persisted.actions,
+      };
+    }
+
+    yield* this.streamReplyDeltaEvents(ids.assistantMessageId, presentation.visibleReply);
+
+    await this.touchConversation(conversation, dto.content);
+
+    yield this.createMessageCompletedStreamEvent(conversation.id, ids, presentation.visibleReply, {
+      reasoning: presentation.processTrace,
+      media: persisted.media.length ? persisted.media : undefined,
+      actions: persisted.actions.length ? persisted.actions : undefined,
+      raw: {
+        source: route.source,
+        skillName: route.skillName,
+        ...(route.source === 'skill:auto' ? { routerReason: route.routerReason } : {}),
+        ...skillResult.metadata,
+      },
+    });
+  }
+
+  private createStreamMessageIds(prefix: string): StreamMessageIds {
+    const suffix = randomUUID().replace(/-/g, '');
+    return {
+      userMessageId: `msg_user_${prefix}_${suffix}`,
+      assistantMessageId: `msg_assistant_${prefix}_${suffix}`,
+    };
+  }
+
+  private async appendRuntimeUserMessage(
+    sessionFilePath: string,
+    conversationId: string,
+    messageId: string,
+    content: string,
+    timestamp: Date,
+  ) {
+    await appendFile(
+      sessionFilePath,
+      `${JSON.stringify({
+        type: 'user',
+        message: { id: messageId, role: 'user', content },
+        uuid: randomUUID(),
+        timestamp: timestamp.toISOString(),
+        sessionId: conversationId,
+      })}\n`,
+      'utf8',
+    );
+  }
+
+  private async appendRuntimeAssistantMessage(
+    sessionFilePath: string,
+    conversationId: string,
+    messageId: string,
+    content: Array<Record<string, unknown>>,
+    timestamp: Date,
+  ) {
+    await appendFile(
+      sessionFilePath,
+      `${JSON.stringify({
+        type: 'assistant',
+        message: { id: messageId, role: 'assistant', content },
+        uuid: randomUUID(),
+        timestamp: timestamp.toISOString(),
+        sessionId: conversationId,
+      })}\n`,
+      'utf8',
+    );
+  }
+
+  private createMessageCreatedStreamEvent(
+    conversationId: string,
+    ids: StreamMessageIds,
+    createdAt: string,
+  ): ConversationStreamEvent {
+    return {
+      type: 'message.created',
+      conversation_id: conversationId,
+      conversationId,
+      message_id: ids.userMessageId,
+      messageId: ids.userMessageId,
+      assistant_message_id: ids.assistantMessageId,
+      assistantMessageId: ids.assistantMessageId,
+      created_at: createdAt,
+      createdAt,
+    };
+  }
+
+  private createMessageCompletedStreamEvent(
+    conversationId: string,
+    ids: StreamMessageIds,
+    reply: string,
+    options: {
+      reasoning?: string;
+      media?: MessageMedia[];
+      actions?: MessageAction[];
+      raw?: Record<string, unknown>;
+    } = {},
+  ): ConversationStreamEvent {
+    return {
+      type: 'message.completed',
+      accepted: true,
+      status: 'done',
+      conversation_id: conversationId,
+      conversationId,
+      message_id: ids.userMessageId,
+      messageId: ids.userMessageId,
+      assistant_message_id: ids.assistantMessageId,
+      assistantMessageId: ids.assistantMessageId,
+      reply,
+      reasoning: options.reasoning,
+      think: options.reasoning,
+      media: options.media,
+      actions: options.actions,
+      raw: options.raw,
+    };
+  }
+
+  private *streamReasoningDeltaEvents(
+    messageId: string,
+    text?: string,
+  ): Generator<ConversationStreamEvent> {
+    for (const delta of this.chunkStreamText(text)) {
+      yield {
+        type: 'reasoning.delta',
+        message_id: messageId,
+        messageId,
+        delta,
+      };
+    }
+  }
+
+  private *streamReplyDeltaEvents(
+    messageId: string,
+    text?: string,
+  ): Generator<ConversationStreamEvent> {
+    for (const delta of this.chunkStreamText(text)) {
+      yield {
+        type: 'reply.delta',
+        message_id: messageId,
+        messageId,
+        delta,
+      };
+    }
+  }
+
+  private chunkStreamText(text?: string, chunkSize = 700): string[] {
+    if (!text) {
+      return [];
+    }
+
+    const chunks: string[] = [];
+    for (let start = 0; start < text.length; start += chunkSize) {
+      chunks.push(text.slice(start, start + chunkSize));
+    }
+    return chunks;
+  }
+
+  private formatSkillRouteTrace(route: Extract<SkillStreamRoute, { kind: 'invoke' }>) {
+    if (route.source === 'skill:auto') {
+      const reason = route.routerReason ? ` Router reason: ${route.routerReason}.` : '';
+      return `Auto skill selected: /${route.skillName}.${reason}`;
+    }
+
+    return `Skill command selected: /${route.skillName}.`;
+  }
+
+  private formatSkillListReply(skills: Awaited<ReturnType<SkillService['listSkills']>>) {
+    const byCategory = new Map<string, typeof skills>();
+    for (const skill of skills) {
+      const category = (skill.category as string | undefined) ?? 'utility';
+      if (!byCategory.has(category)) {
+        byCategory.set(category, []);
+      }
+      byCategory.get(category)!.push(skill);
+    }
+
+    const sections: string[] = ['**Available Skills**\n'];
+    const categoryLabels: Record<string, string> = {
+      search: 'Search',
+      analysis: 'Analysis',
+      generation: 'Generation',
+      utility: 'Utility',
+    };
+
+    for (const [category, items] of byCategory) {
+      sections.push(`**${categoryLabels[category] ?? category}**`);
+      for (const skill of items) {
+        const params = skill.parameters as Array<{ name: string }> | undefined;
+        const paramHint = params?.length
+          ? ` - params: ${params.map((param) => param.name).join(', ')}`
+          : '';
+        sections.push(`- \`/${skill.name}\` - ${skill.description}${paramHint}`);
+      }
+      sections.push('');
+    }
+
+    sections.push('Type `/help` for usage information.');
+    return sections.join('\n');
+  }
+
+  private buildSkillReplyPresentation(
+    skillResult: SkillHandlerResult,
+    routeTrace: string,
+  ) {
+    const hasOutputFiles = Boolean(skillResult.outputFiles?.length);
+    const visibleReply = hasOutputFiles
+      ? (skillResult.outputFiles![0].title ?? 'Application generated. Use the open action to view it.')
+      : skillResult.reply;
+    const generatedTrace = hasOutputFiles ? skillResult.reply : undefined;
+    const processTrace = [routeTrace, generatedTrace].filter(Boolean).join('\n\n') || undefined;
+
+    return {
+      visibleReply,
+      processTrace,
+      assistantContentBlocks: this.createAssistantContentBlocks(visibleReply, processTrace),
+    };
+  }
+
+  private createAssistantContentBlocks(reply: string, processTrace?: string) {
+    const assistantContentBlocks: Array<Record<string, unknown>> = [];
+    if (processTrace) {
+      assistantContentBlocks.push({
+        type: 'thinking',
+        phase: 'process',
+        thinking: processTrace,
+        signature: '',
+      });
+    }
+    assistantContentBlocks.push({ type: 'text', phase: 'final', text: reply });
+    return assistantContentBlocks;
+  }
+
+  private async persistSkillOutputFilesForStream(
+    userId: number,
+    conversationId: string,
+    assistantMessageId: string,
+    sessionFilePath: string,
+    skillResult: SkillHandlerResult,
+  ): Promise<{ media: MessageMedia[]; actions: MessageAction[] }> {
+    if (!skillResult.outputFiles?.length) {
+      return { media: [], actions: [] };
+    }
+
+    skillLogger.info('ConversationService', 'Skill outputFiles:', skillResult.outputFiles);
+    const media = this.skillOutputFilesToMedia(skillResult.outputFiles, userId);
+    skillLogger.info('ConversationService', 'Mapped media:', media.map((item) => ({
+      id: item.id,
+      kind: item.kind,
+      url: item.url,
+    })));
+    const persisted = await this.persistAssistantGeneratedResources(
+      userId,
+      conversationId,
+      assistantMessageId,
+      media,
+    );
+    await this.replaceMessageResourceMappings(userId, conversationId, assistantMessageId, persisted.media);
+    await this.mergeAssistantMessageActions(sessionFilePath, assistantMessageId, persisted.actions);
+
+    return persisted;
   }
 
   private async getConversationByIdentifier(identifier: string, requestUserId?: number) {
@@ -1344,17 +2036,32 @@ export class ConversationService {
       }
 
       const typedBlock = block as Record<string, unknown>;
-      if (this.isToolFacingAssistantBlock(typedBlock.type)) {
+      const blockPhase = this.getAssistantContentPhase(typedBlock);
+      if (blockPhase === 'process') {
+        const blockReasoning = this.extractAssistantReasoningBlock(typedBlock);
+        if (blockReasoning) {
+          reasoningParts.push(blockReasoning);
+        }
         continue;
       }
 
-      if (typedBlock.type === 'text' && typeof typedBlock.text === 'string') {
-        textParts.push(typedBlock.text);
+      if (blockPhase === 'final') {
+        const blockText = this.extractAssistantFinalBlock(typedBlock);
+        if (blockText) {
+          textParts.push(blockText);
+        }
+        continue;
       }
 
       const blockReasoning = this.extractAssistantReasoningBlock(typedBlock);
       if (blockReasoning) {
         reasoningParts.push(blockReasoning);
+        continue;
+      }
+
+      const blockText = this.extractAssistantFinalBlock(typedBlock);
+      if (blockText) {
+        textParts.push(blockText);
       }
 
     }
@@ -1395,13 +2102,108 @@ export class ConversationService {
   }
 
   private extractAssistantReasoningBlock(block: Record<string, unknown>): string | null {
-    if (block.type !== 'thinking' && block.type !== 'reasoning') {
+    const phase = this.getAssistantContentPhase(block);
+    if (phase === 'final') {
       return null;
     }
 
-    return this.normalizeReasoningText(
+    if (phase !== 'process' && block.type === 'text') {
+      return null;
+    }
+
+    if (this.isToolFacingAssistantBlock(block.type, block)) {
+      return this.formatAssistantProcessBlock(block);
+    }
+
+    const explicitReasoning = this.normalizeReasoningText(
       block.thinking ?? block.reasoning ?? block.text ?? block.content,
     );
+    if (explicitReasoning) {
+      return explicitReasoning;
+    }
+
+    return this.formatAssistantProcessBlock(block);
+  }
+
+  private extractAssistantFinalBlock(block: Record<string, unknown>): string | null {
+    const phase = this.getAssistantContentPhase(block);
+    if (phase === 'process') {
+      return null;
+    }
+
+    if (phase !== 'final' && block.type !== 'text') {
+      return null;
+    }
+
+    return this.normalizeReasoningText(block.text ?? block.content);
+  }
+
+  private getAssistantContentPhase(block: Record<string, unknown>): 'process' | 'final' | undefined {
+    const phase = block.phase ?? block.contentPhase ?? block.content_phase;
+    if (typeof phase !== 'string') {
+      return undefined;
+    }
+
+    const normalized = phase.trim().toLowerCase();
+    if (normalized === 'process' || normalized === 'reasoning' || normalized === 'thinking') {
+      return 'process';
+    }
+    if (normalized === 'final' || normalized === 'answer' || normalized === 'reply') {
+      return 'final';
+    }
+
+    return undefined;
+  }
+
+  private formatAssistantProcessBlock(block: Record<string, unknown>): string | null {
+    const blockType = typeof block.type === 'string' ? block.type : 'unknown';
+    if (blockType === 'text') {
+      return null;
+    }
+
+    if (this.isToolFacingAssistantBlock(blockType, block)) {
+      return this.formatFilteredAssistantToolBlock(blockType, block);
+    }
+
+    return [
+      '[结构化过程事件已过滤]',
+      `事件类型: ${blockType}`,
+      '说明: 原始结构化内容未展示，以避免暴露内部调用细节。',
+    ].join('\n');
+  }
+
+  private formatFilteredAssistantToolBlock(
+    blockType: string,
+    block: Record<string, unknown>,
+  ): string {
+    const isResult = blockType.includes('result') || block.content !== undefined || block.result !== undefined;
+    const filteredFields = [
+      block.name !== undefined || block.tool_name !== undefined || block.toolName !== undefined
+        ? '工具名称'
+        : undefined,
+      block.input !== undefined ? '调用参数 input' : undefined,
+      block.arguments !== undefined ? '调用参数 arguments' : undefined,
+      block.args !== undefined ? '调用参数 args' : undefined,
+      block.content !== undefined ? '返回内容 content' : undefined,
+      block.result !== undefined ? '返回内容 result' : undefined,
+      block.output !== undefined ? '返回内容 output' : undefined,
+      block.id !== undefined || block.tool_use_id !== undefined || block.toolUseId !== undefined
+        ? '内部调用标识'
+        : undefined,
+    ].filter(Boolean);
+    const status =
+      block.is_error === true || block.isError === true
+        ? '执行状态: 工具返回错误，错误详情已过滤。'
+        : isResult
+          ? '执行状态: 工具已返回，返回正文已过滤。'
+          : '执行状态: 工具调用已发起，调用细节已过滤。';
+
+    return [
+      isResult ? '[工具返回已过滤]' : '[工具调用已过滤]',
+      `事件类型: ${blockType}`,
+      status,
+      `过滤内容: ${filteredFields.length ? filteredFields.join('、') : '工具相关内部数据'}`,
+    ].join('\n');
   }
 
   private isToolResultContentBlock(item: unknown) {
@@ -1418,18 +2220,20 @@ export class ConversationService {
     );
   }
 
-  private isToolFacingAssistantBlock(type: unknown) {
-    if (typeof type !== 'string') {
-      return false;
-    }
-
+  private isToolFacingAssistantBlock(
+    type: unknown,
+    block?: Record<string, unknown>,
+  ) {
+    const blockType = typeof type === 'string' ? type : '';
     return (
-      type === 'tool_use' ||
-      type === 'tool_result' ||
-      type === 'server_tool_use' ||
-      type === 'mcp_tool_use' ||
-      type.endsWith('_tool_use') ||
-      type.endsWith('_tool_result')
+      blockType === 'tool_use' ||
+      blockType === 'tool_result' ||
+      blockType === 'server_tool_use' ||
+      blockType === 'mcp_tool_use' ||
+      blockType.endsWith('_tool_use') ||
+      blockType.endsWith('_tool_result') ||
+      typeof block?.tool_use_id === 'string' ||
+      typeof block?.toolUseId === 'string'
     );
   }
 

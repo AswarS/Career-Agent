@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { matchesMobileLayoutViewport } from '../app/responsive';
 import { runtimeConfig } from '../config/runtime';
 import { createCareerAgentClient } from '../services/createCareerAgentClient';
+import { MessageStreamUnavailableError } from '../services/careerAgentClient';
 import { shouldSimulateArtifactRefreshLifecycle } from './artifactRefreshPolicy';
 import type {
   ArtifactRecord,
@@ -9,10 +10,15 @@ import type {
   ArtifactViewMode,
   DraftMessageSubmission,
   LoadState,
+  MessageAction,
+  MessageFileAttachment,
+  MessageMedia,
   ProfileRecord,
   ProfileSuggestion,
+  ThreadMessageStreamEvent,
   ThreadMessage,
   ThreadSummary,
+  UploadedConversationFile,
 } from '../types/entities';
 
 const client = createCareerAgentClient();
@@ -91,6 +97,51 @@ function deriveThreadSeed(submission: DraftMessageSubmission) {
     title: '新对话',
     preview: '',
   };
+}
+
+function mergeById<T extends { id: string }>(existing: T[] | undefined, incoming: T[] | undefined) {
+  const merged = new Map<string, T>();
+
+  for (const item of existing ?? []) {
+    merged.set(item.id, item);
+  }
+
+  for (const item of incoming ?? []) {
+    merged.set(item.id, {
+      ...merged.get(item.id),
+      ...item,
+    });
+  }
+
+  return merged.size ? [...merged.values()] : undefined;
+}
+
+function appendText(existing: string | null | undefined, delta: string) {
+  return `${existing ?? ''}${delta}`;
+}
+
+function createUploadedFileMedia(uploadedFiles: UploadedConversationFile[]): MessageMedia[] {
+  return uploadedFiles
+    .filter((file) => file.kind === 'image' || file.kind === 'video')
+    .map((file) => ({
+      id: file.assetId,
+      kind: file.kind,
+      url: file.url,
+      title: file.title,
+      mimeType: file.mimeType,
+    }));
+}
+
+function createUploadedFileAttachments(uploadedFiles: UploadedConversationFile[]): MessageFileAttachment[] {
+  return uploadedFiles
+    .filter((file) => file.kind === 'file')
+    .map((file) => ({
+      id: file.assetId,
+      name: file.title || file.originalName,
+      url: file.url,
+      mimeType: file.mimeType,
+      sizeBytes: file.sizeBytes,
+    }));
 }
 
 interface WorkspaceState {
@@ -634,7 +685,7 @@ export const useWorkspaceStore = defineStore('workspace', {
         });
       };
 
-      let uploadedFiles;
+      let uploadedFiles: UploadedConversationFile[];
       try {
         uploadedFiles = [];
 
@@ -649,6 +700,188 @@ export const useWorkspaceStore = defineStore('workspace', {
       }
 
       const clientRequestId = createMessageId('request');
+      const messageContent = content || '（已添加附件）';
+      const refreshThreadMessages = async () => {
+        const nextMessages = await client.getThreadMessages(targetThreadId);
+
+        if (this.activeThreadId !== targetThreadId) {
+          return false;
+        }
+
+        revokeLocalMessageResources(this.messages);
+        this.messages = nextMessages;
+        this.messagesStatus = 'ready';
+        this.messageSubmitStatus = 'ready';
+        return true;
+      };
+      const sendBufferedAndRefresh = async () => {
+        const sendResult = await client.sendMessage(targetThreadId, {
+          kind: 'markdown',
+          content: messageContent,
+          attachmentAssetIds: uploadedFiles.map((file) => file.assetId),
+          clientRequestId,
+        });
+
+        if (!sendResult.accepted || sendResult.status === 'failed') {
+          throw new Error(!sendResult.accepted ? '消息未被服务端接受' : '消息发送失败');
+        }
+
+        try {
+          await refreshThreadMessages();
+        } catch (error) {
+          reportSubmissionError('refresh', error);
+        }
+      };
+      const ensureAssistantMessage = (assistantMessageId: string, createdAt = formatLocalTimestamp(new Date())) => {
+        const existingIndex = this.messages.findIndex((message) => message.id === assistantMessageId);
+        if (existingIndex >= 0) {
+          return existingIndex;
+        }
+
+        this.messages.push({
+          id: assistantMessageId,
+          threadId: targetThreadId,
+          role: 'assistant',
+          kind: 'markdown',
+          content: '',
+          reasoning: null,
+          createdAt,
+        });
+
+        return this.messages.length - 1;
+      };
+      const mergeAssistantPayload = (
+        assistantMessageId: string,
+        payload: {
+          content?: string;
+          reasoning?: string | null;
+          media?: MessageMedia[];
+          files?: MessageFileAttachment[];
+          actions?: MessageAction[];
+          createdAt?: string;
+        },
+      ) => {
+        const index = ensureAssistantMessage(assistantMessageId, payload.createdAt);
+        const existingMessage = this.messages[index];
+
+        this.messages[index] = {
+          ...existingMessage,
+          content: payload.content ?? existingMessage.content,
+          reasoning: payload.reasoning !== undefined ? payload.reasoning : existingMessage.reasoning,
+          media: mergeById(existingMessage.media, payload.media),
+          files: mergeById(existingMessage.files, payload.files),
+          actions: mergeById(existingMessage.actions, payload.actions),
+        };
+      };
+      const applyStreamEvent = (event: ThreadMessageStreamEvent) => {
+        if (event.type === 'message.created') {
+          const pendingIndex = this.messages.findIndex((message) => message.id === pendingMessageId);
+          if (pendingIndex >= 0) {
+            const uploadedMedia = createUploadedFileMedia(uploadedFiles);
+            const uploadedAttachments = createUploadedFileAttachments(uploadedFiles);
+            this.messages[pendingIndex] = {
+              ...this.messages[pendingIndex],
+              id: event.messageId,
+              createdAt: event.createdAt,
+              media: uploadedMedia.length ? uploadedMedia : this.messages[pendingIndex].media,
+              files: uploadedAttachments.length ? uploadedAttachments : this.messages[pendingIndex].files,
+            };
+          }
+          ensureAssistantMessage(event.assistantMessageId, event.createdAt);
+          return;
+        }
+
+        if (event.type === 'reasoning.delta') {
+          const index = ensureAssistantMessage(event.messageId);
+          this.messages[index] = {
+            ...this.messages[index],
+            reasoning: appendText(this.messages[index].reasoning, event.delta),
+          };
+          return;
+        }
+
+        if (event.type === 'reply.delta') {
+          const index = ensureAssistantMessage(event.messageId);
+          this.messages[index] = {
+            ...this.messages[index],
+            content: appendText(this.messages[index].content, event.delta),
+          };
+          return;
+        }
+
+        if (event.type === 'artifact.created') {
+          mergeAssistantPayload(event.messageId, {
+            media: event.media,
+            files: event.files,
+            actions: event.actions,
+          });
+          return;
+        }
+
+        if (event.type === 'message.completed') {
+          mergeAssistantPayload(event.assistantMessageId, {
+            content: event.reply,
+            reasoning: event.reasoning ?? null,
+            media: event.media,
+            files: event.files,
+            actions: event.actions,
+          });
+          return;
+        }
+
+        if (event.type === 'error') {
+          throw new Error(event.message);
+        }
+      };
+
+      if (client.streamMessage) {
+        const abortController = new AbortController();
+        let streamStarted = false;
+
+        try {
+          for await (const event of client.streamMessage(targetThreadId, {
+            kind: 'markdown',
+            content: messageContent,
+            attachmentAssetIds: uploadedFiles.map((file) => file.assetId),
+            clientRequestId,
+          }, { signal: abortController.signal })) {
+            streamStarted = true;
+            if (this.activeThreadId !== targetThreadId) {
+              abortController.abort();
+              return;
+            }
+
+            applyStreamEvent(event);
+          }
+
+          try {
+            await refreshThreadMessages();
+          } catch (error) {
+            reportSubmissionError('refresh', error);
+          }
+          return;
+        } catch (error) {
+          if (!streamStarted && error instanceof MessageStreamUnavailableError) {
+            try {
+              await sendBufferedAndRefresh();
+            } catch (fallbackError) {
+              reportSubmissionError('send', fallbackError);
+            }
+            return;
+          }
+
+          reportSubmissionError('send', error);
+          return;
+        }
+      }
+
+      try {
+        await sendBufferedAndRefresh();
+      } catch (error) {
+        reportSubmissionError('send', error);
+      }
+      return;
+
       try {
         const sendResult = await client.sendMessage(targetThreadId, {
           kind: 'markdown',

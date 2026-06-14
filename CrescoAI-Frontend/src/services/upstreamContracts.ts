@@ -11,6 +11,7 @@ import type {
   ProfileRecord,
   ProfileSuggestion,
   ThreadMessage,
+  ThreadMessageStreamEvent,
   ThreadStatus,
   ThreadSummary,
   UploadedConversationFile,
@@ -71,6 +72,8 @@ export interface UpstreamMessageMedia {
   kind?: string;
   type?: string;
   url?: string | null;
+  download_url?: string | null;
+  downloadUrl?: string | null;
   src?: string | null;
   title?: string | null;
   caption?: string | null;
@@ -121,6 +124,32 @@ export interface UpstreamSendThreadMessageResult {
   assistant_message_id?: string | number | null;
   assistantMessageId?: string | number | null;
   status?: string | null;
+}
+
+export interface UpstreamMessageStreamEvent {
+  type?: string;
+  sequence?: number;
+  conversation_id?: string | number | null;
+  conversationId?: string | number | null;
+  thread_id?: string | number | null;
+  threadId?: string | number | null;
+  message_id?: string | number | null;
+  messageId?: string | number | null;
+  assistant_message_id?: string | number | null;
+  assistantMessageId?: string | number | null;
+  created_at?: string | number | Date | null;
+  createdAt?: string | number | Date | null;
+  delta?: string | null;
+  reply?: string | null;
+  reasoning?: string | null;
+  think?: string | null;
+  accepted?: boolean | null;
+  status?: string | null;
+  actions?: UpstreamMessageAction[] | null;
+  media?: UpstreamMessageMedia[] | null;
+  attachments?: UpstreamMessageMedia[] | null;
+  message?: string | null;
+  code?: string | null;
 }
 
 export interface UpstreamProfileSuggestion {
@@ -299,11 +328,11 @@ function normalizeOptionalText(value: string | null | undefined): string | undef
 
 function normalizeMessageMedia(media: UpstreamMessageMedia[] | null | undefined): MessageMedia[] | undefined {
   const nextMedia: MessageMedia[] = [];
-  const supportedKinds = new Set(['image', 'video', 'html', 'app']);
+  const supportedKinds = new Set<MessageMedia['kind']>(['image', 'audio', 'video', 'html', 'app']);
 
   for (const item of media ?? []) {
     const kind = item.kind ?? item.type;
-    const url = normalizeMediaUrl(item.url ?? item.src);
+    const url = normalizeMediaUrl(item.downloadUrl ?? item.download_url ?? item.url ?? item.src);
     const storedFileName = firstDefinedText(
       item.storedFileName,
       item.stored_file_name,
@@ -317,13 +346,14 @@ function normalizeMessageMedia(media: UpstreamMessageMedia[] | null | undefined)
       storedFileName,
     });
 
-    if (!kind || !supportedKinds.has(kind) || !url) {
+    if (!kind || !supportedKinds.has(kind as MessageMedia['kind']) || !url) {
       continue;
     }
+    const normalizedKind = kind as MessageMedia['kind'];
 
     nextMedia.push({
       id: normalizeId(item.id, `media-${nextMedia.length + 1}`),
-      kind,
+      kind: normalizedKind,
       url,
       title: presentation?.name ?? normalizeOptionalText(item.title),
       caption: normalizeOptionalText(item.caption),
@@ -439,7 +469,9 @@ function normalizeMessageFiles(
       ? CAREER_AGENT_API_ROUTES.threadFile(fallbackThreadId, storedFileName)
       : undefined;
     const url = normalizeMediaUrl(
-      item.url
+      item.downloadUrl
+      ?? item.download_url
+      ?? item.url
       ?? item.src
       ?? downloadRoute
       ?? item.storagePath
@@ -579,6 +611,95 @@ export function normalizeSendThreadMessageResult(input: UpstreamSendThreadMessag
     assistantMessageId: normalizeId(input.assistantMessageId ?? input.assistant_message_id, ''),
     status: normalizeOptionalText(input.status) ?? 'done',
   };
+}
+
+export function normalizeMessageStreamEvent(
+  input: UpstreamMessageStreamEvent,
+  fallbackThreadId: string,
+): ThreadMessageStreamEvent | null {
+  const type = input.type;
+  const threadId = normalizeId(
+    input.threadId ?? input.thread_id ?? input.conversationId ?? input.conversation_id,
+    fallbackThreadId,
+  );
+  const messageId = normalizeId(input.messageId ?? input.message_id, '');
+  const assistantMessageId = normalizeId(input.assistantMessageId ?? input.assistant_message_id, '');
+
+  if (type === 'message.created') {
+    return {
+      type,
+      threadId,
+      messageId,
+      assistantMessageId,
+      createdAt: normalizeTimestamp(input.createdAt ?? input.created_at),
+    };
+  }
+
+  if (type === 'reasoning.delta' || type === 'reply.delta') {
+    if (!messageId || typeof input.delta !== 'string') {
+      return null;
+    }
+
+    return {
+      type,
+      messageId,
+      delta: input.delta,
+    };
+  }
+
+  if (type === 'artifact.created') {
+    const mergedMedia = mergeMessageMediaSources({
+      id: messageId || 'stream-artifact',
+      threadId,
+      role: 'assistant',
+      content: '',
+      media: input.media,
+      attachments: input.attachments,
+    });
+
+    return {
+      type,
+      messageId,
+      actions: normalizeMessageActions(input.actions),
+      media: normalizeMessageMedia(mergedMedia),
+      files: normalizeMessageFiles(mergedMedia, threadId),
+    };
+  }
+
+  if (type === 'message.completed') {
+    const mergedMedia = mergeMessageMediaSources({
+      id: assistantMessageId || messageId || 'stream-completed',
+      threadId,
+      role: 'assistant',
+      content: input.reply ?? '',
+      media: input.media,
+      attachments: input.attachments,
+    });
+
+    return {
+      type,
+      accepted: input.accepted ?? true,
+      status: normalizeOptionalText(input.status) ?? 'done',
+      threadId,
+      messageId,
+      assistantMessageId,
+      reply: input.reply ?? '',
+      reasoning: input.reasoning ?? input.think ?? null,
+      actions: normalizeMessageActions(input.actions),
+      media: normalizeMessageMedia(mergedMedia),
+      files: normalizeMessageFiles(mergedMedia, threadId),
+    };
+  }
+
+  if (type === 'error') {
+    return {
+      type,
+      message: input.message ?? 'Message stream failed.',
+      code: normalizeOptionalText(input.code),
+    };
+  }
+
+  return null;
 }
 
 export function normalizeProfileSuggestion(input: UpstreamProfileSuggestion): ProfileSuggestion {

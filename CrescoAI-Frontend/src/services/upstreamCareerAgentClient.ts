@@ -1,10 +1,14 @@
 import axios, { AxiosHeaders, type AxiosInstance, type AxiosRequestConfig } from 'axios';
-import type { CareerAgentClient } from './careerAgentClient';
+import {
+  MessageStreamUnavailableError,
+  type CareerAgentClient,
+} from './careerAgentClient';
 import { CAREER_AGENT_API_ROUTES } from './careerAgentApiRoutes';
 import type { DraftMessageAttachment, ProfileRecord } from '../types/entities';
 import { rememberUploadedAssetPresentation } from './uploadedAssetPresentationCache';
 import type {
   UpstreamArtifactRecord,
+  UpstreamMessageStreamEvent,
   UpstreamProfileSuggestion,
   UpstreamSendThreadMessageResult,
   UpstreamThreadMessage,
@@ -13,6 +17,7 @@ import type {
 } from './upstreamContracts';
 import {
   normalizeArtifactRecord,
+  normalizeMessageStreamEvent,
   normalizeProfileSuggestion,
   normalizeSendThreadMessageResult,
   normalizeThreadMessage,
@@ -20,7 +25,7 @@ import {
   normalizeUploadedConversationFile,
   sanitizeProfileRecord,
 } from './upstreamContracts';
-import { readStoredAuthToken, readStoredAuthUserId } from './authSessionStorage';
+import { readStoredAuthToken, readStoredAuthTokenType, readStoredAuthUserId } from './authSessionStorage';
 
 export interface UpstreamCareerAgentClientOptions {
   baseUrl: string;
@@ -113,6 +118,78 @@ function isOptionalCapabilityError(error: unknown) {
 function normalizeUserIdForServer(value: string) {
   const numericValue = Number(value);
   return Number.isFinite(numericValue) ? numericValue : value;
+}
+
+function resolveUpstreamRequestUrl(baseUrl: string, path: string) {
+  if (/^https?:\/\//i.test(path)) {
+    return path;
+  }
+
+  return `${baseUrl.replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`;
+}
+
+function appendSseDataLine(line: string, dataLines: string[]) {
+  if (!line.startsWith('data:')) {
+    return;
+  }
+
+  const value = line.slice('data:'.length);
+  dataLines.push(value.startsWith(' ') ? value.slice(1) : value);
+}
+
+function parseSseEvent(rawEvent: string): unknown | null {
+  const dataLines: string[] = [];
+
+  for (const line of rawEvent.split('\n')) {
+    appendSseDataLine(line, dataLines);
+  }
+
+  if (!dataLines.length) {
+    return null;
+  }
+
+  const data = dataLines.join('\n').trim();
+  if (!data) {
+    return null;
+  }
+
+  return JSON.parse(data);
+}
+
+async function* readSseJson(response: Response): AsyncGenerator<unknown> {
+  const reader = response.body?.getReader();
+  if (!reader) {
+    throw new Error('Streaming response body is not readable.');
+  }
+
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) {
+      break;
+    }
+
+    buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n');
+    let separatorIndex = buffer.indexOf('\n\n');
+
+    while (separatorIndex >= 0) {
+      const rawEvent = buffer.slice(0, separatorIndex);
+      buffer = buffer.slice(separatorIndex + 2);
+      const parsed = parseSseEvent(rawEvent);
+      if (parsed) {
+        yield parsed;
+      }
+      separatorIndex = buffer.indexOf('\n\n');
+    }
+  }
+
+  buffer += decoder.decode().replace(/\r\n/g, '\n');
+  const parsed = parseSseEvent(buffer);
+  if (parsed) {
+    yield parsed;
+  }
 }
 
 async function attachmentToFile(attachment: DraftMessageAttachment | File): Promise<File> {
@@ -250,6 +327,49 @@ export function createUpstreamCareerAgentClient(
       );
 
       return normalizeSendThreadMessageResult(payload);
+    },
+    async *streamMessage(threadId, input, streamOptions) {
+      const path = CAREER_AGENT_API_ROUTES.streamThreadMessage(threadId);
+      const token = readStoredAuthToken();
+      const tokenType = readStoredAuthTokenType();
+      const headers = new Headers({
+        Accept: 'text/event-stream',
+        'Content-Type': 'application/json',
+      });
+
+      if (token) {
+        headers.set('Authorization', `${tokenType} ${token}`);
+      }
+
+      const response = await fetch(resolveUpstreamRequestUrl(options.baseUrl, path), {
+        method: 'POST',
+        headers,
+        credentials: options.withCredentials ? 'include' : 'same-origin',
+        signal: streamOptions?.signal,
+        body: JSON.stringify({
+          kind: input.kind ?? 'markdown',
+          content: input.content,
+          attachment_asset_ids: input.attachmentAssetIds ?? [],
+          client_request_id: input.clientRequestId,
+          context: input.context,
+        }),
+      });
+
+      if (response.status === 404 || response.status === 405 || response.status === 501) {
+        throw new MessageStreamUnavailableError(`Message stream endpoint is unavailable (${response.status}).`);
+      }
+
+      if (!response.ok) {
+        const message = await response.text().catch(() => response.statusText);
+        throw new Error(`Upstream stream request failed (${response.status}) for ${path}: ${message || response.statusText}`);
+      }
+
+      for await (const rawEvent of readSseJson(response)) {
+        const normalizedEvent = normalizeMessageStreamEvent(rawEvent as UpstreamMessageStreamEvent, threadId);
+        if (normalizedEvent) {
+          yield normalizedEvent;
+        }
+      }
     },
     async getProfile() {
       const payload = await requestOptionalJson<ProfileRecord>(CAREER_AGENT_API_ROUTES.profile());

@@ -37,6 +37,9 @@ export interface AgentSendMessageInput {
   attachments?: AgentAttachmentInput[];
   context?: Record<string, unknown>;
   clientRequestId?: string;
+  userMessageId?: string;
+  assistantMessageId?: string;
+  abortSignal?: AbortSignal;
   /** Per-message override, falls back to conversation-level config */
   apiKey?: string;
   baseUrl?: string;
@@ -64,6 +67,46 @@ export interface AgentSendMessageResult {
   generatedFiles?: GeneratedFile[];
   raw?: Record<string, unknown>;
 }
+
+export type AgentStreamEvent =
+  | {
+      type: 'message.created';
+      conversationId: string;
+      userMessageId: string;
+      assistantMessageId: string;
+      createdAt: string;
+    }
+  | {
+      type: 'reasoning.delta';
+      messageId: string;
+      delta: string;
+    }
+  | {
+      type: 'reply.delta';
+      messageId: string;
+      delta: string;
+    }
+  | {
+      type: 'message.completed';
+      accepted: boolean;
+      status: AgentSendMessageResult['status'];
+      conversationId: string;
+      userMessageId: string;
+      assistantMessageId: string;
+      reply: string;
+      reasoning?: string;
+      file?: AgentAttachmentInput | AgentAttachmentInput[];
+      generatedFiles?: GeneratedFile[];
+      raw?: Record<string, unknown>;
+    }
+  | {
+      type: 'error';
+      conversationId: string;
+      userMessageId: string;
+      assistantMessageId: string;
+      message: string;
+      code?: string;
+    };
 
 const networkRootDir = fileURLToPath(new URL('../../', import.meta.url));
 const userDataRootDir = join(networkRootDir, 'user');
