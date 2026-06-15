@@ -18,6 +18,7 @@ export type SessionConfig = {
   baseUrl?: string
   provider?: string
   model?: string
+  appendSystemPrompt?: string
   cwd: string
   permissions?: PermissionConfig
   userId?: string

@@ -1,7 +1,6 @@
 ---
 name: "develop-web-game"
-description: "TRIGGER FIRST — before writing a plain-text answer, ask yourself: can this be shown visually? If yes, use this skill. Trigger on ANY request whose subject has a spatial, temporal, structural, or quantitative dimension that benefits from visual presentation. This explicitly includes knowledge/introductory requests ('介绍', '了解', '解释', '科普', 'explain', 'introduce', 'tell me about', 'what is') about topics like astronomy, biology, geography, history timelines, architecture, circuits, algorithms, data structures, physics, chemistry, math, music theory, etc. Also trigger for: web games, interactive diagrams, simulations, data dashboards, generative art, UI prototypes, and any scenario where showing beats telling. When in doubt, prefer a visual answer over a text-only answer."
-author: openai
+description: "TRIGGER FIRST: 互动/可视化/模拟/动画/小游戏/图解/交互练习/仪表盘/算法演示/数据结构/流程/时间线 -> use this skill before plain text. Also trigger for 介绍/了解/解释/科普/explain/what is when showing beats telling. Build HTML apps, games, simulations, dashboards, visual demos."
 ---
 
 

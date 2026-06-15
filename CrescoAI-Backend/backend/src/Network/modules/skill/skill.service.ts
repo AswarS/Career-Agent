@@ -22,6 +22,88 @@ import {
   type ParsedSkillFile,
 } from './skill-file-store';
 import { substituteArguments } from '../../../utils/argumentSubstitution.js';
+import { CAREER_AGENT_SKILL_ROUTER_GUIDANCE } from '../../prompts/careerAgentLearningPrompt.js';
+
+type SkillRouteCandidate = {
+  name: string;
+  description: string;
+  category: string;
+  source: string;
+};
+
+const FAST_ROUTE_MAX_DIRECT_MATCHES = 1;
+const LEARNING_ROUTE_KEYWORDS = [
+  '学习计划',
+  '学习路线',
+  '怎么学',
+  '系统学习',
+  '从零开始',
+  '备考',
+  '面试准备',
+  '求职准备',
+  '技能提升',
+  '考试复习',
+  '课程规划',
+  '知识体系',
+  'study plan',
+  'learning plan',
+  'learning path',
+  'roadmap',
+  'interview prep',
+  'exam prep',
+  'curriculum',
+];
+const INTERACTIVE_ROUTE_KEYWORDS = [
+  '互动',
+  '可视化',
+  '模拟',
+  '动画',
+  '小游戏',
+  '图解',
+  '交互练习',
+  '仪表盘',
+  '算法演示',
+  '数据结构',
+  '流程',
+  '时间线',
+  'interactive',
+  'visualize',
+  'visualise',
+  'simulation',
+  'simulator',
+  'animation',
+  'game',
+  'dashboard',
+  'diagram',
+  'timeline',
+];
+const IMAGE_ROUTE_KEYWORDS = [
+  '生成图片',
+  '画一张',
+  '做一张图',
+  '图片生成',
+  'image generation',
+  'generate image',
+  'draw an image',
+  'create an image',
+];
+const VIDEO_ROUTE_KEYWORDS = [
+  '生成视频',
+  '视频生成',
+  '做一个视频',
+  'generate video',
+  'video generation',
+  'create a video',
+];
+const CODE_ROUTE_KEYWORDS = [
+  '代码分析',
+  '分析代码',
+  '代码审查',
+  'code analysis',
+  'analyze code',
+  'analyse code',
+  'review this code',
+];
 
 @Injectable()
 export class SkillService implements OnModuleInit {
@@ -372,7 +454,7 @@ export class SkillService implements OnModuleInit {
     }
 
     const skills = await this.listSkills(userId);
-    const candidates = skills
+    const candidates: SkillRouteCandidate[] = skills
       .filter((s) => typeof s.name === 'string' && s.name !== 'skills')
       .map((s) => ({
         name: String(s.name),
@@ -382,6 +464,15 @@ export class SkillService implements OnModuleInit {
       }));
 
     if (!candidates.length) return { useSkill: false, reason: 'no_skills' };
+
+    const fastRoute = this.tryFastRouteSkill(content, candidates);
+    if (fastRoute.kind === 'skip') {
+      return { useSkill: false, reason: fastRoute.reason };
+    }
+    const routerCandidates =
+      fastRoute.kind === 'ambiguous' && fastRoute.candidates.length > 0
+        ? fastRoute.candidates
+        : candidates;
 
     let llmConfig: SkillExecutionContext['llmConfig'] | undefined;
     if (this.settingsService) {
@@ -398,15 +489,30 @@ export class SkillService implements OnModuleInit {
       return { useSkill: false, reason: 'llm_not_configured' };
     }
 
+    if (fastRoute.kind === 'direct') {
+      return {
+        useSkill: true,
+        skillName: fastRoute.skillName,
+        args: content,
+        reason: fastRoute.reason,
+      };
+    }
+
     const routerPrompt =
-      'You are a strict skill router.\n' +
-      'Given user message and available skills, decide whether to call one skill.\n' +
+      'You are a strict skill router for CareerAgent.\n' +
+      'Given user message and available skills, decide whether to call one skill.\n\n' +
+      `${CAREER_AGENT_SKILL_ROUTER_GUIDANCE}\n\n` +
       'Rules:\n' +
       '1) Return ONLY compact JSON.\n' +
-      '2) If no skill is clearly beneficial, set useSkill=false.\n' +
+      '2) If no skill is beneficial, set useSkill=false.\n' +
       '3) If useSkill=true, skillName must exactly match one available name.\n' +
-      '4) args should be concise, preserving user intent.\n\n' +
-      `Available skills JSON:\n${JSON.stringify(candidates)}\n\n` +
+      '4) args should be concise, preserving the user intent and language.\n' +
+      '5) For simple learning queries, prefer using a suitable skill over answering only in text.\n\n' +
+      'Examples:\n' +
+      'User: "帮我规划三个月 Java 后端学习路线" -> {"useSkill":true,"skillName":"learning-plan","args":"帮我规划三个月 Java 后端学习路线","reason":"structured learning plan request"}\n' +
+      'User: "用互动方式教我理解递归" -> {"useSkill":true,"skillName":"develop-web-game","args":"用互动方式教我理解递归","reason":"interactive visual learning request"}\n' +
+      'User: "你好" -> {"useSkill":false,"skillName":"","args":"","reason":"greeting"}\n\n' +
+      `Available skills JSON:\n${JSON.stringify(routerCandidates)}\n\n` +
       `User message:\n${content}\n\n` +
       'Output schema:\n{"useSkill":boolean,"skillName":"string","args":"string","reason":"string"}';
 
@@ -453,6 +559,114 @@ export class SkillService implements OnModuleInit {
     for (const { userId, skill } of allSkills) {
       this.registerCustomSkill(userId, skill);
     }
+  }
+
+  private tryFastRouteSkill(
+    content: string,
+    candidates: SkillRouteCandidate[],
+  ):
+    | { kind: 'direct'; skillName: string; reason: string }
+    | { kind: 'ambiguous'; candidates: SkillRouteCandidate[]; reason: string }
+    | { kind: 'skip'; reason: string }
+    | { kind: 'none' } {
+    const normalized = content.trim().toLowerCase();
+    if (!normalized) {
+      return { kind: 'skip', reason: 'empty_message' };
+    }
+
+    if (this.isClearlyNonSkillMessage(normalized)) {
+      return { kind: 'skip', reason: 'local_non_skill_message' };
+    }
+
+    const candidateNames = new Set(candidates.map((candidate) => candidate.name));
+    const matchedNames = new Set<string>();
+    const addIfAvailable = (skillName: string) => {
+      if (candidateNames.has(skillName)) {
+        matchedNames.add(skillName);
+      }
+    };
+
+    if (this.matchesAny(normalized, LEARNING_ROUTE_KEYWORDS)) {
+      addIfAvailable('learning-plan');
+      this.addCandidatesMatchingKeywords(candidates, LEARNING_ROUTE_KEYWORDS, matchedNames);
+    }
+
+    if (this.matchesAny(normalized, INTERACTIVE_ROUTE_KEYWORDS)) {
+      addIfAvailable('develop-web-game');
+      this.addCandidatesMatchingKeywords(candidates, INTERACTIVE_ROUTE_KEYWORDS, matchedNames);
+    }
+
+    if (this.matchesAny(normalized, IMAGE_ROUTE_KEYWORDS)) {
+      addIfAvailable('image-generation');
+      this.addCandidatesMatchingKeywords(candidates, IMAGE_ROUTE_KEYWORDS, matchedNames);
+    }
+
+    if (this.matchesAny(normalized, VIDEO_ROUTE_KEYWORDS)) {
+      addIfAvailable('video-generation');
+      this.addCandidatesMatchingKeywords(candidates, VIDEO_ROUTE_KEYWORDS, matchedNames);
+    }
+
+    if (this.matchesAny(normalized, CODE_ROUTE_KEYWORDS)) {
+      addIfAvailable('code-analysis');
+      this.addCandidatesMatchingKeywords(candidates, CODE_ROUTE_KEYWORDS, matchedNames);
+    }
+
+    const matched = candidates.filter((candidate) => matchedNames.has(candidate.name));
+    if (matched.length === 0) {
+      return { kind: 'none' };
+    }
+
+    if (matched.length <= FAST_ROUTE_MAX_DIRECT_MATCHES) {
+      return {
+        kind: 'direct',
+        skillName: matched[0]!.name,
+        reason: 'local_fast_route',
+      };
+    }
+
+    return {
+      kind: 'ambiguous',
+      candidates: matched,
+      reason: 'local_fast_route_ambiguous',
+    };
+  }
+
+  private isClearlyNonSkillMessage(normalized: string): boolean {
+    const compact = normalized.replace(/[!！.。?？,，\s]/g, '');
+    return new Set([
+      '你好',
+      '您好',
+      'hello',
+      'hi',
+      'hey',
+      '谢谢',
+      'thanks',
+      'thankyou',
+    ]).has(compact);
+  }
+
+  private addCandidatesMatchingKeywords(
+    candidates: SkillRouteCandidate[],
+    keywords: string[],
+    matchedNames: Set<string>,
+  ): void {
+    for (const candidate of candidates) {
+      if (this.matchesAny(this.candidateSearchText(candidate), keywords)) {
+        matchedNames.add(candidate.name);
+      }
+    }
+  }
+
+  private candidateSearchText(candidate: SkillRouteCandidate): string {
+    return [
+      candidate.name,
+      candidate.description,
+      candidate.category,
+    ].join(' ').toLowerCase();
+  }
+
+  private matchesAny(value: string, needles: string[]): boolean {
+    return needles.some((needle) => value.includes(needle.toLowerCase()));
   }
 
   private async syncUserSkills(userId: number): Promise<void> {

@@ -21,6 +21,7 @@ import type { CanUseToolFn } from '../hooks/useCanUseTool.js'
 import type { PermissionDecision } from '../utils/permissions/permissions.js'
 import type { ToolType } from '../Tool.js'
 import type { FileStateCache } from '../utils/fileStateCache.js'
+import { CAREER_AGENT_LEARNING_SYSTEM_PROMPT } from '../Network/prompts/careerAgentLearningPrompt.js'
 
 // ---------------------------------------------------------------------------
 // Per-session AppState
@@ -227,6 +228,10 @@ export function createQueryEngineForSession(
   const tools = mcpTools.length > 0
     ? assembleToolPool(toolPermissionContext, mcpTools)
     : builtInTools
+  const appendSystemPrompt = [
+    CAREER_AGENT_LEARNING_SYSTEM_PROMPT,
+    context.config.appendSystemPrompt,
+  ].filter(Boolean).join('\n\n')
 
   const config: QueryEngineConfig = {
     cwd: context.config.cwd,
@@ -239,6 +244,7 @@ export function createQueryEngineForSession(
     setAppState,
     initialMessages: options.initialMessages ?? [],
     readFileCache: options.readFileCache ?? new Map() as FileStateCache,
+    appendSystemPrompt,
     userSpecifiedModel: context.config.model,
     // TODO: read thinking config from SessionContext.config.thinkingMode once the
     // frontend setting is wired up (update-api-settings.dto.ts has the field stub).
