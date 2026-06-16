@@ -6,6 +6,7 @@ import type {
   ArtifactViewMode,
   MessageAction,
   MessageMedia,
+  MessageMediaKind,
   MessageFileAttachment,
   MessageKind,
   ProfileRecord,
@@ -19,6 +20,12 @@ import type {
 import { CAREER_AGENT_API_ROUTES } from './careerAgentApiRoutes';
 import { resolveUpstreamAssetUrl } from './upstreamAssetUrls';
 import { findUploadedAssetPresentation } from './uploadedAssetPresentationCache';
+
+const supportedMessageMediaKinds = new Set<MessageMediaKind>(['image', 'audio', 'video', 'html', 'app']);
+
+function isSupportedMessageMediaKind(kind: string | undefined): kind is MessageMediaKind {
+  return kind !== undefined && supportedMessageMediaKinds.has(kind as MessageMediaKind);
+}
 
 export interface UpstreamThreadSummary {
   id: string | number;
@@ -328,7 +335,6 @@ function normalizeOptionalText(value: string | null | undefined): string | undef
 
 function normalizeMessageMedia(media: UpstreamMessageMedia[] | null | undefined): MessageMedia[] | undefined {
   const nextMedia: MessageMedia[] = [];
-  const supportedKinds = new Set<MessageMedia['kind']>(['image', 'audio', 'video', 'html', 'app']);
 
   for (const item of media ?? []) {
     const kind = item.kind ?? item.type;
@@ -346,14 +352,13 @@ function normalizeMessageMedia(media: UpstreamMessageMedia[] | null | undefined)
       storedFileName,
     });
 
-    if (!kind || !supportedKinds.has(kind as MessageMedia['kind']) || !url) {
+    if (!isSupportedMessageMediaKind(kind) || !url) {
       continue;
     }
-    const normalizedKind = kind as MessageMedia['kind'];
 
     nextMedia.push({
       id: normalizeId(item.id, `media-${nextMedia.length + 1}`),
-      kind: normalizedKind,
+      kind,
       url,
       title: presentation?.name ?? normalizeOptionalText(item.title),
       caption: normalizeOptionalText(item.caption),

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useRoute, useRouter } from 'vue-router';
 import ConversationComposer from '../modules/conversation/ConversationComposer.vue';
@@ -12,11 +12,40 @@ import type { DraftMessageSubmission, MessageAction } from '../types/entities';
 const route = useRoute();
 const router = useRouter();
 const workspaceStore = useWorkspaceStore();
-const { activeThread, errorMessage, messages, messagesStatus, messageSubmitStatus } = storeToRefs(workspaceStore);
+const {
+  activeThread,
+  errorMessage,
+  messages,
+  messagesStatus,
+  messageSubmitStatus,
+  messageSubmitThreadId,
+} = storeToRefs(workspaceStore);
+const minimumRunningIndicatorMs = 360;
 
 const threadId = computed(() => String(route.params.threadId ?? 'thread-001'));
 const multiAgentMode = computed(() => shouldUseMultiAgentPresentation(messages.value));
+const localSubmitRunning = ref(false);
+const localSubmitThreadId = ref<string | null>(null);
+const isConversationRunning = computed(() => (
+  messageSubmitThreadId.value === threadId.value
+  || (localSubmitRunning.value && localSubmitThreadId.value === threadId.value)
+));
 const conversationScrollRegion = ref<HTMLElement | null>(null);
+let submitRunToken = 0;
+
+async function scrollConversationToBottom(behavior: ScrollBehavior = 'auto') {
+  await nextTick();
+  const scrollRegion = conversationScrollRegion.value;
+
+  if (!scrollRegion) {
+    return;
+  }
+
+  scrollRegion.scrollTo({
+    top: scrollRegion.scrollHeight,
+    behavior,
+  });
+}
 
 watch(
   threadId,
@@ -25,26 +54,52 @@ watch(
     if (activeThreadId && activeThreadId !== value) {
       await router.replace(`/threads/${activeThreadId}`);
     }
+
+    await scrollConversationToBottom();
   },
   { immediate: true },
 );
 
 watch(
-  [messagesStatus, () => messages.value.length],
+  [messagesStatus, () => messages.value.length, isConversationRunning],
   async ([status]) => {
     if (status !== 'ready') {
       return;
     }
 
-    await nextTick();
-    conversationScrollRegion.value?.scrollTo({
-      top: conversationScrollRegion.value.scrollHeight,
-    });
+    await scrollConversationToBottom();
   },
 );
 
+onMounted(() => {
+  void scrollConversationToBottom();
+});
+
+function waitForMinimumRunningTime(startedAt: number) {
+  const elapsedMs = Date.now() - startedAt;
+  const remainingMs = Math.max(0, minimumRunningIndicatorMs - elapsedMs);
+
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, remainingMs);
+  });
+}
+
 async function handleSubmit(submission: DraftMessageSubmission) {
-  await workspaceStore.submitDraftMessage(submission);
+  const currentToken = ++submitRunToken;
+  const startedAt = Date.now();
+  localSubmitRunning.value = true;
+  localSubmitThreadId.value = threadId.value;
+
+  try {
+    await workspaceStore.submitDraftMessage(submission);
+  } finally {
+    await waitForMinimumRunningTime(startedAt);
+
+    if (currentToken === submitRunToken) {
+      localSubmitRunning.value = false;
+      localSubmitThreadId.value = null;
+    }
+  }
 }
 
 async function handleMessageAction(action: MessageAction) {
@@ -92,10 +147,13 @@ async function handleMessageAction(action: MessageAction) {
             @action="handleMessageAction"
           />
 
-          <div v-if="messageSubmitStatus === 'loading'" class="typing-indicator" aria-label="AI 正在生成回复">
-            <span class="typing-dot"></span>
-            <span class="typing-dot"></span>
-            <span class="typing-dot"></span>
+          <div v-if="isConversationRunning" class="running-indicator" role="status" aria-live="polite" aria-label="对话正在运行">
+            <span class="running-dots" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span></span>
+            </span>
+            <span>思考中</span>
           </div>
         </section>
       </div>
@@ -142,6 +200,62 @@ async function handleMessageAction(action: MessageAction) {
   display: grid;
   gap: 12px;
   align-content: start;
+}
+
+.running-indicator {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  width: fit-content;
+  margin-top: 2px;
+  padding: 9px 12px;
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-primary);
+  border-radius: 14px;
+  border-top-left-radius: 5px;
+  border-bottom-left-radius: 5px;
+  background: var(--color-surface-strong);
+  color: var(--color-text-muted);
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.running-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.running-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--color-primary);
+  opacity: 0.36;
+  animation: running-dot 920ms ease-in-out infinite;
+}
+
+.running-dots span:nth-child(2) {
+  animation-delay: 140ms;
+}
+
+.running-dots span:nth-child(3) {
+  animation-delay: 280ms;
+}
+
+@keyframes running-dot {
+  0%,
+  80%,
+  100% {
+    opacity: 0.34;
+    transform: translateY(0);
+  }
+
+  40% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
 }
 
 .composer-dock {
@@ -219,49 +333,6 @@ async function handleMessageAction(action: MessageAction) {
 @media (max-width: 640px) {
   .composer-dock :deep(.composer-card) {
     width: calc(100vw - 24px);
-  }
-}
-
-.typing-indicator {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 14px 18px;
-  border-radius: 16px;
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-card);
-  width: fit-content;
-}
-
-.typing-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--color-text-muted);
-  animation: typing-bounce 1.4s infinite ease-in-out both;
-}
-
-.typing-dot:nth-child(1) {
-  animation-delay: 0s;
-}
-
-.typing-dot:nth-child(2) {
-  animation-delay: 0.2s;
-}
-
-.typing-dot:nth-child(3) {
-  animation-delay: 0.4s;
-}
-
-@keyframes typing-bounce {
-  0%, 80%, 100% {
-    transform: scale(0.6);
-    opacity: 0.4;
-  }
-  40% {
-    transform: scale(1);
-    opacity: 1;
   }
 }
 
