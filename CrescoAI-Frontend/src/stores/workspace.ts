@@ -812,7 +812,7 @@ export const useWorkspaceStore = defineStore('workspace', {
         revokeLocalMessageResources(this.messages);
         this.messages = nextMessages;
         this.messagesStatus = 'ready';
-        this.messageSubmitStatus = 'ready';
+        this.messageSubmitStatusByThread[targetThreadId] = 'ready';
         return true;
       };
       const sendBufferedAndRefresh = async () => {
