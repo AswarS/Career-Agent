@@ -6,6 +6,7 @@ import type {
   ArtifactViewMode,
   MessageAction,
   MessageMedia,
+  MessageMediaKind,
   MessageFileAttachment,
   MessageKind,
   ProfileRecord,
@@ -18,6 +19,12 @@ import type {
 import { CAREER_AGENT_API_ROUTES } from './careerAgentApiRoutes';
 import { resolveUpstreamAssetUrl } from './upstreamAssetUrls';
 import { findUploadedAssetPresentation } from './uploadedAssetPresentationCache';
+
+const supportedMessageMediaKinds = new Set<MessageMediaKind>(['image', 'video', 'html', 'app']);
+
+function isSupportedMessageMediaKind(kind: string | undefined): kind is MessageMediaKind {
+  return kind !== undefined && supportedMessageMediaKinds.has(kind as MessageMediaKind);
+}
 
 export interface UpstreamThreadSummary {
   id: string | number;
@@ -299,7 +306,6 @@ function normalizeOptionalText(value: string | null | undefined): string | undef
 
 function normalizeMessageMedia(media: UpstreamMessageMedia[] | null | undefined): MessageMedia[] | undefined {
   const nextMedia: MessageMedia[] = [];
-  const supportedKinds = new Set(['image', 'video', 'html', 'app']);
 
   for (const item of media ?? []) {
     const kind = item.kind ?? item.type;
@@ -317,7 +323,7 @@ function normalizeMessageMedia(media: UpstreamMessageMedia[] | null | undefined)
       storedFileName,
     });
 
-    if (!kind || !supportedKinds.has(kind) || !url) {
+    if (!isSupportedMessageMediaKind(kind) || !url) {
       continue;
     }
 
