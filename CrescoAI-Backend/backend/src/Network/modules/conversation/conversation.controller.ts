@@ -73,10 +73,14 @@ export class ConversationController {
   ) {
     const abortController = new AbortController();
     let sequence = 0;
+    const abortOnDisconnect = () => {
+      if (!response.writableEnded) {
+        abortController.abort();
+      }
+    };
 
-    req.on('close', () => {
-      abortController.abort();
-    });
+    req.once('aborted', abortOnDisconnect);
+    response.once('close', abortOnDisconnect);
 
     response.status(200);
     response.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
@@ -84,6 +88,13 @@ export class ConversationController {
     response.setHeader('Connection', 'keep-alive');
     response.setHeader('X-Accel-Buffering', 'no');
     response.flushHeaders?.();
+
+    const heartbeat = setInterval(() => {
+      if (!response.destroyed && !response.writableEnded) {
+        response.write(': keepalive\n\n');
+      }
+    }, 15_000);
+    heartbeat.unref?.();
 
     const writeEvent = (event: Record<string, unknown> & { type: string }) => {
       sequence += 1;
@@ -110,6 +121,9 @@ export class ConversationController {
         writeEvent({ type: 'error', message });
       }
     } finally {
+      clearInterval(heartbeat);
+      req.removeListener('aborted', abortOnDisconnect);
+      response.removeListener('close', abortOnDisconnect);
       if (!response.destroyed) {
         response.end();
       }

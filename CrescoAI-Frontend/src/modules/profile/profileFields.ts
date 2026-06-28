@@ -76,6 +76,15 @@ export function buildProfileSnapshotSections(profile: ProfileRecord) {
         { label: '就业状态', value: profile.employmentStatus },
         { label: '所在地区', value: profile.locationRegion },
         { label: '每周可投入时间', value: profile.weeklyTimeBudget },
+        { label: '语言与地区', value: profile.locale },
+        { label: '时区', value: profile.timezone },
+      ] satisfies ProfileSnapshotItem[],
+    },
+    {
+      title: '经历与学习背景',
+      items: [
+        { label: '经验概述', value: profile.experienceSummary },
+        { label: '学习背景', value: profile.educationSummary },
       ] satisfies ProfileSnapshotItem[],
     },
     {

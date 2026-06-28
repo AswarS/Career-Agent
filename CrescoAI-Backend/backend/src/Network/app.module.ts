@@ -23,6 +23,7 @@ import { GeneratedAppEntity } from './modules/generated-app/entities/generated-a
 import { GeneratedModule } from './modules/generated/generated.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { ProfileModule } from './modules/profile/profile.module';
 
 const networkDir = dirname(fileURLToPath(import.meta.url));
 
@@ -54,6 +55,7 @@ const networkDir = dirname(fileURLToPath(import.meta.url));
     MemoryModule,
     SettingsModule,
     UserModule,
+    ProfileModule,
     GeneratedModule,
   ],
   providers: [AppService],

@@ -3,9 +3,51 @@ import { clearUploadedAssetPresentationCache, rememberUploadedAssetPresentation 
 import {
   normalizeArtifactRecord,
   normalizeProfileSuggestion,
+  sanitizeProfileRecord,
   normalizeThreadMessage,
   normalizeThreadSummary,
 } from './upstreamContracts';
+
+describe('sanitizeProfileRecord', () => {
+  it('normalizes the sample profile envelope without leaking fixture metadata', () => {
+    const profile = sanitizeProfileRecord({
+      _meta: {
+        personaId: 'freelancer-indie-developer',
+        careerStage: 'mid',
+      },
+      profile: {
+        displayName: '苏远',
+        locale: 'zh-CN',
+        timezone: 'Asia/Shanghai',
+        currentRole: '独立开发者 / 自由职业全栈工程师',
+        targetIndustries: ['开发者工具', '效率工具', 'AI 应用层'],
+        constraints: ['收入不稳定，不能长时间不产出'],
+      },
+    });
+
+    expect(profile).toMatchObject({
+      displayName: '苏远',
+      timezone: 'Asia/Shanghai',
+      currentRole: '独立开发者 / 自由职业全栈工程师',
+      targetIndustries: ['开发者工具', '效率工具', 'AI 应用层'],
+    });
+    expect(profile).not.toHaveProperty('_meta');
+    expect(profile.workPreferences).toEqual([]);
+  });
+
+  it('migrates legacy snake_case fields and safely fills missing arrays', () => {
+    const profile = sanitizeProfileRecord({
+      display_name: '苏远',
+      target_role: '全职独立开发者',
+      key_strengths: ['快速交付', '快速交付', '  '],
+    });
+
+    expect(profile.displayName).toBe('苏远');
+    expect(profile.targetRole).toBe('全职独立开发者');
+    expect(profile.keyStrengths).toEqual(['快速交付']);
+    expect(profile.riskSignals).toEqual([]);
+  });
+});
 
 describe('uploaded asset presentation cache integration', () => {
   it('prefers remembered original file names over sanitized backend titles for the current session', () => {

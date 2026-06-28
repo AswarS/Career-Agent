@@ -111,6 +111,7 @@ const codeAnalysisSkill: BuiltinSkillDefinition = {
       return {
         success: true,
         reply: result.reply,
+        outputFiles: result.generatedFiles,
         metadata: { model: result.model ?? llmConfig.model },
       };
     }
@@ -489,6 +490,7 @@ const learningPlanSkill: BuiltinSkillDefinition = {
       return {
         success: true,
         reply: result.reply,
+        outputFiles: result.generatedFiles,
         metadata: { model: result.model ?? llmConfig.model },
       };
     }
@@ -563,7 +565,16 @@ const developWebGameSkill: BuiltinSkillDefinition = {
         metadata: { model: result.model ?? llmConfig.model },
       };
 
-      if (artifact && artifact.url) {
+      if (result.generatedFiles?.length) {
+        response.outputFiles = result.generatedFiles.map((file) => ({
+          ...file,
+          title: file.title ?? artifact?.description ?? description,
+        }));
+        skillLogger.info(
+          'develop-web-game',
+          `Using ${response.outputFiles.length} generated file(s) reported by AgentService.`,
+        );
+      } else if (artifact && artifact.url) {
         // AI wrote files to disk and reported the path
         const originalPath = artifact.url;
         const kind = artifact.type;
@@ -633,6 +644,42 @@ const developWebGameSkill: BuiltinSkillDefinition = {
 
       if (response.outputFiles?.length) {
         skillLogger.info('develop-web-game', 'Returning outputFiles:', response.outputFiles);
+      } else {
+        skillLogger.warn(
+          'develop-web-game',
+          'The first execution did not produce a generated artifact; retrying once.',
+        );
+        const retryResult = await context.runUnifiedPrompt({
+          userId: context.userId,
+          conversationId: context.conversationId,
+          apiKey: llmConfig.apiKey,
+          baseUrl: llmConfig.baseUrl,
+          model: llmConfig.model,
+          content:
+            `${skillContent}\n\nUser request:\n${description}\n\n` +
+            'The previous execution did not create a usable artifact. Complete the task now: ' +
+            'write a self-contained HTML file with the available file tools, verify that it exists, ' +
+            'and do not stop after only describing the plan.',
+        });
+
+        if (retryResult.success && retryResult.reply) {
+          response.reply = retryResult.reply;
+          response.metadata = { model: retryResult.model ?? llmConfig.model };
+          if (retryResult.generatedFiles?.length) {
+            response.outputFiles = retryResult.generatedFiles.map((file) => ({
+              ...file,
+              title: file.title ?? description,
+            }));
+          }
+        }
+      }
+
+      if (!response.outputFiles?.length) {
+        return {
+          success: false,
+          reply: 'Web game generation stopped before producing a usable artifact. Please retry.',
+          metadata: response.metadata,
+        };
       }
 
       return response;

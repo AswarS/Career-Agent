@@ -29,9 +29,16 @@ export interface SkillHandlerResult {
   }>;
 }
 
+export interface SkillProgressEvent {
+  type: 'reasoning.delta' | 'reply.delta';
+  delta: string;
+}
+
 export interface SkillExecutionContext {
   userId?: number;
   conversationId?: string;
+  abortSignal?: AbortSignal;
+  onProgress?: (event: SkillProgressEvent) => void;
   llmConfig?: {
     apiKey?: string;
     baseUrl?: string;
@@ -44,7 +51,13 @@ export interface SkillExecutionContext {
     model?: string;
     userId?: number;
     conversationId?: string;
-  }) => Promise<{ success: boolean; reply?: string; thinking?: string; model?: string }>;
+  }) => Promise<{
+    success: boolean;
+    reply?: string;
+    thinking?: string;
+    model?: string;
+    generatedFiles?: SkillHandlerResult['outputFiles'];
+  }>;
   runInSession?: <T>(
     callback: (context: { abortController: AbortController }) => Promise<T>,
   ) => Promise<T>;

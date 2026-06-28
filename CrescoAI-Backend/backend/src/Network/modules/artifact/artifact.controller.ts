@@ -35,7 +35,7 @@ export class ArtifactController {
       throw new ForbiddenException('You do not have access to this artifact');
     }
 
-    return artifact;
+    return this.artifactService.toPublicArtifact(artifact);
   }
 
   @Post(':artifactId/refresh')
@@ -57,6 +57,6 @@ export class ArtifactController {
     }
 
     // For now, just return the existing artifact (no dynamic refresh logic yet)
-    return artifact;
+    return this.artifactService.toPublicArtifact(artifact);
   }
 }

@@ -16,12 +16,14 @@ import {
 import { createIsolatedState } from '../../../bootstrap/state.js';
 import { createQueryEngineForSession } from '../../../server/queryEngineFactory.js';
 import { QueryEngine } from '../../../QueryEngine.js';
-import { appendFile, mkdir, readdir, stat } from 'node:fs/promises';
-import { join, extname } from 'node:path';
+import { appendFile, mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { SettingsService } from '../settings/settings.service';
 import { setSessionMultimodalConfig, removeSessionMultimodalConfig } from '../../../utils/multimodalConfig.js';
+import { discoverGeneratedFiles } from './generated-output-discovery.js';
+import { sanitizeServerPhysicalPaths } from '../../utils/publicOutputSanitizer.js';
 
 // ---------------------------------------------------------------------------
 // JSONL helpers
@@ -43,7 +45,7 @@ function createAssistantProcessBlock(thinking: string): Record<string, unknown> 
   return {
     type: 'thinking',
     phase: 'process',
-    thinking,
+    thinking: sanitizeServerPhysicalPaths(thinking),
     signature: '',
   };
 }
@@ -52,7 +54,7 @@ function createAssistantFinalBlock(text: string): Record<string, unknown> {
   return {
     type: 'text',
     phase: 'final',
-    text,
+    text: sanitizeServerPhysicalPaths(text),
   };
 }
 
@@ -60,11 +62,11 @@ function formatAgentProcessBlock(block: Record<string, unknown>): string {
   const blockType = typeof block.type === 'string' ? block.type : 'unknown';
 
   if (blockType === 'thinking' && typeof block.thinking === 'string') {
-    return block.thinking;
+    return sanitizeServerPhysicalPaths(block.thinking);
   }
 
   if (blockType === 'reasoning' && typeof (block.reasoning ?? block.text) === 'string') {
-    return String(block.reasoning ?? block.text);
+    return sanitizeServerPhysicalPaths(String(block.reasoning ?? block.text));
   }
 
   if (blockType === 'text') {
@@ -76,6 +78,16 @@ function formatAgentProcessBlock(block: Record<string, unknown>): string {
   }
 
   return formatFilteredStructuredProcessBlock(blockType);
+}
+
+function isToolResultProcessBlock(blockType: string, block: Record<string, unknown>): boolean {
+  return (
+    blockType === 'tool_result' ||
+    blockType.endsWith('_tool_result') ||
+    block.content !== undefined ||
+    block.result !== undefined ||
+    block.output !== undefined
+  );
 }
 
 function isToolFacingProcessBlock(blockType: string, block: Record<string, unknown>): boolean {
@@ -95,41 +107,91 @@ function formatFilteredToolProcessBlock(
   blockType: string,
   block: Record<string, unknown>,
 ): string {
-  const isResult = blockType.includes('result') || block.content !== undefined || block.result !== undefined;
-  const filteredFields = [
-    block.name !== undefined || block.tool_name !== undefined || block.toolName !== undefined
-      ? '工具名称'
-      : undefined,
-    block.input !== undefined ? '调用参数 input' : undefined,
-    block.arguments !== undefined ? '调用参数 arguments' : undefined,
-    block.args !== undefined ? '调用参数 args' : undefined,
-    block.content !== undefined ? '返回内容 content' : undefined,
-    block.result !== undefined ? '返回内容 result' : undefined,
-    block.output !== undefined ? '返回内容 output' : undefined,
-    block.id !== undefined || block.tool_use_id !== undefined || block.toolUseId !== undefined
-      ? '内部调用标识'
-      : undefined,
-  ].filter(Boolean);
-  const status =
-    block.is_error === true || block.isError === true
-      ? '执行状态: 工具返回错误，错误详情已过滤。'
-      : isResult
-        ? '执行状态: 工具已返回，返回正文已过滤。'
-        : '执行状态: 工具调用已发起，调用细节已过滤。';
+  if (isToolResultProcessBlock(blockType, block)) {
+    return formatSanitizedToolResultProcessBlock(block);
+  }
 
   return [
-    isResult ? '[工具返回已过滤]' : '[工具调用已过滤]',
-    `事件类型: ${blockType}`,
-    status,
-    `过滤内容: ${filteredFields.length ? filteredFields.join('、') : '工具相关内部数据'}`,
+    '[工具调用]',
+    '正在调用工具。',
   ].join('\n');
+}
+
+function formatSanitizedToolResultProcessBlock(block: Record<string, unknown>): string {
+  const rawResult = extractToolResultText(block);
+  const resultText = redactSensitiveProcessText(rawResult);
+  return [
+    '[工具返回]',
+    resultText || (block.is_error === true || block.isError === true ? '工具返回错误。' : '工具已返回。'),
+  ].join('\n');
+}
+
+function extractToolResultText(block: Record<string, unknown>): string {
+  const value = block.content ?? block.result ?? block.output ?? block.error ?? block;
+  return stringifyToolResultValue(value);
+}
+
+function stringifyToolResultValue(value: unknown): string {
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => {
+        if (typeof item === 'string') {
+          return item;
+        }
+        if (typeof item !== 'object' || item === null) {
+          return String(item);
+        }
+        const typedItem = item as Record<string, unknown>;
+        if (typedItem.type === 'text' && typeof typedItem.text === 'string') {
+          return typedItem.text;
+        }
+        if (typeof typedItem.content === 'string') {
+          return typedItem.content;
+        }
+        return stringifyToolResultValue(typedItem);
+      })
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  if (value === undefined || value === null) {
+    return '';
+  }
+
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+function redactSensitiveProcessText(input: string): string {
+  let output = input;
+  output = output.replace(/(Bearer\s+)[A-Za-z0-9._~+/=-]+/gi, '$1******');
+  output = output.replace(
+    /\b(authorization|api[_-]?key|access[_-]?token|refresh[_-]?token|secret|password|passwd|pwd|private[_-]?key)\b(\s*[:=]\s*)(["']?)[^\s"',;]+/gi,
+    '$1$2$3******',
+  );
+  output = output.replace(
+    /([?&](?:api[_-]?key|access[_-]?token|refresh[_-]?token|token|secret|password)=)[^&\s"']+/gi,
+    '$1******',
+  );
+  output = output.replace(/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g, '******');
+  output = output.replace(/\b(?:sk|pk|rk|xox[baprs])-[A-Za-z0-9_-]{16,}\b/gi, '******');
+  output = output.replace(/\b[A-Fa-f0-9]{64,}\b/g, '******');
+  output = output.replace(/\b[A-Za-z0-9+/]{80,}={0,2}\b/g, '******');
+  output = output.replace(/C:\\Users\\[^\\\s"']+/gi, 'C:\\Users\\<user>');
+  return sanitizeServerPhysicalPaths(output);
 }
 
 function formatFilteredStructuredProcessBlock(blockType: string): string {
   return [
-    '[结构化过程事件已过滤]',
-    `事件类型: ${blockType}`,
-    '说明: 原始结构化内容未展示，以避免暴露内部调用细节。',
+    '[过程事件]',
+    '正在处理过程事件。',
   ].join('\n');
 }
 
@@ -216,23 +278,62 @@ export class AgentService {
     baseUrl?: string;
     model?: string;
     conversationId?: string;
-  }): Promise<{ success: boolean; reply?: string; thinking?: string; model?: string }> {
+    abortSignal?: AbortSignal;
+    onProgress?: (event: {
+      type: 'reasoning.delta' | 'reply.delta';
+      delta: string;
+    }) => void;
+  }): Promise<{
+    success: boolean;
+    reply?: string;
+    thinking?: string;
+    model?: string;
+    generatedFiles?: GeneratedFile[];
+  }> {
     const tempConversationId =
       input.conversationId && input.conversationId.trim().length > 0
         ? `${input.conversationId}-skill`
         : `skill-${randomUUID()}`;
 
     try {
-      const result = await this.runQueryEngineInference(
-        tempConversationId,
-        input.userId,
-        input.content,
-        {
-          apiKey: input.apiKey,
-          baseUrl: input.baseUrl,
-          model: input.model,
-        },
-      );
+      const config = {
+        apiKey: input.apiKey,
+        baseUrl: input.baseUrl,
+        model: input.model,
+      };
+      let result;
+
+      if (input.onProgress || input.abortSignal) {
+        const eventQueue = new AsyncEventQueue<AgentStreamEvent>();
+        const inferencePromise = this.runStreamingInference({
+          input: {
+            conversationId: tempConversationId,
+            userId: input.userId,
+            content: input.content,
+            userVisibleContent: input.content,
+            abortSignal: input.abortSignal,
+          },
+          config,
+          userEventUuid: randomUUID(),
+          assistantMessageId: `msg_assistant_skill_${randomUUID().replace(/-/g, '')}`,
+          startTime: Date.now(),
+          eventQueue,
+        });
+
+        for await (const event of eventQueue) {
+          if (event.type === 'reasoning.delta' || event.type === 'reply.delta') {
+            input.onProgress?.({ type: event.type, delta: event.delta });
+          }
+        }
+        result = await inferencePromise;
+      } else {
+        result = await this.runQueryEngineInference(
+          tempConversationId,
+          input.userId,
+          input.content,
+          config,
+        );
+      }
 
       if (!result.success) return { success: false };
       return {
@@ -240,6 +341,7 @@ export class AgentService {
         reply: result.reply,
         thinking: result.thinking,
         model: result.model,
+        generatedFiles: result.generatedFiles,
       };
     } finally {
       this.queryEngines.delete(tempConversationId);
@@ -462,7 +564,7 @@ export class AgentService {
     }
 
     // 4. Fallback to stub if QueryEngine unavailable
-    const stubReply = `Stub agent reply: ${userVisibleContent}`;
+    const stubReply = sanitizeServerPhysicalPaths(`Stub agent reply: ${userVisibleContent}`);
     const thinkingUuid = randomUUID();
     const replyUuid = randomUUID();
     const thinkingTimestamp = new Date(now.getTime() + 300).toISOString();
@@ -513,7 +615,7 @@ export class AgentService {
       userMessageId,
       assistantMessageId,
       reply: stubReply,
-      reasoning: `Preparing a response for: ${userVisibleContent}`,
+      reasoning: sanitizeServerPhysicalPaths(`Preparing a response for: ${userVisibleContent}`),
       raw: {
         kind: input.kind ?? 'markdown',
         attachmentCount: input.attachments?.length ?? 0,
@@ -685,8 +787,8 @@ export class AgentService {
       return;
     }
 
-    const stubReply = `Stub agent reply: ${userVisibleContent}`;
-    const stubThinking = `Preparing a response for: ${userVisibleContent}`;
+    const stubReply = sanitizeServerPhysicalPaths(`Stub agent reply: ${userVisibleContent}`);
+    const stubThinking = sanitizeServerPhysicalPaths(`Preparing a response for: ${userVisibleContent}`);
     const thinkingUuid = randomUUID();
     const replyUuid = randomUUID();
 
@@ -871,11 +973,12 @@ export class AgentService {
                 for (const block of msgMessage.content) {
                   const blockType = typeof block.type === 'string' ? block.type : '';
                   if (blockType === 'text' && typeof block.text === 'string' && block.text) {
-                    textParts.push(block.text);
+                    const safeText = sanitizeServerPhysicalPaths(block.text);
+                    textParts.push(safeText);
                     eventQueue.push({
                       type: 'reply.delta',
                       messageId: assistantMessageId,
-                      delta: block.text,
+                      delta: safeText,
                     });
                   }
 
@@ -909,17 +1012,18 @@ export class AgentService {
               }
 
               if ((msg as any).type === 'result' && typeof (msg as any).result === 'string' && !textParts.length) {
-                textParts.push((msg as any).result);
+                const safeResult = sanitizeServerPhysicalPaths((msg as any).result);
+                textParts.push(safeResult);
                 eventQueue.push({
                   type: 'reply.delta',
                   messageId: assistantMessageId,
-                  delta: (msg as any).result,
+                  delta: safeResult,
                 });
               }
             }
 
-            const reply = textParts.join('\n').trim();
-            const thinking = thinkingParts.join('\n').trim();
+            const reply = sanitizeServerPhysicalPaths(textParts.join('\n').trim());
+            const thinking = sanitizeServerPhysicalPaths(thinkingParts.join('\n').trim());
 
             return { reply, thinking, model, usage };
           });
@@ -1070,7 +1174,7 @@ export class AgentService {
               if (msgMessage && Array.isArray(msgMessage.content)) {
                 for (const block of msgMessage.content) {
                   if (block.type === 'text' && typeof block.text === 'string') {
-                    textParts.push(block.text);
+                    textParts.push(sanitizeServerPhysicalPaths(block.text));
                   }
                   const reasoningText = formatAgentProcessBlock(block);
                   if (reasoningText) {
@@ -1088,12 +1192,12 @@ export class AgentService {
               }
 
               if ((msg as any).type === 'result' && typeof (msg as any).result === 'string' && !textParts.length) {
-                textParts.push((msg as any).result);
+                textParts.push(sanitizeServerPhysicalPaths((msg as any).result));
               }
             }
 
-            const reply = textParts.join('\n').trim();
-            const thinking = thinkingParts.join('\n').trim();
+            const reply = sanitizeServerPhysicalPaths(textParts.join('\n').trim());
+            const thinking = sanitizeServerPhysicalPaths(thinkingParts.join('\n').trim());
 
             return { reply, thinking, model };
           });
@@ -1145,50 +1249,7 @@ export class AgentService {
     workspaceDir: string,
     sinceMs: number,
   ): Promise<GeneratedFile[]> {
-    const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp']);
-    const AUDIO_EXTS = new Set(['.mp3', '.wav', '.ogg', '.flac', '.aac', '.m4a', '.wma', '.aiff', '.opus']);
-    const VIDEO_EXTS = new Set(['.mp4', '.webm', '.mov', '.avi', '.mkv']);
-    const HTML_EXTS = new Set(['.html', '.htm']);
-    const dirs: Array<{ subdir: string; kind: GeneratedFile['kind'] }> = [
-      { subdir: 'image_generated', kind: 'image' },
-      { subdir: 'audio_generated', kind: 'audio' },
-      { subdir: 'video_generated', kind: 'video' },
-      { subdir: 'html_generated', kind: 'html' },
-      { subdir: 'app_generated', kind: 'app' },
-    ];
-    const results: GeneratedFile[] = [];
-
-    for (const { subdir, kind } of dirs) {
-      const dir = join(workspaceDir, subdir);
-      let entries: string[];
-      try {
-        entries = await readdir(dir);
-      } catch {
-        continue;
-      }
-
-      for (const name of entries) {
-        if (name.endsWith('.log')) continue;
-        const filePath = join(dir, name);
-        try {
-          const s = await stat(filePath);
-          if (s.mtimeMs >= sinceMs) {
-            const ext = extname(name).toLowerCase();
-            let resolvedKind = kind;
-            if (kind === 'image' && !IMAGE_EXTS.has(ext)) continue;
-            if (kind === 'audio' && !AUDIO_EXTS.has(ext)) continue;
-            if (kind === 'video' && !VIDEO_EXTS.has(ext)) continue;
-            if (kind === 'html' && !HTML_EXTS.has(ext)) continue;
-            if (kind === 'app' && !s.isDirectory()) continue;
-            results.push({ path: filePath, kind: resolvedKind });
-          }
-        } catch {
-          continue;
-        }
-      }
-    }
-
-    return results;
+    return discoverGeneratedFiles(workspaceDir, sinceMs);
   }
 
   private buildSessionContext(

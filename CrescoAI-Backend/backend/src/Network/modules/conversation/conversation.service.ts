@@ -13,11 +13,16 @@ import { TextDecoder } from 'node:util';
 import { detectOutputType } from '../../utils/detectOutputType.js';
 import { createFileDownloadToken } from '../../utils/fileDownloadToken.js';
 import { skillLogger } from '../../utils/skillLogger.js';
+import {
+  looksLikeServerPhysicalPath,
+  sanitizeServerPhysicalPaths,
+  sanitizeServerPhysicalPathsInValue,
+} from '../../utils/publicOutputSanitizer.js';
 import { fileURLToPath } from 'node:url';
 import { DataSource, Repository } from 'typeorm';
 import { AgentService } from '../agent/agent.service';
 import { SkillService } from '../skill/skill.service';
-import type { SkillHandlerResult } from '../skill/skill.registry';
+import type { SkillHandlerResult, SkillProgressEvent } from '../skill/skill.registry';
 import { ArtifactService } from '../artifact/artifact.service';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { SendMultimodalMessageDto } from './dto/send-multimodal-message.dto';
@@ -237,6 +242,56 @@ type SkillStreamRoute =
 interface StreamMessageIds {
   userMessageId: string;
   assistantMessageId: string;
+}
+
+class SkillProgressQueue implements AsyncIterable<SkillProgressEvent> {
+  private values: SkillProgressEvent[] = [];
+  private waiting: Array<(value: IteratorResult<SkillProgressEvent>) => void> = [];
+  private closed = false;
+
+  push(value: SkillProgressEvent) {
+    if (this.closed || !value.delta) {
+      return;
+    }
+
+    const resolve = this.waiting.shift();
+    if (resolve) {
+      resolve({ value, done: false });
+      return;
+    }
+    this.values.push(value);
+  }
+
+  close() {
+    if (this.closed) {
+      return;
+    }
+    this.closed = true;
+    for (const resolve of this.waiting.splice(0)) {
+      resolve({ value: undefined as unknown as SkillProgressEvent, done: true });
+    }
+  }
+
+  private async next(): Promise<IteratorResult<SkillProgressEvent>> {
+    const value = this.values.shift();
+    if (value) {
+      return { value, done: false };
+    }
+    if (this.closed) {
+      return { value: undefined as unknown as SkillProgressEvent, done: true };
+    }
+    return new Promise((resolve) => this.waiting.push(resolve));
+  }
+
+  async *[Symbol.asyncIterator]() {
+    while (true) {
+      const nextValue = await this.next();
+      if (nextValue.done) {
+        return;
+      }
+      yield nextValue.value;
+    }
+  }
 }
 
 const uploadPolicies: Record<string, UploadPolicy> = {
@@ -480,10 +535,12 @@ export class ConversationService {
     await this.persistUploadedFileRecords(conversation, uploadedFile);
     await this.touchConversation(conversation, `Uploaded file: ${originalName}`);
 
-    return this.withConversationFileDownloadUrl(
-      uploadedFile,
-      conversation.userId,
-      conversation.id,
+    return this.toPublicUploadedConversationFile(
+      this.withConversationFileDownloadUrl(
+        uploadedFile,
+        conversation.userId,
+        conversation.id,
+      ),
     );
   }
 
@@ -532,8 +589,7 @@ export class ConversationService {
 
       const reply =
         `Skill \`/${created.name}\` created successfully.\n\n` +
-        `You can now invoke it with \`/${created.name}\`.\n` +
-        `Stored at: ${created.filePath}`;
+        `You can now invoke it with \`/${created.name}\`.`;
 
       const userMessageId = `msg_user_skill_${randomUUID().replace(/-/g, '')}`;
       const assistantMessageId = `msg_assistant_skill_${randomUUID().replace(/-/g, '')}`;
@@ -571,7 +627,7 @@ export class ConversationService {
         assistant_message_id: assistantMessageId,
         assistantMessageId: assistantMessageId,
         reply,
-        raw: { source: 'skill:create', skillName: created.name, filePath: created.filePath },
+        raw: { source: 'skill:create', skillName: created.name },
       };
     }
 
@@ -673,10 +729,12 @@ export class ConversationService {
       // For skill results with output files (e.g. games), show a concise description
       // and tuck the full AI reply into a collapsible "thinking" block.
       const hasOutputFiles = Boolean(skillResult.outputFiles?.length);
-      const visibleReply = hasOutputFiles
+      const visibleReply = sanitizeServerPhysicalPaths(hasOutputFiles
         ? (skillResult.outputFiles![0].title ?? '应用已生成，请点击「打开应用」查看。')
-        : skillResult.reply;
-      const thinkingContent = hasOutputFiles ? skillResult.reply : undefined;
+        : skillResult.reply);
+      const thinkingContent = hasOutputFiles
+        ? sanitizeServerPhysicalPaths(skillResult.reply)
+        : undefined;
 
       const assistantContentBlocks = this.createAssistantContentBlocks(
         visibleReply,
@@ -731,7 +789,11 @@ export class ConversationService {
         think: thinkingContent,
         media: responseMedia,
         actions: responseActions,
-        raw: { source: 'skill', skillName: skillInvocation.skillName, ...skillResult.metadata },
+        raw: sanitizeServerPhysicalPathsInValue({
+          source: 'skill',
+          skillName: skillInvocation.skillName,
+          ...skillResult.metadata,
+        }),
       };
     }
 
@@ -772,10 +834,12 @@ export class ConversationService {
       // For skill results with output files (e.g. games), show a concise description
       // and tuck the full AI reply into a collapsible "thinking" block.
       const hasOutputFiles = Boolean(skillResult.outputFiles?.length);
-      const visibleReply = hasOutputFiles
+      const visibleReply = sanitizeServerPhysicalPaths(hasOutputFiles
         ? (skillResult.outputFiles![0].title ?? '应用已生成，请点击「打开应用」查看。')
-        : skillResult.reply;
-      const thinkingContent = hasOutputFiles ? skillResult.reply : undefined;
+        : skillResult.reply);
+      const thinkingContent = hasOutputFiles
+        ? sanitizeServerPhysicalPaths(skillResult.reply)
+        : undefined;
 
       const assistantContentBlocks = this.createAssistantContentBlocks(
         visibleReply,
@@ -831,12 +895,12 @@ export class ConversationService {
         think: thinkingContent,
         media: responseMedia,
         actions: responseActions,
-        raw: {
+        raw: sanitizeServerPhysicalPathsInValue({
           source: 'skill:auto',
           skillName: autoRoute.skillName,
           routerReason: autoRoute.reason,
           ...skillResult.metadata,
-        },
+        }),
       };
     }
 
@@ -903,13 +967,16 @@ export class ConversationService {
       messageId: agentResponse.userMessageId,
       assistant_message_id: agentResponse.assistantMessageId,
       assistantMessageId: agentResponse.assistantMessageId,
-      reply: agentResponse.reply,
-      reasoning: agentResponse.reasoning,
-      think: agentResponse.reasoning,
-      file: agentResponse.file,
+      reply: sanitizeServerPhysicalPaths(agentResponse.reply),
+      reasoning: agentResponse.reasoning
+        ? sanitizeServerPhysicalPaths(agentResponse.reasoning)
+        : undefined,
+      think: agentResponse.reasoning
+        ? sanitizeServerPhysicalPaths(agentResponse.reasoning)
+        : undefined,
       media: persistedAssistantResources.media,
       actions: persistedAssistantResources.actions,
-      raw: agentResponse.raw,
+      raw: sanitizeServerPhysicalPathsInValue(agentResponse.raw),
     };
   }
 
@@ -928,7 +995,13 @@ export class ConversationService {
 
     const skillStreamRoute = await this.resolveSkillStreamRoute(conversation, dto);
     if (skillStreamRoute) {
-      yield* this.streamSkillMessage(conversation, dto, attachments, skillStreamRoute);
+      yield* this.streamSkillMessage(
+        conversation,
+        dto,
+        attachments,
+        skillStreamRoute,
+        abortSignal,
+      );
       return;
     }
 
@@ -1056,12 +1129,16 @@ export class ConversationService {
           messageId: userMessageId,
           assistant_message_id: assistantMessageId,
           assistantMessageId: assistantMessageId,
-          reply: event.reply,
-          reasoning: event.reasoning,
-          think: event.reasoning,
+          reply: sanitizeServerPhysicalPaths(event.reply),
+          reasoning: event.reasoning
+            ? sanitizeServerPhysicalPaths(event.reasoning)
+            : undefined,
+          think: event.reasoning
+            ? sanitizeServerPhysicalPaths(event.reasoning)
+            : undefined,
           media: persistedAssistantResources.media.length ? persistedAssistantResources.media : undefined,
           actions: persistedAssistantResources.actions.length ? persistedAssistantResources.actions : undefined,
-          raw: event.raw,
+          raw: sanitizeServerPhysicalPathsInValue(event.raw),
         };
       }
     }
@@ -1118,6 +1195,7 @@ export class ConversationService {
     dto: SendMultimodalMessageDto,
     attachments: MessageMedia[],
     route: SkillStreamRoute,
+    abortSignal?: AbortSignal,
   ): AsyncGenerator<ConversationStreamEvent> {
     if (route.kind === 'create') {
       yield* this.streamCreateSkillMessage(conversation, dto, attachments, route.command);
@@ -1129,7 +1207,13 @@ export class ConversationService {
       return;
     }
 
-    yield* this.streamInvokedSkillMessage(conversation, dto, attachments, route);
+    yield* this.streamInvokedSkillMessage(
+      conversation,
+      dto,
+      attachments,
+      route,
+      abortSignal,
+    );
   }
 
   private async *streamCreateSkillMessage(
@@ -1160,8 +1244,7 @@ export class ConversationService {
 
     const reply =
       `Skill \`/${created.name}\` created successfully.\n\n` +
-      `You can now invoke it with \`/${created.name}\`.\n` +
-      `Stored at: ${created.filePath}`;
+      `You can now invoke it with \`/${created.name}\`.`;
 
     await this.appendRuntimeAssistantMessage(
       sessionFilePath,
@@ -1176,7 +1259,7 @@ export class ConversationService {
 
     yield this.createMessageCompletedStreamEvent(conversation.id, ids, reply, {
       reasoning: processTrace,
-      raw: { source: 'skill:create', skillName: created.name, filePath: created.filePath },
+      raw: { source: 'skill:create', skillName: created.name },
     });
   }
 
@@ -1221,6 +1304,7 @@ export class ConversationService {
     dto: SendMultimodalMessageDto,
     attachments: MessageMedia[],
     route: Extract<SkillStreamRoute, { kind: 'invoke' }>,
+    abortSignal?: AbortSignal,
   ): AsyncGenerator<ConversationStreamEvent> {
     const ids = this.createStreamMessageIds(route.source === 'skill:auto' ? 'skill_auto' : 'skill');
     const now = new Date();
@@ -1237,12 +1321,67 @@ export class ConversationService {
       conversation.userId,
       conversation.id,
     );
-    const skillResult = await this.skillService.invokeSkill(
+    const progressQueue = new SkillProgressQueue();
+    const streamedReasoningParts: string[] = [];
+    let streamedReply = false;
+    const streamReplyAsReasoning = route.skillName === 'develop-web-game';
+    const skillOutcomePromise = this.skillService.invokeSkill(
       route.skillName,
       route.args,
-      { ...dto.context, ...skillContext },
+      {
+        ...dto.context,
+        ...skillContext,
+        abortSignal,
+        onProgress: (event: SkillProgressEvent) => progressQueue.push(event),
+      },
+    ).then(
+      (result) => ({ result, error: undefined }),
+      (error: unknown) => ({ result: undefined, error }),
+    ).finally(() => progressQueue.close());
+
+    for await (const progress of progressQueue) {
+      if (abortSignal?.aborted) {
+        continue;
+      }
+
+      const delta = sanitizeServerPhysicalPaths(progress.delta);
+      if (!delta) {
+        continue;
+      }
+
+      if (progress.type === 'reasoning.delta' || streamReplyAsReasoning) {
+        streamedReasoningParts.push(delta);
+        yield {
+          type: 'reasoning.delta',
+          message_id: ids.assistantMessageId,
+          messageId: ids.assistantMessageId,
+          delta,
+        };
+      } else {
+        streamedReply = true;
+        yield {
+          type: 'reply.delta',
+          message_id: ids.assistantMessageId,
+          messageId: ids.assistantMessageId,
+          delta,
+        };
+      }
+    }
+
+    const skillOutcome = await skillOutcomePromise;
+    if (skillOutcome.error) {
+      throw skillOutcome.error;
+    }
+    if (!skillOutcome.result || abortSignal?.aborted) {
+      return;
+    }
+
+    const skillResult = skillOutcome.result;
+    const presentation = this.buildSkillReplyPresentation(
+      skillResult,
+      routeTrace,
+      streamedReasoningParts.join('\n'),
     );
-    const presentation = this.buildSkillReplyPresentation(skillResult, routeTrace);
 
     await this.appendRuntimeAssistantMessage(
       sessionFilePath,
@@ -1270,7 +1409,9 @@ export class ConversationService {
       };
     }
 
-    yield* this.streamReplyDeltaEvents(ids.assistantMessageId, presentation.visibleReply);
+    if (!streamedReply || streamReplyAsReasoning) {
+      yield* this.streamReplyDeltaEvents(ids.assistantMessageId, presentation.visibleReply);
+    }
 
     await this.touchConversation(conversation, dto.content);
 
@@ -1374,12 +1515,16 @@ export class ConversationService {
       messageId: ids.userMessageId,
       assistant_message_id: ids.assistantMessageId,
       assistantMessageId: ids.assistantMessageId,
-      reply,
-      reasoning: options.reasoning,
-      think: options.reasoning,
+      reply: sanitizeServerPhysicalPaths(reply),
+      reasoning: options.reasoning
+        ? sanitizeServerPhysicalPaths(options.reasoning)
+        : undefined,
+      think: options.reasoning
+        ? sanitizeServerPhysicalPaths(options.reasoning)
+        : undefined,
       media: options.media,
       actions: options.actions,
-      raw: options.raw,
+      raw: sanitizeServerPhysicalPathsInValue(options.raw),
     };
   }
 
@@ -1416,9 +1561,10 @@ export class ConversationService {
       return [];
     }
 
+    const publicText = sanitizeServerPhysicalPaths(text);
     const chunks: string[] = [];
-    for (let start = 0; start < text.length; start += chunkSize) {
-      chunks.push(text.slice(start, start + chunkSize));
+    for (let start = 0; start < publicText.length; start += chunkSize) {
+      chunks.push(publicText.slice(start, start + chunkSize));
     }
     return chunks;
   }
@@ -1469,13 +1615,18 @@ export class ConversationService {
   private buildSkillReplyPresentation(
     skillResult: SkillHandlerResult,
     routeTrace: string,
+    streamedReasoning = '',
   ) {
     const hasOutputFiles = Boolean(skillResult.outputFiles?.length);
-    const visibleReply = hasOutputFiles
+    const visibleReply = sanitizeServerPhysicalPaths(hasOutputFiles
       ? (skillResult.outputFiles![0].title ?? 'Application generated. Use the open action to view it.')
-      : skillResult.reply;
-    const generatedTrace = hasOutputFiles ? skillResult.reply : undefined;
-    const processTrace = [routeTrace, generatedTrace].filter(Boolean).join('\n\n') || undefined;
+      : skillResult.reply);
+    const generatedTrace = hasOutputFiles && !streamedReasoning
+      ? sanitizeServerPhysicalPaths(skillResult.reply)
+      : undefined;
+    const processTrace = sanitizeServerPhysicalPaths(
+      [routeTrace, streamedReasoning, generatedTrace].filter(Boolean).join('\n\n'),
+    ) || undefined;
 
     return {
       visibleReply,
@@ -1490,11 +1641,15 @@ export class ConversationService {
       assistantContentBlocks.push({
         type: 'thinking',
         phase: 'process',
-        thinking: processTrace,
+        thinking: sanitizeServerPhysicalPaths(processTrace),
         signature: '',
       });
     }
-    assistantContentBlocks.push({ type: 'text', phase: 'final', text: reply });
+    assistantContentBlocks.push({
+      type: 'text',
+      phase: 'final',
+      text: sanitizeServerPhysicalPaths(reply),
+    });
     return assistantContentBlocks;
   }
 
@@ -1890,10 +2045,13 @@ export class ConversationService {
         const reasoning = this.normalizeReasoningText(message.reasoning ?? message.think);
         return {
           ...message,
+          content: message.role === 'assistant'
+            ? sanitizeServerPhysicalPaths(message.content)
+            : message.content,
           reasoning: reasoning ?? undefined,
           think: reasoning ?? undefined,
-          media: media.length ? media : undefined,
-          attachments: media.length ? media : undefined,
+          media: media.length ? media.map((item) => this.toPublicMessageMedia(item)) : undefined,
+          attachments: media.length ? media.map((item) => this.toPublicMessageMedia(item)) : undefined,
         };
       })
       .filter(Boolean) as ConversationMessage[];
@@ -2097,7 +2255,7 @@ export class ConversationService {
       return null;
     }
 
-    const normalized = value.trim();
+    const normalized = sanitizeServerPhysicalPaths(value).trim();
     return normalized ? normalized : null;
   }
 
@@ -2166,9 +2324,8 @@ export class ConversationService {
     }
 
     return [
-      '[结构化过程事件已过滤]',
-      `事件类型: ${blockType}`,
-      '说明: 原始结构化内容未展示，以避免暴露内部调用细节。',
+      '[过程事件]',
+      '正在处理过程事件。',
     ].join('\n');
   }
 
@@ -2176,34 +2333,98 @@ export class ConversationService {
     blockType: string,
     block: Record<string, unknown>,
   ): string {
-    const isResult = blockType.includes('result') || block.content !== undefined || block.result !== undefined;
-    const filteredFields = [
-      block.name !== undefined || block.tool_name !== undefined || block.toolName !== undefined
-        ? '工具名称'
-        : undefined,
-      block.input !== undefined ? '调用参数 input' : undefined,
-      block.arguments !== undefined ? '调用参数 arguments' : undefined,
-      block.args !== undefined ? '调用参数 args' : undefined,
-      block.content !== undefined ? '返回内容 content' : undefined,
-      block.result !== undefined ? '返回内容 result' : undefined,
-      block.output !== undefined ? '返回内容 output' : undefined,
-      block.id !== undefined || block.tool_use_id !== undefined || block.toolUseId !== undefined
-        ? '内部调用标识'
-        : undefined,
-    ].filter(Boolean);
-    const status =
-      block.is_error === true || block.isError === true
-        ? '执行状态: 工具返回错误，错误详情已过滤。'
-        : isResult
-          ? '执行状态: 工具已返回，返回正文已过滤。'
-          : '执行状态: 工具调用已发起，调用细节已过滤。';
+    if (this.isToolResultAssistantBlock(blockType, block)) {
+      return this.formatSanitizedAssistantToolResult(block);
+    }
 
     return [
-      isResult ? '[工具返回已过滤]' : '[工具调用已过滤]',
-      `事件类型: ${blockType}`,
-      status,
-      `过滤内容: ${filteredFields.length ? filteredFields.join('、') : '工具相关内部数据'}`,
+      '[工具调用]',
+      '正在调用工具。',
     ].join('\n');
+  }
+
+  private isToolResultAssistantBlock(
+    blockType: string,
+    block: Record<string, unknown>,
+  ) {
+    return (
+      blockType === 'tool_result' ||
+      blockType.endsWith('_tool_result') ||
+      block.content !== undefined ||
+      block.result !== undefined ||
+      block.output !== undefined
+    );
+  }
+
+  private formatSanitizedAssistantToolResult(block: Record<string, unknown>): string {
+    const rawResult = this.extractAssistantToolResultText(block);
+    const resultText = this.redactSensitiveReasoningText(rawResult);
+    return [
+      '[工具返回]',
+      resultText || (block.is_error === true || block.isError === true ? '工具返回错误。' : '工具已返回。'),
+    ].join('\n');
+  }
+
+  private extractAssistantToolResultText(block: Record<string, unknown>): string {
+    const value = block.content ?? block.result ?? block.output ?? block.error ?? block;
+    return this.stringifyAssistantToolResultValue(value);
+  }
+
+  private stringifyAssistantToolResultValue(value: unknown): string {
+    if (typeof value === 'string') {
+      return value;
+    }
+
+    if (Array.isArray(value)) {
+      return value
+        .map((item) => {
+          if (typeof item === 'string') {
+            return item;
+          }
+          if (typeof item !== 'object' || item === null) {
+            return String(item);
+          }
+          const typedItem = item as Record<string, unknown>;
+          if (typedItem.type === 'text' && typeof typedItem.text === 'string') {
+            return typedItem.text;
+          }
+          if (typeof typedItem.content === 'string') {
+            return typedItem.content;
+          }
+          return this.stringifyAssistantToolResultValue(typedItem);
+        })
+        .filter(Boolean)
+        .join('\n');
+    }
+
+    if (value === undefined || value === null) {
+      return '';
+    }
+
+    try {
+      return JSON.stringify(value, null, 2);
+    } catch {
+      return String(value);
+    }
+  }
+
+  private redactSensitiveReasoningText(input: string): string {
+    let output = input;
+    output = output.replace(/(Bearer\s+)[A-Za-z0-9._~+/=-]+/gi, '$1******');
+    output = output.replace(
+      /\b(authorization|api[_-]?key|access[_-]?token|refresh[_-]?token|secret|password|passwd|pwd|private[_-]?key)\b(\s*[:=]\s*)(["']?)[^\s"',;]+/gi,
+      '$1$2$3******',
+    );
+    output = output.replace(
+      /([?&](?:api[_-]?key|access[_-]?token|refresh[_-]?token|token|secret|password)=)[^&\s"']+/gi,
+      '$1******',
+    );
+    output = output.replace(/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g, '******');
+    output = output.replace(/\b(?:sk|pk|rk|xox[baprs])-[A-Za-z0-9_-]{16,}\b/gi, '******');
+    output = output.replace(/\b[A-Fa-f0-9]{64,}\b/g, '******');
+    output = output.replace(/\b[A-Za-z0-9+/]{80,}={0,2}\b/g, '******');
+    output = output.replace(/C:\\Users\\[^\\\s"']+/gi, 'C:\\Users\\<user>');
+    return output;
   }
 
   private isToolResultContentBlock(item: unknown) {
@@ -2386,8 +2607,6 @@ export class ConversationService {
         downloadUrl: url,
         mime_type: row.mimeType,
         mimeType: row.mimeType,
-        storage_path: row.resourcePath,
-        storagePath: row.resourcePath,
         size_bytes: row.sizeBytes,
         sizeBytes: row.sizeBytes,
         created_at: row.createdAt.toISOString(),
@@ -2422,7 +2641,9 @@ export class ConversationService {
         ? f.kind
         : this.detectMediaKindFromPath(storagePath);
       const filename = this.displayNameFromPath(storagePath);
-      const url = f.url ?? this.toGeneratedPublicUrl(storagePath, kind, uid);
+      const url = f.url && !looksLikeServerPhysicalPath(f.url)
+        ? f.url
+        : this.toGeneratedPublicUrl(storagePath, kind, uid);
       media.push({
         id: `asset-${randomUUID().replace(/-/g, '').slice(0, 16)}`,
         kind,
@@ -2481,6 +2702,24 @@ export class ConversationService {
 
   private pathWithoutQuery(pathOrUrl: string) {
     return pathOrUrl.split(/[?#]/, 1)[0] ?? pathOrUrl;
+  }
+
+  private toPublicMessageMedia(resource: MessageMedia): MessageMedia {
+    const {
+      storage_path: _storagePath,
+      storagePath: _storagePathAlias,
+      ...publicResource
+    } = resource;
+    return publicResource;
+  }
+
+  private toPublicUploadedConversationFile(asset: UploadedConversationFile) {
+    const {
+      storage_path: _storagePath,
+      storagePath: _storagePathAlias,
+      ...publicAsset
+    } = asset;
+    return publicAsset;
   }
 
   private withConversationFileDownloadUrl<T extends { url: string; download_url?: string; downloadUrl?: string }>(
@@ -2583,7 +2822,7 @@ export class ConversationService {
         skillLogger.error('ConversationService', `Failed to create generated artifact: ${err?.message ?? err}`);
       }
 
-      media.push(enriched);
+      media.push(this.toPublicMessageMedia(enriched));
     }
 
     return { media, actions };

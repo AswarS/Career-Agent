@@ -382,7 +382,7 @@ describe('createUpstreamCareerAgentClient', () => {
     await expect(client.listProfileSuggestions()).resolves.toEqual([]);
     await expect(client.getProfile()).resolves.toMatchObject({
       locale: 'zh-CN',
-      timezone: 'Asia/Singapore',
+      timezone: 'Asia/Shanghai',
     });
   });
 

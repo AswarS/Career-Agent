@@ -12,6 +12,7 @@ import { UserEntity } from '../user/entities/user.entity';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
+import { createDefaultProfile } from '../profile/profile.types';
 
 const scrypt = promisify(scryptCallback);
 interface AccessTokenPayload {
@@ -53,7 +54,7 @@ export class AuthService {
       username,
       displayName,
       passwordHash,
-      profileJson: JSON.stringify(this.createDefaultProfile(displayName)),
+      profileJson: JSON.stringify(createDefaultProfile(displayName)),
       tokenVersion: 0,
     });
     let saved: UserEntity | undefined;
@@ -339,15 +340,6 @@ export class AuthService {
     }
 
     return username ?? email?.split('@')[0] ?? '用户';
-  }
-
-  private createDefaultProfile(displayName: string) {
-    return {
-      display_name: displayName,
-      locale: 'zh-CN',
-      timezone: 'Asia/Shanghai',
-      onboarding_completed: false,
-    };
   }
 
   private toAuthUser(user: UserEntity) {

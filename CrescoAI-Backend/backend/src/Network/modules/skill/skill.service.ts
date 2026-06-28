@@ -302,13 +302,26 @@ export class SkillService implements OnModuleInit {
           baseUrl: input.baseUrl ?? mergedContext.llmConfig?.baseUrl,
           model: input.model ?? mergedContext.llmConfig?.model,
           content: input.content,
+          abortSignal: mergedContext.abortSignal,
+          onProgress: mergedContext.onProgress,
         });
       mergedContext.runInSession = async (callback) =>
         this.agentService!.runInSessionContext({
           userId: String(mergedContext.userId ?? 1),
           conversationId: mergedContext.conversationId,
-          callback: async (sessionContext) =>
-            callback({ abortController: sessionContext.abortController }),
+          callback: async (sessionContext) => {
+            const abortSession = () => sessionContext.abortController.abort();
+            if (mergedContext.abortSignal?.aborted) {
+              abortSession();
+            } else {
+              mergedContext.abortSignal?.addEventListener('abort', abortSession, { once: true });
+            }
+            try {
+              return await callback({ abortController: sessionContext.abortController });
+            } finally {
+              mergedContext.abortSignal?.removeEventListener('abort', abortSession);
+            }
+          },
         });
     }
 
@@ -368,15 +381,15 @@ export class SkillService implements OnModuleInit {
     );
 
     try {
-      if (!this.agentService) {
+      if (!context.runUnifiedPrompt) {
         return {
           success: false,
           reply: 'Skill backend is not ready: AgentService unavailable.',
         };
       }
 
-      const result = await this.agentService.runIsolatedPrompt({
-        userId: String(context.userId ?? 1),
+      const result = await context.runUnifiedPrompt({
+        userId: context.userId ?? 1,
         conversationId:
           typeof context.conversationId === 'string'
             ? context.conversationId
@@ -397,6 +410,7 @@ export class SkillService implements OnModuleInit {
       return {
         success: true,
         reply: result.reply,
+        outputFiles: result.generatedFiles,
         metadata: {
           model: result.model ?? llmConfig.model,
         },

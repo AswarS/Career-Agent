@@ -17,6 +17,7 @@ const emit = defineEmits<{
 
 const presentedMessage = computed(() => getPresentedMessageContent(props.message));
 const visibleReasoning = computed(() => presentedMessage.value.reasoning);
+const reasoningSegments = computed(() => parseReasoningSegments(visibleReasoning.value));
 const visibleActions = computed(() => props.message.role === 'assistant' ? props.message.actions ?? [] : []);
 const visibleMedia = computed(() => props.message.media ?? []);
 const visibleFiles = computed(() => (props.message.files ?? []).map((file) => ({
@@ -24,6 +25,107 @@ const visibleFiles = computed(() => (props.message.files ?? []).map((file) => ({
   canDownload: canDownloadFile(file.url),
 })));
 const showSpeakerIdentity = computed(() => props.message.role !== 'user');
+
+type ReasoningSegmentKind = 'thought' | 'tool-call' | 'tool-result' | 'structured';
+
+interface ReasoningSegment {
+  id: string;
+  kind: ReasoningSegmentKind;
+  title: string;
+  content: string;
+}
+
+function parseReasoningSegments(source: string | null | undefined): ReasoningSegment[] {
+  const text = source?.trim();
+  if (!text) {
+    return [];
+  }
+
+  const markerPattern = /^\[(工具调用|工具调用已过滤|工具返回|工具返回已过滤|过程事件|结构化过程事件已过滤)\]\s*$/gm;
+  const matches = [...text.matchAll(markerPattern)];
+  if (!matches.length) {
+    return [createReasoningSegment('thought', text, 0)];
+  }
+
+  const segments: ReasoningSegment[] = [];
+  let cursor = 0;
+
+  matches.forEach((match, index) => {
+    const matchIndex = match.index ?? 0;
+    const thoughtContent = text.slice(cursor, matchIndex).trim();
+    if (thoughtContent) {
+      segments.push(createReasoningSegment('thought', thoughtContent, segments.length));
+    }
+
+    const marker = match[1] ?? '';
+    const contentStart = matchIndex + match[0].length;
+    const nextIndex = matches[index + 1]?.index ?? text.length;
+    const content = text.slice(contentStart, nextIndex).trim();
+    segments.push(createReasoningSegment(kindFromReasoningMarker(marker), content, segments.length));
+    cursor = nextIndex;
+  });
+
+  const trailingThought = text.slice(cursor).trim();
+  if (trailingThought) {
+    segments.push(createReasoningSegment('thought', trailingThought, segments.length));
+  }
+
+  return segments;
+}
+
+function kindFromReasoningMarker(marker: string): ReasoningSegmentKind {
+  if (marker.includes('工具调用')) {
+    return 'tool-call';
+  }
+  if (marker.includes('工具返回')) {
+    return 'tool-result';
+  }
+  return 'structured';
+}
+
+function createReasoningSegment(
+  kind: ReasoningSegmentKind,
+  content: string,
+  index: number,
+): ReasoningSegment {
+  const titles: Record<ReasoningSegmentKind, string> = {
+    thought: '思考',
+    'tool-call': '工具调用',
+    'tool-result': '工具返回',
+    structured: '过程事件',
+  };
+
+  const fallback: Record<ReasoningSegmentKind, string> = {
+    thought: '正在整理思路。',
+    'tool-call': '正在调用工具。',
+    'tool-result': '工具已返回。',
+    structured: '正在处理过程事件。',
+  };
+
+  return {
+    id: `${kind}-${index}`,
+    kind,
+    title: titles[kind],
+    content: cleanReasoningSegmentContent(kind, content) || fallback[kind],
+  };
+}
+
+function cleanReasoningSegmentContent(kind: ReasoningSegmentKind, content: string) {
+  if (kind === 'tool-call') {
+    return '正在调用工具。';
+  }
+
+  const cleaned = content
+    .replace(/\[(?:工具调用已过滤|工具返回已过滤|结构化过程事件已过滤)\]/g, '')
+    .replace(/\[(?:JWT|密钥|长密钥或哈希|长密钥或编码内容)已过滤\]/g, '******')
+    .replace(/\[已过滤\]/g, '******')
+    .split(/\r?\n/)
+    .filter((line) => !/(已隐藏|已过滤|已脱敏|脱敏|过滤内容|filtered fields|hidden|redacted)/i.test(line))
+    .join('\n')
+    .trim();
+
+  return cleaned;
+}
 
 function canDownloadFile(value: string) {
   const nextValue = value.trim();
@@ -143,7 +245,17 @@ async function handleFileDownload(file: MessageFileAttachment) {
 
     <details v-if="visibleReasoning" class="reasoning-block">
       <summary>思考过程</summary>
-      <MarkdownContent :source="visibleReasoning" />
+      <div class="reasoning-segments">
+        <section
+          v-for="segment in reasoningSegments"
+          :key="segment.id"
+          class="reasoning-segment"
+          :class="segment.kind"
+        >
+          <div class="reasoning-segment-label">{{ segment.title }}</div>
+          <MarkdownContent :source="segment.content" />
+        </section>
+      </div>
     </details>
 
     <MarkdownContent v-if="props.message.kind === 'markdown'" :source="presentedMessage.content" />
@@ -389,8 +501,54 @@ async function handleFileDownload(file: MessageFileAttachment) {
   display: none;
 }
 
-.reasoning-block :deep(.markdown-body) {
-  padding: 0 14px 14px;
+.reasoning-segments {
+  display: grid;
+  gap: 8px;
+  padding: 0 12px 12px;
+}
+
+.reasoning-segment {
+  border: 1px solid color-mix(in srgb, var(--color-border) 84%, transparent);
+  border-left-width: 3px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--color-surface-strong) 92%, white);
+  overflow: hidden;
+}
+
+.reasoning-segment.thought {
+  border-left-color: color-mix(in srgb, var(--color-text-muted) 72%, var(--color-border));
+}
+
+.reasoning-segment.tool-call {
+  border-left-color: color-mix(in srgb, #b77808 72%, var(--color-border));
+  background: color-mix(in srgb, #fff7e6 52%, var(--color-surface-strong));
+}
+
+.reasoning-segment.tool-result {
+  border-left-color: color-mix(in srgb, #16846f 72%, var(--color-border));
+  background: color-mix(in srgb, #edf9f5 56%, var(--color-surface-strong));
+}
+
+.reasoning-segment.structured {
+  border-left-color: color-mix(in srgb, #687083 70%, var(--color-border));
+  background: color-mix(in srgb, var(--color-bg-subtle) 70%, var(--color-surface-strong));
+}
+
+.reasoning-segment-label {
+  padding: 7px 10px 0;
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.reasoning-segment :deep(.markdown-body) {
+  padding: 5px 10px 9px;
+}
+
+.reasoning-segment.tool-result :deep(.markdown-body) {
+  max-height: 260px;
+  overflow: auto;
 }
 
 .status-copy {

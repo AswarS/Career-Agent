@@ -535,16 +535,69 @@ function extractReasoningBlock(content: string): { content: string; reasoning: s
   };
 }
 
-export function sanitizeProfileRecord(input: ProfileRecord): ProfileRecord {
+type UnknownRecord = Record<string, unknown>;
+
+function isUnknownRecord(value: unknown): value is UnknownRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function unwrapProfilePayload(input: unknown): UnknownRecord {
+  if (!isUnknownRecord(input)) {
+    return {};
+  }
+
+  return isUnknownRecord(input.profile) ? input.profile : input;
+}
+
+function readProfileValue(source: UnknownRecord, ...aliases: string[]) {
+  for (const alias of aliases) {
+    if (source[alias] !== undefined) {
+      return source[alias];
+    }
+  }
+
+  return undefined;
+}
+
+function normalizeProfileText(value: unknown, fallback = '') {
+  return typeof value === 'string' ? value.trim() : fallback;
+}
+
+function normalizeProfileList(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return [...new Set(value
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => item.trim())
+    .filter(Boolean))];
+}
+
+/** Accept the canonical camelCase API shape plus legacy snake_case and sample `{ profile }` envelopes. */
+export function sanitizeProfileRecord(input: unknown): ProfileRecord {
+  const source = unwrapProfilePayload(input);
+
   return {
-    ...input,
-    targetIndustries: [...input.targetIndustries],
-    constraints: [...input.constraints],
-    workPreferences: [...input.workPreferences],
-    learningPreferences: [...input.learningPreferences],
-    keyStrengths: [...input.keyStrengths],
-    riskSignals: [...input.riskSignals],
-    portfolioLinks: [...input.portfolioLinks],
+    displayName: normalizeProfileText(readProfileValue(source, 'displayName', 'display_name')),
+    locale: normalizeProfileText(readProfileValue(source, 'locale'), 'zh-CN'),
+    timezone: normalizeProfileText(readProfileValue(source, 'timezone'), 'Asia/Shanghai'),
+    currentRole: normalizeProfileText(readProfileValue(source, 'currentRole', 'current_role')),
+    employmentStatus: normalizeProfileText(readProfileValue(source, 'employmentStatus', 'employment_status')),
+    experienceSummary: normalizeProfileText(readProfileValue(source, 'experienceSummary', 'experience_summary')),
+    educationSummary: normalizeProfileText(readProfileValue(source, 'educationSummary', 'education_summary')),
+    locationRegion: normalizeProfileText(readProfileValue(source, 'locationRegion', 'location_region')),
+    targetRole: normalizeProfileText(readProfileValue(source, 'targetRole', 'target_role')),
+    targetIndustries: normalizeProfileList(readProfileValue(source, 'targetIndustries', 'target_industries')),
+    shortTermGoal: normalizeProfileText(readProfileValue(source, 'shortTermGoal', 'short_term_goal')),
+    longTermGoal: normalizeProfileText(readProfileValue(source, 'longTermGoal', 'long_term_goal')),
+    weeklyTimeBudget: normalizeProfileText(readProfileValue(source, 'weeklyTimeBudget', 'weekly_time_budget')),
+    constraints: normalizeProfileList(readProfileValue(source, 'constraints')),
+    workPreferences: normalizeProfileList(readProfileValue(source, 'workPreferences', 'work_preferences')),
+    learningPreferences: normalizeProfileList(readProfileValue(source, 'learningPreferences', 'learning_preferences')),
+    keyStrengths: normalizeProfileList(readProfileValue(source, 'keyStrengths', 'key_strengths')),
+    riskSignals: normalizeProfileList(readProfileValue(source, 'riskSignals', 'risk_signals')),
+    portfolioLinks: normalizeProfileList(readProfileValue(source, 'portfolioLinks', 'portfolio_links')),
   };
 }
 

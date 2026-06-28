@@ -23,7 +23,8 @@ defineProps<{
           <p v-else class="empty-copy">暂未填写明确内容。</p>
         </template>
 
-        <p v-else class="value-copy">{{ item.value }}</p>
+        <p v-else-if="item.value" class="value-copy">{{ item.value }}</p>
+        <p v-else class="empty-copy">暂未填写明确内容。</p>
       </section>
     </div>
   </article>

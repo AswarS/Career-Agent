@@ -17,6 +17,7 @@ import type { ProfileRecord, ProfileSuggestion } from '../types/entities';
 const workspaceStore = useWorkspaceStore();
 const {
   activeThread,
+  artifacts,
   errorMessage,
   profile,
   profileSaveStatus,
@@ -60,6 +61,23 @@ const hasUnsavedChanges = computed(() => {
 
   return JSON.stringify(profile.value) !== JSON.stringify(draftProfile.value);
 });
+
+const profileCompletion = computed(() => {
+  if (!profile.value) {
+    return { completed: 0, total: scalarProfileFields.length + listProfileFields.length };
+  }
+
+  const completedScalarFields = scalarProfileFields.filter((field) => profile.value?.[field.key].trim()).length;
+  const completedListFields = listProfileFields.filter((field) => profile.value?.[field.key].length).length;
+  return {
+    completed: completedScalarFields + completedListFields,
+    total: scalarProfileFields.length + listProfileFields.length,
+  };
+});
+
+const hasProfileSummary = computed(() => (
+  artifacts.value.some((artifact) => artifact.id === 'artifact-profile-summary')
+));
 
 function cloneProfile(input: ProfileRecord): ProfileRecord {
   return {
@@ -192,12 +210,16 @@ function formatSuggestionStatus(status: typeof profileSuggestionsStatus.value) {
         <MobileRailTrigger />
         <div>
           <p class="eyebrow">轻量画像</p>
-          <h1>{{ profile?.displayName ?? '正在加载画像...' }}</h1>
+          <h1>{{ profile?.displayName || (profile ? '我的职业画像' : '正在加载画像...') }}</h1>
         </div>
       </div>
       <div class="header-actions">
         <div class="action-group">
-          <button class="secondary-button" @click="workspaceStore.openArtifact('artifact-profile-summary')">
+          <button
+            v-if="hasProfileSummary"
+            class="secondary-button"
+            @click="workspaceStore.openArtifact('artifact-profile-summary')"
+          >
             打开画像摘要
           </button>
           <button v-if="!isEditing" class="primary-button" :disabled="!profile" @click="beginEditing">
@@ -226,6 +248,7 @@ function formatSuggestionStatus(status: typeof profileSuggestionsStatus.value) {
       <p class="eyebrow">错误</p>
       <h2>画像加载失败。</h2>
       <p>{{ errorMessage ?? '发生未知画像错误。' }}</p>
+      <button class="secondary-button retry-button" @click="workspaceStore.initialize()">重新加载</button>
     </section>
 
     <section v-else-if="profile && draftProfile" class="profile-layout">
@@ -244,6 +267,9 @@ function formatSuggestionStatus(status: typeof profileSuggestionsStatus.value) {
             <div>
               <p class="eyebrow">画像编辑</p>
               <h2>显式保存后生效</h2>
+              <p class="completion-copy">
+                已填写 {{ profileCompletion.completed }} / {{ profileCompletion.total }} 项
+              </p>
             </div>
             <span class="status-chip" :class="{ active: isEditing }">
               {{ isEditing ? '草稿编辑中' : '已与正式数据同步' }}
@@ -307,6 +333,10 @@ function formatSuggestionStatus(status: typeof profileSuggestionsStatus.value) {
           </section>
 
           <div v-else class="suggestion-list">
+            <section v-if="profileSuggestions.length === 0" class="state-card compact">
+              <h2>暂无待确认建议</h2>
+              <p>后续从对话中识别到可靠信息时，会在这里生成可审阅的画像更新。</p>
+            </section>
             <ProfileSuggestionCard
               v-for="suggestion in profileSuggestions"
               :key="suggestion.id"
@@ -429,11 +459,22 @@ function formatSuggestionStatus(status: typeof profileSuggestionsStatus.value) {
 }
 
 .editor-copy,
+.completion-copy,
 .notice-copy,
 .state-card p:not(.eyebrow) {
   margin: 0;
   color: var(--color-text-muted);
   line-height: 1.45;
+}
+
+.completion-copy {
+  margin: 6px 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+}
+
+.retry-button {
+  margin-top: 12px;
 }
 
 .notice-copy {

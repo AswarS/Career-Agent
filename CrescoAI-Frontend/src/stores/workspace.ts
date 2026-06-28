@@ -938,6 +938,7 @@ export const useWorkspaceStore = defineStore('workspace', {
       if (client.streamMessage) {
         const abortController = new AbortController();
         let streamStarted = false;
+        let streamCompleted = false;
 
         try {
           for await (const event of client.streamMessage(targetThreadId, {
@@ -952,7 +953,14 @@ export const useWorkspaceStore = defineStore('workspace', {
               return;
             }
 
+            if (event.type === 'message.completed') {
+              streamCompleted = true;
+            }
             applyStreamEvent(event);
+          }
+
+          if (!streamCompleted) {
+            throw new Error('消息流在完成事件到达前已断开，请重试。');
           }
 
           try {

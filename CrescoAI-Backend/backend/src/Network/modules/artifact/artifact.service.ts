@@ -2,6 +2,10 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AgentService } from '../agent/agent.service';
+import {
+  looksLikeServerPhysicalPath,
+  sanitizeServerPhysicalPaths,
+} from '../../utils/publicOutputSanitizer.js';
 import { ArtifactEntity } from './entities/artifact.entity';
 
 @Injectable()
@@ -24,10 +28,34 @@ export class ArtifactService {
   }
 
   async listArtifacts(userId: number) {
-    return this.artifactRepo.find({
+    const artifacts = await this.artifactRepo.find({
       where: { userId },
       order: { createdAt: 'ASC' },
     });
+    return artifacts.map((artifact) => this.toPublicArtifact(artifact));
+  }
+
+  toPublicArtifact(artifact: ArtifactEntity) {
+    const {
+      storagePath: _storagePath,
+      metadataJson: _metadataJson,
+      ...publicArtifact
+    } = artifact;
+    return {
+      ...publicArtifact,
+      title: publicArtifact.title
+        ? sanitizeServerPhysicalPaths(publicArtifact.title)
+        : publicArtifact.title,
+      summary: publicArtifact.summary
+        ? sanitizeServerPhysicalPaths(publicArtifact.summary)
+        : publicArtifact.summary,
+      payloadPath: publicArtifact.payloadPath && !looksLikeServerPhysicalPath(publicArtifact.payloadPath)
+        ? publicArtifact.payloadPath
+        : undefined,
+      url: publicArtifact.url && !looksLikeServerPhysicalPath(publicArtifact.url)
+        ? publicArtifact.url
+        : undefined,
+    };
   }
 
   async createArtifact(dto: {

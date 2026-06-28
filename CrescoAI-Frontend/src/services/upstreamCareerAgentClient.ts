@@ -38,7 +38,7 @@ function createDefaultProfile(): ProfileRecord {
   return {
     displayName: '',
     locale: 'zh-CN',
-    timezone: 'Asia/Singapore',
+    timezone: 'Asia/Shanghai',
     currentRole: '',
     employmentStatus: '',
     experienceSummary: '',
@@ -372,11 +372,11 @@ export function createUpstreamCareerAgentClient(
       }
     },
     async getProfile() {
-      const payload = await requestOptionalJson<ProfileRecord>(CAREER_AGENT_API_ROUTES.profile());
+      const payload = await requestOptionalJson<unknown>(CAREER_AGENT_API_ROUTES.profile());
       return sanitizeProfileRecord(payload ?? createDefaultProfile());
     },
     async updateProfile(profile) {
-      const payload = await requestJson<ProfileRecord>(CAREER_AGENT_API_ROUTES.profile(), {
+      const payload = await requestJson<unknown>(CAREER_AGENT_API_ROUTES.profile(), {
         method: 'PUT',
         data: profile,
       });
