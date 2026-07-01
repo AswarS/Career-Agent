@@ -4,6 +4,7 @@ import {
   OnModuleInit,
   Optional,
 } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import {
   SkillRegistry,
   type SkillHandlerResult,
@@ -23,12 +24,21 @@ import {
 } from './skill-file-store';
 import { substituteArguments } from '../../../utils/argumentSubstitution.js';
 import { CAREER_AGENT_SKILL_ROUTER_GUIDANCE } from '../../prompts/careerAgentLearningPrompt.js';
+import { skillLogger } from '../../utils/skillLogger.js';
 
 type SkillRouteCandidate = {
   name: string;
   description: string;
   category: string;
   source: string;
+};
+
+type AutoSkillRouteDecision = {
+  routeId: string;
+  useSkill: boolean;
+  skillName?: string;
+  args?: string;
+  reason?: string;
 };
 
 const FAST_ROUTE_MAX_DIRECT_MATCHES = 1;
@@ -279,7 +289,11 @@ export class SkillService implements OnModuleInit {
     args: string,
     context?: SkillExecutionContext,
   ): Promise<SkillHandlerResult> {
+    const invocationStartedAt = Date.now();
     const mergedContext: SkillExecutionContext = { ...(context ?? {}) };
+    const autoSkillRouteId = typeof mergedContext.autoSkillRouteId === 'string'
+      ? mergedContext.autoSkillRouteId
+      : null;
     if (mergedContext.userId) {
       await this.syncUserSkills(mergedContext.userId);
     }
@@ -327,23 +341,74 @@ export class SkillService implements OnModuleInit {
 
     const entry = this.registry.get(name, mergedContext.userId);
     if (!entry) {
+      skillLogger.warn('SkillService', 'Skill invocation rejected', {
+        autoSkillRouteId,
+        name,
+        userId: mergedContext.userId ?? null,
+        conversationId: mergedContext.conversationId ?? null,
+        reason: 'skill_not_loaded',
+      });
       throw new ForbiddenException({ error: 'Skill not loaded', skill: name });
     }
 
     console.log(
-      `[SkillService] invokeSkill source=${entry.source} name=${name} userId=${mergedContext.userId ?? 'unknown'} conversationId=${mergedContext.conversationId ?? 'unknown'}`,
+      `[SkillService] invokeSkill source=${entry.source} name=${name} userId=${mergedContext.userId ?? 'unknown'} conversationId=${mergedContext.conversationId ?? 'unknown'} autoSkillRouteId=${autoSkillRouteId ?? 'none'}`,
     );
 
     if (entry.status !== 'loaded') {
+      skillLogger.warn('SkillService', 'Skill invocation rejected', {
+        autoSkillRouteId,
+        source: entry.source,
+        name,
+        userId: mergedContext.userId ?? null,
+        conversationId: mergedContext.conversationId ?? null,
+        reason: `status_${entry.status}`,
+      });
       throw new ForbiddenException({ error: 'Skill not loaded', skill: name });
     }
 
+    const invocationLogContext = {
+      autoSkillRouteId,
+      source: entry.source,
+      name,
+      userId: mergedContext.userId ?? null,
+      conversationId: mergedContext.conversationId ?? null,
+    };
+    const finishInvocation = (result: SkillHandlerResult): SkillHandlerResult => {
+      skillLogger.info('SkillService', 'Skill invocation completed', {
+        ...invocationLogContext,
+        durationMs: Date.now() - invocationStartedAt,
+        success: result.success,
+        replyLength: result.reply.length,
+        outputFileCount: result.outputFiles?.length ?? 0,
+        artifactCount: result.artifacts?.length ?? 0,
+      });
+      return result;
+    };
+    skillLogger.info('SkillService', 'Skill invocation started', {
+      ...invocationLogContext,
+      argsLength: args.length,
+      hasAbortSignal: Boolean(mergedContext.abortSignal),
+      hasProgressCallback: Boolean(mergedContext.onProgress),
+      hasLlmConfig: Boolean(
+        mergedContext.llmConfig?.apiKey && mergedContext.llmConfig?.baseUrl,
+      ),
+    });
+
     if (entry.source === 'builtin') {
       try {
-        return await entry.handler(args, mergedContext);
+        return finishInvocation(await entry.handler(args, mergedContext));
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
-        return { success: false, reply: `Skill execution failed: ${message}` };
+        skillLogger.error('SkillService', 'Skill invocation threw', {
+          ...invocationLogContext,
+          durationMs: Date.now() - invocationStartedAt,
+          error: this.routeReasonForLog(message),
+        });
+        return finishInvocation({
+          success: false,
+          reply: `Skill execution failed: ${message}`,
+        });
       }
     }
 
@@ -354,10 +419,15 @@ export class SkillService implements OnModuleInit {
     const custom = await readSkillFile(mergedContext.userId, name);
     if (!custom) {
       this.registry.setStatus(name, 'unloaded', mergedContext.userId);
+      skillLogger.warn('SkillService', 'Skill invocation rejected', {
+        ...invocationLogContext,
+        durationMs: Date.now() - invocationStartedAt,
+        reason: 'custom_skill_file_missing',
+      });
       throw new ForbiddenException({ error: 'Skill not loaded', skill: name });
     }
 
-    return this.invokeCustomSkill(custom, args, mergedContext);
+    return finishInvocation(await this.invokeCustomSkill(custom, args, mergedContext));
   }
 
   private async invokeCustomSkill(
@@ -462,9 +532,43 @@ export class SkillService implements OnModuleInit {
     content: string,
     userId: number,
     conversationId?: string,
-  ): Promise<{ useSkill: boolean; skillName?: string; args?: string; reason?: string }> {
+  ): Promise<AutoSkillRouteDecision> {
+    const routeId = randomUUID();
+    const startedAt = Date.now();
+    const logContext = {
+      routeId,
+      userId,
+      conversationId: conversationId ?? null,
+    };
+    const finish = (
+      decision: Omit<AutoSkillRouteDecision, 'routeId'>,
+      stage: 'precheck' | 'local' | 'llm',
+      details: Record<string, unknown> = {},
+    ): AutoSkillRouteDecision => {
+      skillLogger.info('AutoSkillRouter', 'Route completed', {
+        ...logContext,
+        stage,
+        durationMs: Date.now() - startedAt,
+        useSkill: decision.useSkill,
+        skillName: decision.skillName ?? null,
+        reason: this.routeReasonForLog(decision.reason),
+        argsLength: decision.args?.length ?? 0,
+        ...details,
+      });
+      return { routeId, ...decision };
+    };
+
+    skillLogger.info('AutoSkillRouter', 'Route started', {
+      ...logContext,
+      contentLength: content.length,
+      trimmedContentLength: content.trim().length,
+    });
+
     if (!this.agentService) {
-      return { useSkill: false, reason: 'agent_service_unavailable' };
+      return finish(
+        { useSkill: false, reason: 'agent_service_unavailable' },
+        'precheck',
+      );
     }
 
     const skills = await this.listSkills(userId);
@@ -477,11 +581,34 @@ export class SkillService implements OnModuleInit {
         source: String(s.source ?? 'unknown'),
       }));
 
-    if (!candidates.length) return { useSkill: false, reason: 'no_skills' };
+    skillLogger.info('AutoSkillRouter', 'Candidate snapshot created', {
+      ...logContext,
+      candidateCount: candidates.length,
+      candidates: candidates.map(({ name, category, source }) => ({
+        name,
+        category,
+        source,
+      })),
+    });
+
+    if (!candidates.length) {
+      return finish({ useSkill: false, reason: 'no_skills' }, 'precheck');
+    }
 
     const fastRoute = this.tryFastRouteSkill(content, candidates);
+    const fastRouteCandidates = fastRoute.kind === 'direct'
+      ? [fastRoute.skillName]
+      : fastRoute.kind === 'ambiguous'
+        ? fastRoute.candidates.map((candidate) => candidate.name)
+        : [];
+    skillLogger.info('AutoSkillRouter', 'Local route evaluated', {
+      ...logContext,
+      result: fastRoute.kind,
+      reason: 'reason' in fastRoute ? fastRoute.reason : 'no_keyword_match',
+      matchedSkills: fastRouteCandidates,
+    });
     if (fastRoute.kind === 'skip') {
-      return { useSkill: false, reason: fastRoute.reason };
+      return finish({ useSkill: false, reason: fastRoute.reason }, 'local');
     }
     const routerCandidates =
       fastRoute.kind === 'ambiguous' && fastRoute.candidates.length > 0
@@ -499,17 +626,26 @@ export class SkillService implements OnModuleInit {
         };
       }
     }
+    skillLogger.info('AutoSkillRouter', 'LLM configuration evaluated', {
+      ...logContext,
+      hasApiKey: Boolean(llmConfig?.apiKey),
+      hasBaseUrl: Boolean(llmConfig?.baseUrl),
+      hasModel: Boolean(llmConfig?.model),
+    });
     if (!llmConfig?.apiKey || !llmConfig?.baseUrl) {
-      return { useSkill: false, reason: 'llm_not_configured' };
+      return finish({ useSkill: false, reason: 'llm_not_configured' }, 'precheck');
     }
 
     if (fastRoute.kind === 'direct') {
-      return {
-        useSkill: true,
-        skillName: fastRoute.skillName,
-        args: content,
-        reason: fastRoute.reason,
-      };
+      return finish(
+        {
+          useSkill: true,
+          skillName: fastRoute.skillName,
+          args: content,
+          reason: fastRoute.reason,
+        },
+        'local',
+      );
     }
 
     const routerPrompt =
@@ -530,41 +666,124 @@ export class SkillService implements OnModuleInit {
       `User message:\n${content}\n\n` +
       'Output schema:\n{"useSkill":boolean,"skillName":"string","args":"string","reason":"string"}';
 
-    const route = await this.agentService.runIsolatedPrompt({
-      userId: String(userId),
-      conversationId,
-      apiKey: llmConfig.apiKey,
-      baseUrl: llmConfig.baseUrl,
-      model: llmConfig.model,
-      content: routerPrompt,
+    const llmStartedAt = Date.now();
+    skillLogger.info('AutoSkillRouter', 'LLM route started', {
+      ...logContext,
+      requestMode: 'non_streaming',
+      candidateCount: routerCandidates.length,
+      candidateNames: routerCandidates.map((candidate) => candidate.name),
+      promptLength: routerPrompt.length,
+      model: llmConfig.model ?? null,
+    });
+    let route: Awaited<ReturnType<AgentService['runIsolatedNonStreamingPrompt']>>;
+    try {
+      route = await this.agentService.runIsolatedNonStreamingPrompt({
+        userId: String(userId),
+        apiKey: llmConfig.apiKey,
+        baseUrl: llmConfig.baseUrl,
+        model: llmConfig.model,
+        content: routerPrompt,
+      });
+    } catch (error: unknown) {
+      const llmDurationMs = Date.now() - llmStartedAt;
+      skillLogger.error('AutoSkillRouter', 'LLM route threw', {
+        ...logContext,
+        durationMs: llmDurationMs,
+        errorType: error instanceof Error ? error.name : typeof error,
+      });
+      finish(
+        { useSkill: false, reason: 'router_exception' },
+        'llm',
+        { llmDurationMs, parseStatus: 'not_attempted' },
+      );
+      throw error;
+    }
+    const llmDurationMs = Date.now() - llmStartedAt;
+    skillLogger.info('AutoSkillRouter', 'LLM route completed', {
+      ...logContext,
+      requestMode: 'non_streaming',
+      durationMs: llmDurationMs,
+      success: route.success,
+      replyLength: route.reply?.length ?? 0,
+      model: route.model ?? llmConfig.model ?? null,
+    });
+    skillLogger.info('AutoSkillRouter', 'LLM raw response', {
+      ...logContext,
+      requestMode: 'non_streaming',
+      rawReply: route.reply ?? null,
     });
 
     if (!route.success || !route.reply) {
-      return { useSkill: false, reason: 'router_failed' };
+      return finish(
+        { useSkill: false, reason: 'router_failed' },
+        'llm',
+        { llmDurationMs, parseStatus: 'not_attempted' },
+      );
     }
 
     try {
       const matched = route.reply.match(/\{[\s\S]*\}/);
-      if (!matched) return { useSkill: false, reason: 'router_no_json' };
+      if (!matched) {
+        return finish(
+          { useSkill: false, reason: 'router_no_json' },
+          'llm',
+          { llmDurationMs, parseStatus: 'no_json' },
+        );
+      }
       const parsed = JSON.parse(matched[0]) as {
         useSkill?: boolean;
         skillName?: string;
         args?: string;
         reason?: string;
       };
+      skillLogger.info('AutoSkillRouter', 'LLM decision parsed', {
+        ...logContext,
+        useSkill: Boolean(parsed.useSkill),
+        skillName: parsed.skillName ?? null,
+        reason: this.routeReasonForLog(parsed.reason),
+        argsLength: parsed.args?.length ?? 0,
+      });
       if (!parsed.useSkill || !parsed.skillName) {
-        return { useSkill: false, reason: parsed.reason ?? 'router_declined' };
+        return finish(
+          { useSkill: false, reason: parsed.reason ?? 'router_declined' },
+          'llm',
+          { llmDurationMs, parseStatus: 'parsed' },
+        );
       }
       const exists = await this.skillExists(parsed.skillName, userId);
-      if (!exists) return { useSkill: false, reason: 'router_skill_not_found' };
-      return {
-        useSkill: true,
+      skillLogger.info('AutoSkillRouter', 'LLM skill validated', {
+        ...logContext,
         skillName: parsed.skillName,
-        args: parsed.args ?? content,
-        reason: parsed.reason ?? 'router_selected',
-      };
-    } catch {
-      return { useSkill: false, reason: 'router_parse_failed' };
+        exists,
+      });
+      if (!exists) {
+        return finish(
+          { useSkill: false, reason: 'router_skill_not_found' },
+          'llm',
+          { llmDurationMs, parseStatus: 'parsed' },
+        );
+      }
+      return finish(
+        {
+          useSkill: true,
+          skillName: parsed.skillName,
+          args: parsed.args ?? content,
+          reason: parsed.reason ?? 'router_selected',
+        },
+        'llm',
+        { llmDurationMs, parseStatus: 'parsed' },
+      );
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      skillLogger.warn('AutoSkillRouter', 'LLM decision parse failed', {
+        ...logContext,
+        error: this.routeReasonForLog(message),
+      });
+      return finish(
+        { useSkill: false, reason: 'router_parse_failed' },
+        'llm',
+        { llmDurationMs, parseStatus: 'invalid_json' },
+      );
     }
   }
 
@@ -681,6 +900,11 @@ export class SkillService implements OnModuleInit {
 
   private matchesAny(value: string, needles: string[]): boolean {
     return needles.some((needle) => value.includes(needle.toLowerCase()));
+  }
+
+  private routeReasonForLog(reason?: string): string | null {
+    if (!reason) return null;
+    return reason.replace(/\s+/g, ' ').trim().slice(0, 300);
   }
 
   private async syncUserSkills(userId: number): Promise<void> {

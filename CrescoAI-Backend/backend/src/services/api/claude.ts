@@ -100,6 +100,10 @@ import {
   extractQuotaStatusFromHeaders,
 } from '../claudeAiLimits.js'
 import { getAPIContextManagement } from '../compact/apiMicrocompact.js'
+import {
+  initializeTextContentBlock,
+  initializeThinkingContentBlock,
+} from './streamContentBlocks.js'
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 const autoModeStateModule = feature('TRANSCRIPT_CLASSIFIER')
@@ -2018,24 +2022,14 @@ async function* queryModel(
                 }
                 break
               case 'text':
-                contentBlocks[part.index] = {
-                  ...part.content_block,
-                  // awkwardly, the sdk sometimes returns text as part of a
-                  // content_block_start message, then returns the same text
-                  // again in a content_block_delta message. we ignore it here
-                  // since there doesn't seem to be a way to detect when a
-                  // content_block_delta message duplicates the text.
-                  text: '',
-                }
+                contentBlocks[part.index] = initializeTextContentBlock(
+                  part.content_block,
+                )
                 break
               case 'thinking':
-                contentBlocks[part.index] = {
-                  ...part.content_block,
-                  // also awkward
-                  thinking: '',
-                  // initialize signature to ensure field exists even if signature_delta never arrives
-                  signature: '',
-                }
+                contentBlocks[part.index] = initializeThinkingContentBlock(
+                  part.content_block,
+                )
                 break
               default:
                 // even more awkwardly, the sdk mutates the contents of text blocks

@@ -237,6 +237,7 @@ type SkillStreamRoute =
       skillName: string;
       args: string;
       routerReason?: string;
+      autoSkillRouteId?: string;
     };
 
 interface StreamMessageIds {
@@ -805,7 +806,7 @@ export class ConversationService {
       conversation.id,
     );
     console.log(
-      `[ConversationService] autoSkill useSkill=${autoRoute.useSkill} skillName=${autoRoute.skillName ?? 'none'} reason=${autoRoute.reason ?? 'n/a'} userId=${conversation.userId} conversationId=${conversation.id}`,
+      `[ConversationService] autoSkill routeId=${autoRoute.routeId} useSkill=${autoRoute.useSkill} skillName=${autoRoute.skillName ?? 'none'} reason=${autoRoute.reason ?? 'n/a'} userId=${conversation.userId} conversationId=${conversation.id}`,
     );
     if (autoRoute.useSkill && autoRoute.skillName) {
       const skillContext = await this.skillService.buildExecutionContext(
@@ -815,7 +816,11 @@ export class ConversationService {
       const skillResult = await this.skillService.invokeSkill(
         autoRoute.skillName,
         autoRoute.args ?? dto.content,
-        { ...dto.context, ...skillContext },
+        {
+          ...dto.context,
+          ...skillContext,
+          autoSkillRouteId: autoRoute.routeId,
+        },
       );
 
       const userMessageId = `msg_user_skill_${randomUUID()}`;
@@ -1174,7 +1179,7 @@ export class ConversationService {
       conversation.id,
     );
     console.log(
-      `[ConversationService] autoSkill useSkill=${autoRoute.useSkill} skillName=${autoRoute.skillName ?? 'none'} reason=${autoRoute.reason ?? 'n/a'} userId=${conversation.userId} conversationId=${conversation.id}`,
+      `[ConversationService] autoSkill routeId=${autoRoute.routeId} useSkill=${autoRoute.useSkill} skillName=${autoRoute.skillName ?? 'none'} reason=${autoRoute.reason ?? 'n/a'} userId=${conversation.userId} conversationId=${conversation.id}`,
     );
 
     if (autoRoute.useSkill && autoRoute.skillName) {
@@ -1184,6 +1189,7 @@ export class ConversationService {
         skillName: autoRoute.skillName,
         args: autoRoute.args ?? dto.content,
         routerReason: autoRoute.reason,
+        autoSkillRouteId: autoRoute.routeId,
       };
     }
 
@@ -1331,6 +1337,9 @@ export class ConversationService {
       {
         ...dto.context,
         ...skillContext,
+        ...(route.autoSkillRouteId
+          ? { autoSkillRouteId: route.autoSkillRouteId }
+          : {}),
         abortSignal,
         onProgress: (event: SkillProgressEvent) => progressQueue.push(event),
       },

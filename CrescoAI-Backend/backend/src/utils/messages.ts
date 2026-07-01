@@ -3014,6 +3014,10 @@ export function handleMessageFromStream(
           onSetStreamMode('thinking')
           return
         case 'text':
+          if (message.event.content_block.text) {
+            onUpdateLength(message.event.content_block.text)
+            onStreamingText?.(() => message.event.content_block.text)
+          }
           onSetStreamMode('responding')
           return
         case 'tool_use': {

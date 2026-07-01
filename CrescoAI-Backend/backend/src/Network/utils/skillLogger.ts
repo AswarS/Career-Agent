@@ -11,6 +11,7 @@ const __dir = dirname(fileURLToPath(import.meta.url));
 const LOGS_ROOT = join(__dir, '..', 'logs', 'skill');
 
 let ensuredDir = false;
+let writeQueue: Promise<void> = Promise.resolve();
 
 function getDateStr(): string {
   const now = new Date();
@@ -44,17 +45,22 @@ async function writeLine(level: string, tag: string, message: string, data?: any
   }
 }
 
+function enqueueLine(level: string, tag: string, message: string, data?: any): void {
+  // Preserve route-stage ordering even when callers intentionally do not await logging.
+  writeQueue = writeQueue.then(() => writeLine(level, tag, message, data));
+}
+
 export const skillLogger = {
   info(tag: string, message: string, data?: any): void {
-    void writeLine('INFO', tag, message, data);
+    enqueueLine('INFO', tag, message, data);
     console.log(`[${tag}] ${message}`, data !== undefined ? data : '');
   },
   warn(tag: string, message: string, data?: any): void {
-    void writeLine('WARN', tag, message, data);
+    enqueueLine('WARN', tag, message, data);
     console.warn(`[${tag}] ${message}`, data !== undefined ? data : '');
   },
   error(tag: string, message: string, data?: any): void {
-    void writeLine('ERROR', tag, message, data);
+    enqueueLine('ERROR', tag, message, data);
     console.error(`[${tag}] ${message}`, data !== undefined ? data : '');
   },
 };

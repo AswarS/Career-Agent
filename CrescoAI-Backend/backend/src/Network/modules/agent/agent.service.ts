@@ -24,6 +24,8 @@ import { SettingsService } from '../settings/settings.service';
 import { setSessionMultimodalConfig, removeSessionMultimodalConfig } from '../../../utils/multimodalConfig.js';
 import { discoverGeneratedFiles } from './generated-output-discovery.js';
 import { sanitizeServerPhysicalPaths } from '../../utils/publicOutputSanitizer.js';
+import { sideQuery } from '../../../utils/sideQuery.js';
+import { getDefaultMainLoopModel } from '../../../utils/model/model.js';
 
 // ---------------------------------------------------------------------------
 // JSONL helpers
@@ -270,6 +272,60 @@ export class AgentService {
   private sessionContexts = new Map<string, SessionContext>();
 
   constructor(@Optional() private readonly settingsService?: SettingsService) {}
+
+  async runIsolatedNonStreamingPrompt(input: {
+    userId: string;
+    content: string;
+    apiKey?: string;
+    baseUrl?: string;
+    model?: string;
+    abortSignal?: AbortSignal;
+  }): Promise<{
+    success: boolean;
+    reply?: string;
+    model?: string;
+  }> {
+    const model = input.model?.trim() || getDefaultMainLoopModel();
+
+    return this.runInSessionContext({
+      userId: input.userId,
+      config: {
+        apiKey: input.apiKey,
+        baseUrl: input.baseUrl,
+        model,
+      },
+      callback: async () => {
+        const response = await sideQuery({
+          querySource: 'autoskill_router',
+          model,
+          messages: [{ role: 'user', content: input.content }],
+          max_tokens: 1024,
+          maxRetries: 2,
+          signal: input.abortSignal,
+          skipSystemPromptPrefix: true,
+          temperature: 0,
+          thinking: false,
+        });
+        const reply = sanitizeServerPhysicalPaths(
+          response.content
+            .filter((block) => block.type === 'text')
+            .map((block) => block.text)
+            .join('')
+            .trim(),
+        );
+
+        if (!reply) {
+          return { success: false, model: response.model };
+        }
+
+        return {
+          success: true,
+          reply,
+          model: response.model,
+        };
+      },
+    });
+  }
 
   async runIsolatedPrompt(input: {
     userId: string;
