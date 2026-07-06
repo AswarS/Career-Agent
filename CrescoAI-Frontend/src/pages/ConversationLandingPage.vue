@@ -41,7 +41,7 @@ const workspaceStore = useWorkspaceStore();
 const { errorMessage, profile, threadCreateStatus } = storeToRefs(workspaceStore);
 
 const welcomeName = computed(() => {
-  const displayName = profile.value?.displayName?.trim();
+  const displayName = profile.value?.basicInfo.fullName?.trim();
   return displayName || '你好';
 });
 

@@ -41,8 +41,8 @@ export class ProfileService {
     const profile = normalizeProfileRecord(source, user.displayName);
 
     user.profileJson = JSON.stringify(profile);
-    if (profile.displayName) {
-      user.displayName = profile.displayName;
+    if (profile.basicInfo.fullName) {
+      user.displayName = profile.basicInfo.fullName;
     }
     await this.userRepo.save(user);
 

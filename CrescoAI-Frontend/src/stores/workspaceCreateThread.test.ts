@@ -1,6 +1,7 @@
 import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CareerAgentClient } from '../services/careerAgentClient';
+import { sanitizeProfileRecord } from '../services/upstreamContracts';
 import type { ThreadMessage } from '../types/entities';
 
 function createClient(overrides: Partial<CareerAgentClient> = {}): CareerAgentClient {
@@ -41,27 +42,7 @@ function createClient(overrides: Partial<CareerAgentClient> = {}): CareerAgentCl
       assistantMessageId: 'message-assistant',
       status: 'done',
     })),
-    getProfile: vi.fn(async () => ({
-      displayName: '',
-      locale: 'zh-CN',
-      timezone: 'Asia/Singapore',
-      currentRole: '',
-      employmentStatus: '',
-      experienceSummary: '',
-      educationSummary: '',
-      locationRegion: '',
-      targetRole: '',
-      targetIndustries: [],
-      shortTermGoal: '',
-      longTermGoal: '',
-      weeklyTimeBudget: '',
-      constraints: [],
-      workPreferences: [],
-      learningPreferences: [],
-      keyStrengths: [],
-      riskSignals: [],
-      portfolioLinks: [],
-    })),
+    getProfile: vi.fn(async () => sanitizeProfileRecord({})),
     updateProfile: vi.fn(async (profile) => profile),
     listProfileSuggestions: vi.fn(async () => []),
     listArtifacts: vi.fn(async () => []),

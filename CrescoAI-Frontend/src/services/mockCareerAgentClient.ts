@@ -2,6 +2,7 @@ import { runtimeConfig } from '../config/runtime';
 import type { CareerAgentClient } from './careerAgentClient';
 import type {
   ArtifactRecord,
+  DeepPartial,
   DraftMessageAttachment,
   MessageMedia,
   ProfileRecord,
@@ -504,25 +505,77 @@ const uploadedFilesByAssetId = new Map<string, UploadedConversationFile>();
 const uploadedFileBlobsByAssetId = new Map<string, Blob>();
 
 let profile: ProfileRecord = {
-  displayName: 'Biter',
-  locale: 'zh-CN',
-  timezone: 'Asia/Shanghai',
-  currentRole: 'LLM Engineer',
-  employmentStatus: 'employed',
-  experienceSummary: '专注大模型底层架构和应用开发，具备丰富的项目交付经验。',
-  educationSummary: '计算机科学硕士，曾就职于多家知名科技公司，主导过多个 AI 产品的前端架构设计和实现。',
-  locationRegion: '北京，中国',
-  targetRole: 'LLM base model engineer',
-  targetIndustries: [],
-  shortTermGoal: '',
-  longTermGoal: '',
-  weeklyTimeBudget: '固定工作之外每周可投入 10-12 小时',
-  constraints: ['需要可持续推进节奏', '不能依赖不稳定的后端契约'],
-  workPreferences: ['低干扰工作环境'],
-  learningPreferences: [],
-  keyStrengths: [],
-  riskSignals: [],
-  portfolioLinks: ['https://example.com/portfolio'],
+  schemaVersion: 'career_profile_v1',
+  basicInfo: {
+    fullName: '王一然',
+    displayName: 'Yiran',
+    contactEmail: 'yiran.wang@example.com',
+    phoneOrPreferredContact: '138****2468 / WeChat: yiran-career',
+    currentCity: '天津',
+    profileAssets: [],
+  },
+  careerProfile: {
+    candidateType: '应届毕业生',
+    currentRole: '2026 届市场营销本科生',
+    employmentStatus: '校招求职中',
+    careerStage: '求职转化期',
+    educationBackground: '市场营销本科，2026 届。',
+    workExperience: '校园公众号运营、活动策划和社群协助经历。',
+    projectExperience: '公众号 3 个月涨粉 2000；校园活动传播项目。',
+    skills: ['内容选题', '公众号运营', '活动复盘', 'Excel 数据分析'],
+    interests: ['互联网内容', '教育科技', '用户增长'],
+    strengthTags: ['内容表达', '校园用户理解', '结果意识'],
+    weaknessTags: ['商业项目证据不足', '数据分析深度不足'],
+    personalityTraits: [],
+  },
+  intentConstraints: {
+    targetIndustry: '互联网 / 教育科技 / 本地生活',
+    targetIndustries: ['互联网', '教育科技', '本地生活'],
+    targetRole: '新媒体运营；备选用户运营',
+    targetCity: '北京，接受天津通勤或短期过渡',
+    expectedSalary: '8k-12k / 月',
+    availableTime: '每周 10 小时优化简历与补项目。',
+    jobSearchStatus: '投递中，面试反馈偏少',
+    constraints: ['暂不接受强销售压力岗位', '毕业前每周最多线下面试 1 次'],
+    workPreferences: ['偏稳定团队', '希望有明确反馈', '不偏好强销售压力'],
+    learningPreferences: ['案例拆解', '短周期项目练习', '每周固定复盘'],
+    careerGoal: '3 个月内拿到内容/用户运营 offer。',
+  },
+  activityRecords: {
+    learningRecords: ['完成运营数据分析入门课程'],
+    projectRecords: ['补充校园公众号增长复盘，缺少用户分层和转化指标'],
+    applicationRecords: ['已投递 18 个新媒体运营岗位，2 个 HR 回复'],
+    interviewRecords: [],
+    offerRecords: [],
+    workRecords: [],
+  },
+  artifacts: {
+    resumeSummary: '经历完整，但项目成果和数据指标不足。',
+    portfolioLinks: ['https://example.com/portfolio'],
+    projectMaterials: ['公众号后台截图待补充', '校园活动复盘文档'],
+    coverLetters: [],
+  },
+  feedbackSignals: {
+    userFeedback: ['希望岗位稳定一些，不接受长期高压加班'],
+    interviewFeedback: [],
+    mentorFeedback: [],
+    managerFeedback: [],
+    systemAssessmentFeedback: ['简历中运营结果已有雏形，但证据链不足'],
+  },
+  planState: {
+    learningPlan: '两周内补完运营数据分析和用户分层案例。',
+    projectPlan: '',
+    applicationPlan: '每周投 20 个匹配岗位，周末复盘 JD 关键词。',
+    interviewPlan: '',
+    onboardingPlan: '',
+    promotionPlan: '',
+  },
+  chinaResumeSupplement: {
+    jobIntentionStatement: '求职意向：新媒体运营，目标城市北京。',
+    educationDetail: '2022.09-2026.06，某大学，市场营销，本科。',
+    awardsCertificatesHighlights: '',
+    conditionalFields: '',
+  },
 };
 
 const profileSuggestions: ProfileSuggestion[] = [
@@ -532,46 +585,41 @@ const profileSuggestions: ProfileSuggestion[] = [
     rationale: '会话反馈表明，当前目标更应强调面向 AI 原生产品的交付能力，而不是泛前端范围。',
     sourceThreadId: 'thread-002',
     patch: {
-      targetRole: '面向开发者产品和职业规划产品的 AI 原生前端工程师',
+      intentConstraints: {
+        targetRole: '新媒体运营；用户运营作为备选',
+      },
     },
   },
   {
-    id: 'suggestion-short-term-goal',
-    title: '让短期目标更具体',
-    rationale: '当前工作台切片已经足够明确，可以进一步收敛成更可执行的近期目标。',
+    id: 'suggestion-availability',
+    title: '补充求职节奏',
+    rationale: '当前工作台切片已经足够明确，可以进一步收敛成可执行的近期求职节奏。',
     sourceThreadId: 'thread-001',
     patch: {
-      shortTermGoal: '交付轻量画像与工件宿主流程，并确保类型化适配层稳定、保存边界清晰。',
+      intentConstraints: {
+        availableTime: '每周投入 10 小时，优先完善项目数据证据并推进目标岗位投递。',
+      },
     },
   },
   {
-    id: 'suggestion-strengths',
-    title: '强化优势组合表达',
+    id: 'suggestion-core-skills',
+    title: '强化核心技能表达',
     rationale: '你最强的定位不只是实现能力，还包括借助 AI 辅助迭代把产品真正交付出去。',
     sourceThreadId: 'thread-002',
     patch: {
-      keyStrengths: ['前端实现', 'API 协调', 'AI 辅助产品交付'],
+      careerProfile: {
+        skills: ['内容选题', '公众号运营', '活动复盘', '用户分层入门'],
+      },
     },
   },
 ];
 
 function cloneProfileRecord(input: ProfileRecord): ProfileRecord {
-  return {
-    ...input,
-    targetIndustries: [...input.targetIndustries],
-    constraints: [...input.constraints],
-    workPreferences: [...input.workPreferences],
-    learningPreferences: [...input.learningPreferences],
-    keyStrengths: [...input.keyStrengths],
-    riskSignals: [...input.riskSignals],
-    portfolioLinks: [...input.portfolioLinks],
-  };
+  return structuredClone(input) as ProfileRecord;
 }
 
-function cloneProfileSuggestionPatch(patch: Partial<ProfileRecord>) {
-  return Object.fromEntries(
-    Object.entries(patch).map(([key, value]) => [key, Array.isArray(value) ? [...value] : value]),
-  ) as Partial<ProfileRecord>;
+function cloneProfileSuggestionPatch(patch: DeepPartial<ProfileRecord>) {
+  return structuredClone(patch) as DeepPartial<ProfileRecord>;
 }
 
 function cloneArtifactRecord(input: ArtifactRecord): ArtifactRecord {
@@ -664,16 +712,16 @@ function buildProfileSummaryArtifact(nextProfile: ProfileRecord, revision: numbe
     renderMode: 'html',
     revision,
     updatedAt: new Date().toISOString(),
-    summary: `基于显式画像字段整理出的 ${nextProfile.displayName} 结构化摘要。`,
+    summary: `基于显式画像字段整理出的 ${nextProfile.basicInfo.fullName} 结构化摘要。`,
     payload: {
       html: `
         <html lang="zh-CN">
           <body style="margin:0;font-family:Inter,system-ui,sans-serif;background:#fffcf7;color:#23313b;">
             <div style="padding:24px;">
               <h1 style="margin:0 0 12px;font-size:24px;">画像摘要</h1>
-              <p style="margin:0 0 8px;color:#61707c;">目标角色：${nextProfile.targetRole}</p>
-              <p style="margin:0 0 8px;color:#61707c;">核心优势：${nextProfile.keyStrengths.join('、')}</p>
-              <p style="margin:0;color:#61707c;">主要风险：${nextProfile.riskSignals[0] ?? '暂无首要风险记录'}</p>
+              <p style="margin:0 0 8px;color:#61707c;">目标角色：${nextProfile.intentConstraints.targetRole}</p>
+              <p style="margin:0 0 8px;color:#61707c;">核心技能：${nextProfile.careerProfile.skills.join('、')}</p>
+              <p style="margin:0;color:#61707c;">求职节奏：${nextProfile.intentConstraints.availableTime || '暂未填写'}</p>
             </div>
           </body>
         </html>`,

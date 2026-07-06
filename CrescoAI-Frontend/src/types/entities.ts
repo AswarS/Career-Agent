@@ -149,33 +149,93 @@ export interface ThreadMessage {
 }
 
 export interface ProfileRecord {
-  displayName: string;
-  locale: string;
-  timezone: string;
-  currentRole: string;
-  employmentStatus: string;
-  experienceSummary: string;
-  educationSummary: string;
-  locationRegion: string;
-  targetRole: string;
-  targetIndustries: string[];
-  shortTermGoal: string;
-  longTermGoal: string;
-  weeklyTimeBudget: string;
-  constraints: string[];
-  workPreferences: string[];
-  learningPreferences: string[];
-  keyStrengths: string[];
-  riskSignals: string[];
-  portfolioLinks: string[];
+  schemaVersion: 'career_profile_v1';
+  basicInfo: {
+    fullName: string;
+    displayName: string;
+    contactEmail: string;
+    phoneOrPreferredContact: string;
+    currentCity: string;
+    profileAssets: string[];
+  };
+  careerProfile: {
+    candidateType: string;
+    currentRole: string;
+    employmentStatus: string;
+    careerStage: string;
+    educationBackground: string;
+    workExperience: string;
+    projectExperience: string;
+    skills: string[];
+    interests: string[];
+    strengthTags: string[];
+    weaknessTags: string[];
+    personalityTraits: string[];
+  };
+  intentConstraints: {
+    targetIndustry: string;
+    targetIndustries: string[];
+    targetRole: string;
+    targetCity: string;
+    expectedSalary: string;
+    availableTime: string;
+    jobSearchStatus: string;
+    constraints: string[];
+    workPreferences: string[];
+    learningPreferences: string[];
+    careerGoal: string;
+  };
+  activityRecords: {
+    learningRecords: string[];
+    projectRecords: string[];
+    applicationRecords: string[];
+    interviewRecords: string[];
+    offerRecords: string[];
+    workRecords: string[];
+  };
+  artifacts: {
+    resumeSummary: string;
+    portfolioLinks: string[];
+    projectMaterials: string[];
+    coverLetters: string[];
+  };
+  feedbackSignals: {
+    userFeedback: string[];
+    interviewFeedback: string[];
+    mentorFeedback: string[];
+    managerFeedback: string[];
+    systemAssessmentFeedback: string[];
+  };
+  planState: {
+    learningPlan: string;
+    projectPlan: string;
+    applicationPlan: string;
+    interviewPlan: string;
+    onboardingPlan: string;
+    promotionPlan: string;
+  };
+  chinaResumeSupplement: {
+    jobIntentionStatement: string;
+    educationDetail: string;
+    awardsCertificatesHighlights: string;
+    conditionalFields: string;
+  };
 }
+
+export type DeepPartial<T> = {
+  [K in keyof T]?: T[K] extends Array<infer U>
+    ? U[]
+    : T[K] extends object
+      ? DeepPartial<T[K]>
+      : T[K];
+};
 
 export interface ProfileSuggestion {
   id: string;
   title: string;
   rationale: string;
   sourceThreadId: string | null;
-  patch: Partial<ProfileRecord>;
+  patch: DeepPartial<ProfileRecord>;
 }
 
 export type ArtifactType =

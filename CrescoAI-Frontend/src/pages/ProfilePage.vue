@@ -1,18 +1,25 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, toRaw, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import MobileRailTrigger from '../modules/navigation/MobileRailTrigger.vue';
 import ProfileSnapshotCard from '../modules/profile/ProfileSnapshotCard.vue';
 import ProfileSuggestionCard from '../modules/profile/ProfileSuggestionCard.vue';
 import {
   buildProfileSnapshotSections,
-  listProfileFields,
-  scalarProfileFields,
-  type ListProfileFieldKey,
-  type ScalarProfileFieldKey,
+  formatRequiredLevel,
+  getRequirementKind,
+  getWritePolicyKind,
+  getWritePolicyLabel,
+  isRequiredProfileField,
+  profileFieldGroups,
+  profileFields,
+  readProfileField,
+  writeProfileField,
+  type ProfileFieldConfig,
+  type ProfileFieldRequirementKind,
 } from '../modules/profile/profileFields';
 import { useWorkspaceStore } from '../stores/workspace';
-import type { ProfileRecord, ProfileSuggestion } from '../types/entities';
+import type { DeepPartial, ProfileRecord, ProfileSuggestion } from '../types/entities';
 
 const workspaceStore = useWorkspaceStore();
 const {
@@ -29,6 +36,15 @@ const {
 const draftProfile = ref<ProfileRecord | null>(null);
 const isEditing = ref(false);
 const localSaveMessage = ref<string | null>(null);
+
+type EditorProfileField = ProfileFieldConfig;
+
+const requirementSortOrder: Record<ProfileFieldRequirementKind, number> = {
+  required: 0,
+  conditional: 1,
+  recommended: 2,
+  optional: 3,
+};
 
 onMounted(() => {
   void workspaceStore.initialize();
@@ -63,33 +79,61 @@ const hasUnsavedChanges = computed(() => {
 });
 
 const profileCompletion = computed(() => {
-  if (!profile.value) {
-    return { completed: 0, total: scalarProfileFields.length + listProfileFields.length };
+  const requiredFields = profileFields.filter(isRequiredProfileField);
+  const completionProfile = isEditing.value ? draftProfile.value : profile.value;
+
+  if (!completionProfile) {
+    return { completed: 0, total: requiredFields.length };
   }
 
-  const completedScalarFields = scalarProfileFields.filter((field) => profile.value?.[field.key].trim()).length;
-  const completedListFields = listProfileFields.filter((field) => profile.value?.[field.key].length).length;
+  const completedFields = requiredFields.filter((field) => {
+    const value = readProfileField(completionProfile, field);
+    return Array.isArray(value) ? value.length > 0 : value.trim().length > 0;
+  }).length;
+
   return {
-    completed: completedScalarFields + completedListFields,
-    total: scalarProfileFields.length + listProfileFields.length,
+    completed: completedFields,
+    total: requiredFields.length,
   };
 });
+
+const orderedProfileFields = computed<EditorProfileField[]>(() => (
+  [...profileFields].sort((left, right) => {
+    const leftGroupIndex = profileFieldGroups.findIndex((group) => group.key === left.groupKey);
+    const rightGroupIndex = profileFieldGroups.findIndex((group) => group.key === right.groupKey);
+    const groupDelta = leftGroupIndex - rightGroupIndex;
+
+    if (groupDelta !== 0) {
+      return groupDelta;
+    }
+
+    const leftKind = getRequirementKind(left.requiredLevel);
+    const rightKind = getRequirementKind(right.requiredLevel);
+    const requirementDelta = requirementSortOrder[leftKind] - requirementSortOrder[rightKind];
+
+    if (requirementDelta !== 0) {
+      return requirementDelta;
+    }
+
+    return profileFields.indexOf(left) - profileFields.indexOf(right);
+  })
+));
+
+const editorFieldGroups = computed(() => (
+  profileFieldGroups
+    .map((group) => ({
+      ...group,
+      fields: orderedProfileFields.value.filter((field) => field.groupKey === group.key),
+    }))
+    .filter((group) => group.fields.length > 0)
+));
 
 const hasProfileSummary = computed(() => (
   artifacts.value.some((artifact) => artifact.id === 'artifact-profile-summary')
 ));
 
 function cloneProfile(input: ProfileRecord): ProfileRecord {
-  return {
-    ...input,
-    targetIndustries: [...input.targetIndustries],
-    constraints: [...input.constraints],
-    workPreferences: [...input.workPreferences],
-    learningPreferences: [...input.learningPreferences],
-    keyStrengths: [...input.keyStrengths],
-    riskSignals: [...input.riskSignals],
-    portfolioLinks: [...input.portfolioLinks],
-  };
+  return JSON.parse(JSON.stringify(toRaw(input))) as ProfileRecord;
 }
 
 function beginEditing() {
@@ -99,7 +143,7 @@ function beginEditing() {
 
   draftProfile.value = cloneProfile(profile.value);
   isEditing.value = true;
-  localSaveMessage.value = '已进入草稿编辑状态。在你明确保存之前，正式画像数据不会变化。';
+  localSaveMessage.value = null;
 }
 
 function cancelEditing() {
@@ -108,42 +152,114 @@ function cancelEditing() {
   }
 
   isEditing.value = false;
-  localSaveMessage.value = '草稿修改已丢弃，结构化画像保持不变。';
+  localSaveMessage.value = '已放弃草稿。';
 }
 
-function updateScalarField(key: ScalarProfileFieldKey, value: string) {
+function updateScalarField(field: ProfileFieldConfig, value: string) {
   if (!draftProfile.value) {
     return;
   }
 
   isEditing.value = true;
-  draftProfile.value = {
-    ...draftProfile.value,
-    [key]: value,
-  };
+  draftProfile.value = writeProfileField(draftProfile.value, field, value);
 }
 
-function updateListField(key: ListProfileFieldKey, value: string) {
+function updateListField(field: ProfileFieldConfig, value: string) {
   if (!draftProfile.value) {
     return;
   }
 
   isEditing.value = true;
-  draftProfile.value = {
-    ...draftProfile.value,
-    [key]: value
+  draftProfile.value = writeProfileField(
+    draftProfile.value,
+    field,
+    value
       .split('\n')
       .map((item) => item.trim())
       .filter(Boolean),
-  };
+  );
 }
 
-function getScalarFieldValue(key: ScalarProfileFieldKey) {
-  return draftProfile.value?.[key] ?? '';
+function getScalarFieldValue(field: ProfileFieldConfig) {
+  if (!draftProfile.value) {
+    return '';
+  }
+
+  const value = readProfileField(draftProfile.value, field);
+  return Array.isArray(value) ? value.join('\n') : value;
 }
 
-function getListFieldValue(key: ListProfileFieldKey) {
-  return draftProfile.value?.[key]?.join('\n') ?? '';
+function getListFieldValue(field: ProfileFieldConfig) {
+  if (!draftProfile.value) {
+    return '';
+  }
+
+  const value = readProfileField(draftProfile.value, field);
+  return Array.isArray(value) ? value.join('\n') : value;
+}
+
+function getFieldHelp(field: { description: string; example: string }) {
+  return `${field.description} 示例：${field.example}`;
+}
+
+function getScalarPlaceholder(field: { input: 'text' | 'textarea'; label: string; example: string }) {
+  if (field.input === 'textarea') {
+    return `请填写${field.label}`;
+  }
+
+  const shortExample = field.example
+    .split(/[；;，,、。]/)[0]
+    .trim();
+  return shortExample ? `例：${shortExample}` : '';
+}
+
+function getListPlaceholder(field: { example: string }) {
+  return field.example
+    .split(/[；;，,、。]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 4)
+    .join('\n') || '每行一项';
+}
+
+function getCompactExample(field: { example: string }) {
+  const example = field.example.trim();
+  return example.length > 44 ? `${example.slice(0, 44)}...` : example;
+}
+
+function hasEditorFieldValue(field: EditorProfileField) {
+  if (!draftProfile.value) {
+    return false;
+  }
+
+  const value = readProfileField(draftProfile.value, field);
+
+  return Array.isArray(value) ? value.length > 0 : value.trim().length > 0;
+}
+
+function mergeProfilePatch(base: ProfileRecord, patch: DeepPartial<ProfileRecord>) {
+  const nextProfile = cloneProfile(base);
+
+  for (const [sectionKey, sectionPatch] of Object.entries(patch) as Array<[keyof ProfileRecord, unknown]>) {
+    if (sectionKey === 'schemaVersion') {
+      continue;
+    }
+
+    if (
+      typeof sectionPatch === 'object'
+      && sectionPatch !== null
+      && !Array.isArray(sectionPatch)
+      && typeof nextProfile[sectionKey] === 'object'
+      && nextProfile[sectionKey] !== null
+    ) {
+      nextProfile[sectionKey] = {
+        ...(nextProfile[sectionKey] as object),
+        ...(sectionPatch as object),
+      } as never;
+    }
+  }
+
+  return nextProfile;
 }
 
 function applySuggestion(suggestion: ProfileSuggestion) {
@@ -152,14 +268,7 @@ function applySuggestion(suggestion: ProfileSuggestion) {
   }
 
   const baseProfile = draftProfile.value ? cloneProfile(draftProfile.value) : cloneProfile(profile.value);
-  const normalizedPatch = Object.fromEntries(
-    Object.entries(suggestion.patch).map(([key, value]) => [key, Array.isArray(value) ? [...value] : value]),
-  ) as Partial<ProfileRecord>;
-
-  draftProfile.value = {
-    ...baseProfile,
-    ...normalizedPatch,
-  };
+  draftProfile.value = mergeProfilePatch(baseProfile, suggestion.patch);
   isEditing.value = true;
   localSaveMessage.value = `已应用建议：${suggestion.title}。请先检查草稿，再决定是否正式保存。`;
 }
@@ -173,7 +282,7 @@ async function saveProfile() {
     const savedProfile = await workspaceStore.saveProfileDraft(cloneProfile(draftProfile.value));
     draftProfile.value = cloneProfile(savedProfile);
     isEditing.value = false;
-    localSaveMessage.value = '画像已通过类型化适配层保存，结构化数据已更新。';
+    localSaveMessage.value = '画像已保存。';
   } catch {
     localSaveMessage.value = '画像保存失败。当前草稿仍保留在本地，可以继续重试。';
   }
@@ -210,7 +319,7 @@ function formatSuggestionStatus(status: typeof profileSuggestionsStatus.value) {
         <MobileRailTrigger />
         <div>
           <p class="eyebrow">轻量画像</p>
-          <h1>{{ profile?.displayName || (profile ? '我的职业画像' : '正在加载画像...') }}</h1>
+          <h1>{{ profile?.basicInfo.fullName || (profile ? '我的职业画像' : '正在加载画像...') }}</h1>
         </div>
       </div>
       <div class="header-actions">
@@ -251,12 +360,16 @@ function formatSuggestionStatus(status: typeof profileSuggestionsStatus.value) {
       <button class="secondary-button retry-button" @click="workspaceStore.initialize()">重新加载</button>
     </section>
 
-    <section v-else-if="profile && draftProfile" class="profile-layout">
-      <div class="snapshot-grid">
+    <section v-else-if="profile && draftProfile" class="profile-layout" :class="{ editing: isEditing }">
+      <div v-if="!isEditing" class="snapshot-grid">
         <ProfileSnapshotCard
           v-for="section in snapshotSections"
           :key="section.title"
           :title="section.title"
+          :eyebrow="section.eyebrow"
+          :description="section.description"
+          :write-policy-label="section.writePolicyLabel"
+          :write-policy-kind="section.writePolicyKind"
           :items="section.items"
         />
       </div>
@@ -266,9 +379,9 @@ function formatSuggestionStatus(status: typeof profileSuggestionsStatus.value) {
           <div class="editor-head">
             <div>
               <p class="eyebrow">画像编辑</p>
-              <h2>显式保存后生效</h2>
+              <h2>编辑画像</h2>
               <p class="completion-copy">
-                已填写 {{ profileCompletion.completed }} / {{ profileCompletion.total }} 项
+                必填 {{ profileCompletion.completed }} / {{ profileCompletion.total }}
               </p>
             </div>
             <span class="status-chip" :class="{ active: isEditing }">
@@ -278,42 +391,76 @@ function formatSuggestionStatus(status: typeof profileSuggestionsStatus.value) {
 
           <p v-if="localSaveMessage" class="notice-copy">{{ localSaveMessage }}</p>
 
-          <div class="form-grid">
-            <label v-for="field in scalarProfileFields" :key="field.key" class="field-block">
-              <span>{{ field.label }}</span>
-              <input
-                v-if="field.input === 'text'"
-                :value="getScalarFieldValue(field.key)"
-                :disabled="!isEditing"
-                :aria-label="field.label"
-                @input="updateScalarField(field.key, ($event.target as HTMLInputElement).value)"
-              />
-              <textarea
-                v-else
-                :value="getScalarFieldValue(field.key)"
-                :disabled="!isEditing"
-                :aria-label="field.label"
-                @input="updateScalarField(field.key, ($event.target as HTMLTextAreaElement).value)"
-              ></textarea>
-              <small>{{ field.description }}</small>
-            </label>
-          </div>
+          <div v-if="isEditing" class="form-sections">
+            <section
+              v-for="group in editorFieldGroups"
+              :key="group.key"
+              class="form-section"
+            >
+              <header class="form-section-head">
+                <div>
+                  <p class="eyebrow">{{ group.eyebrow }}</p>
+                  <h3>{{ group.title }}</h3>
+                  <p>{{ group.description }}</p>
+                </div>
+                <span class="policy-chip" :class="group.writePolicyKind">
+                  {{ group.writePolicyLabel }}
+                </span>
+              </header>
 
-          <div class="list-grid">
-            <label v-for="field in listProfileFields" :key="field.key" class="field-block">
-              <span>{{ field.label }}</span>
-              <textarea
-                :value="getListFieldValue(field.key)"
-                :disabled="!isEditing"
-                :aria-label="field.label"
-                @input="updateListField(field.key, ($event.target as HTMLTextAreaElement).value)"
-              ></textarea>
-              <small>{{ field.description }} 每行填写一项。</small>
-            </label>
+              <div class="form-grid">
+                <label
+                  v-for="field in group.fields"
+                  :key="field.key"
+                  class="field-block"
+                  :class="`requirement-${getRequirementKind(field.requiredLevel)}`"
+                >
+                  <span class="field-label" :title="getFieldHelp(field)">
+                    {{ field.label }}
+                    <span class="field-label-chips">
+                      <small
+                        class="requirement-chip"
+                        :class="getRequirementKind(field.requiredLevel)"
+                      >
+                        {{ formatRequiredLevel(field.requiredLevel) }}
+                      </small>
+                    </span>
+                  </span>
+                  <input
+                    v-if="field.valueType === 'scalar' && field.input === 'text'"
+                    :value="getScalarFieldValue(field)"
+                    :disabled="!isEditing"
+                    :aria-label="field.label"
+                    :aria-required="isRequiredProfileField(field)"
+                    :placeholder="getScalarPlaceholder(field)"
+                    @input="updateScalarField(field, ($event.target as HTMLInputElement).value)"
+                  />
+                  <textarea
+                    v-else-if="field.valueType === 'scalar'"
+                    :value="getScalarFieldValue(field)"
+                    :disabled="!isEditing"
+                    :aria-label="field.label"
+                    :aria-required="isRequiredProfileField(field)"
+                    :placeholder="getScalarPlaceholder(field)"
+                    @input="updateScalarField(field, ($event.target as HTMLTextAreaElement).value)"
+                  ></textarea>
+                  <textarea
+                    v-else
+                    :value="getListFieldValue(field)"
+                    :disabled="!isEditing"
+                    :aria-label="field.label"
+                    :aria-required="isRequiredProfileField(field)"
+                    :placeholder="getListPlaceholder(field)"
+                    @input="updateListField(field, ($event.target as HTMLTextAreaElement).value)"
+                  ></textarea>
+                  <span v-if="!hasEditorFieldValue(field)" class="field-example">例：{{ getCompactExample(field) }}</span>
+                </label>
+              </div>
+            </section>
           </div>
         </section>
 
-        <section class="suggestions-panel">
+        <section v-if="!isEditing" class="suggestions-panel">
           <div class="panel-head">
             <div>
               <p class="eyebrow">对话建议</p>
@@ -355,10 +502,19 @@ function formatSuggestionStatus(status: typeof profileSuggestionsStatus.value) {
 <style scoped>
 @import './shared-page.css';
 
+.page-heading {
+  flex: 1 1 auto;
+  width: auto;
+}
+
 .profile-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.95fr);
+  grid-template-columns: minmax(0, 0.9fr) minmax(360px, 1.1fr);
   gap: 12px;
+}
+
+.profile-layout.editing {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .snapshot-grid,
@@ -386,6 +542,7 @@ function formatSuggestionStatus(status: typeof profileSuggestionsStatus.value) {
 }
 
 .header-actions {
+  flex: 0 0 auto;
   display: grid;
   justify-items: end;
   gap: 10px;
@@ -405,6 +562,7 @@ function formatSuggestionStatus(status: typeof profileSuggestionsStatus.value) {
   font: inherit;
   font-weight: 700;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .primary-button {
@@ -484,47 +642,167 @@ function formatSuggestionStatus(status: typeof profileSuggestionsStatus.value) {
   background: color-mix(in srgb, var(--color-bg-subtle) 76%, white);
 }
 
+.form-sections,
 .form-grid,
 .list-grid {
   display: grid;
-  gap: 10px;
-  margin-top: 12px;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.form-section {
+  padding-top: 14px;
+  border-top: 1px solid var(--color-border);
+}
+
+.form-section:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.form-section-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.form-section-head h3 {
+  margin: 2px 0 3px;
+  color: var(--color-text);
+  font-size: 1rem;
+}
+
+.form-section-head p:not(.eyebrow) {
+  margin: 0;
+  color: var(--color-text-muted);
+  line-height: 1.45;
+  font-size: 0.82rem;
 }
 
 .form-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 18px;
+  row-gap: 16px;
 }
 
 .field-block {
   display: grid;
-  gap: 8px;
+  align-content: start;
+  gap: 5px;
+  min-width: 0;
 }
 
-.field-block span {
+.field-label {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
   color: var(--color-text);
-  font-size: 0.82rem;
+  font-size: 0.8rem;
   font-weight: 700;
+}
+
+.field-label-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  justify-content: flex-end;
+}
+
+.requirement-chip {
+  padding: 0.08rem 0.34rem;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 0.64rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.requirement-chip.required {
+  background: transparent;
+  color: var(--color-success);
+}
+
+.requirement-chip.recommended {
+  background: transparent;
+  color: var(--color-secondary-strong);
+}
+
+.requirement-chip.conditional {
+  background: transparent;
+  color: var(--color-warning);
+}
+
+.requirement-chip.optional {
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-muted);
+}
+
+.policy-chip {
+  align-self: flex-start;
+  padding: 0.18rem 0.48rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.policy-chip.user {
+  background: color-mix(in srgb, var(--color-primary) 12%, white);
+  color: var(--color-primary);
+}
+
+.policy-chip.agent {
+  background: color-mix(in srgb, #2563eb 12%, white);
+  color: #2563eb;
+}
+
+.policy-chip.conditional {
+  background: color-mix(in srgb, var(--color-warning) 14%, white);
+  color: var(--color-warning);
+}
+
+.policy-chip.sensitive {
+  background: color-mix(in srgb, #b42318 12%, white);
+  color: #b42318;
+}
+
+.field-example {
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.field-example {
+  color: color-mix(in srgb, var(--color-text-muted) 86%, var(--color-text));
 }
 
 .field-block input,
 .field-block textarea {
   width: 100%;
   border: 1px solid var(--color-border);
-  border-radius: 12px;
-  padding: 9px 11px;
-  background: var(--color-surface-strong);
+  border-radius: 6px;
+  padding: 7px 9px;
+  background: color-mix(in srgb, var(--color-surface) 78%, var(--color-bg-subtle));
   color: var(--color-text);
   font: inherit;
+  font-size: 0.88rem;
 }
 
 .field-block textarea {
-  min-height: 86px;
+  min-height: 58px;
   resize: vertical;
 }
 
-.field-block small {
-  color: var(--color-text-muted);
-  line-height: 1.4;
+.field-block input::placeholder,
+.field-block textarea::placeholder {
+  color: color-mix(in srgb, var(--color-text-muted) 70%, transparent);
 }
 
 .suggestions-panel {
@@ -547,7 +825,8 @@ function formatSuggestionStatus(status: typeof profileSuggestionsStatus.value) {
   }
 
   .editor-head,
-  .panel-head {
+  .panel-head,
+  .form-section-head {
     flex-direction: column;
   }
 }
