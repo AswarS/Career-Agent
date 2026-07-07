@@ -132,6 +132,8 @@ const hasProfileSummary = computed(() => (
   artifacts.value.some((artifact) => artifact.id === 'artifact-profile-summary')
 ));
 
+const primaryProfileSuggestion = computed(() => profileSuggestions.value[0] ?? null);
+
 function cloneProfile(input: ProfileRecord): ProfileRecord {
   return JSON.parse(JSON.stringify(toRaw(input))) as ProfileRecord;
 }
@@ -273,6 +275,14 @@ function applySuggestion(suggestion: ProfileSuggestion) {
   localSaveMessage.value = `已应用建议：${suggestion.title}。请先检查草稿，再决定是否正式保存。`;
 }
 
+function applyPrimarySuggestion() {
+  if (!primaryProfileSuggestion.value) {
+    return;
+  }
+
+  applySuggestion(primaryProfileSuggestion.value);
+}
+
 async function saveProfile() {
   if (!draftProfile.value || !hasUnsavedChanges.value) {
     return;
@@ -330,6 +340,14 @@ function formatSuggestionStatus(status: typeof profileSuggestionsStatus.value) {
             @click="workspaceStore.openArtifact('artifact-profile-summary')"
           >
             打开画像摘要
+          </button>
+          <button
+            v-if="!isEditing"
+            class="secondary-button"
+            :disabled="!primaryProfileSuggestion || profileSaveStatus === 'loading'"
+            @click="applyPrimarySuggestion"
+          >
+            应用ai建议
           </button>
           <button v-if="!isEditing" class="primary-button" :disabled="!profile" @click="beginEditing">
             开始编辑
@@ -489,8 +507,6 @@ function formatSuggestionStatus(status: typeof profileSuggestionsStatus.value) {
               :key="suggestion.id"
               :suggestion="suggestion"
               :source-label="resolveSourceLabel(suggestion)"
-              :disabled="profileSaveStatus === 'loading'"
-              @apply="applySuggestion"
             />
           </div>
         </section>

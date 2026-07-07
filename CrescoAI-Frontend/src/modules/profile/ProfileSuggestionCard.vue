@@ -5,11 +5,6 @@ import type { ProfileSuggestion } from '../../types/entities';
 const props = defineProps<{
   suggestion: ProfileSuggestion;
   sourceLabel?: string | null;
-  disabled?: boolean;
-}>();
-
-const emit = defineEmits<{
-  apply: [suggestion: ProfileSuggestion];
 }>();
 
 function buildPatchPreviewLines(suggestion: ProfileSuggestion) {
@@ -41,9 +36,6 @@ const previewLines = computed(() => buildPatchPreviewLines(props.suggestion));
       </div>
     </div>
 
-    <button type="button" class="secondary-button" :disabled="disabled" @click="emit('apply', suggestion)">
-      应用到草稿
-    </button>
   </article>
 </template>
 
@@ -119,23 +111,6 @@ h2 {
 .patch-item span {
   color: var(--color-text-muted);
   line-height: 1.4;
-}
-
-.secondary-button {
-  justify-self: flex-start;
-  border: 1px solid var(--color-border);
-  border-radius: 999px;
-  background: var(--color-surface);
-  color: var(--color-text);
-  padding: 0.56rem 0.76rem;
-  font: inherit;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.secondary-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 @media (max-width: 860px) {

@@ -24,6 +24,7 @@ import { AgentService } from '../agent/agent.service';
 import { SkillService } from '../skill/skill.service';
 import type { SkillHandlerResult, SkillProgressEvent } from '../skill/skill.registry';
 import { ArtifactService } from '../artifact/artifact.service';
+import { ProfileService } from '../profile/profile.service';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { SendMultimodalMessageDto } from './dto/send-multimodal-message.dto';
 import { ConversationEntity } from './entities/conversation.entity';
@@ -389,6 +390,7 @@ export class ConversationService {
     private readonly agentService: AgentService,
     private readonly skillService: SkillService,
     private readonly artifactService: ArtifactService,
+    private readonly profileService: ProfileService,
   ) {}
 
   async createConversation(dto: CreateConversationDto, requestUserId?: number) {
@@ -962,6 +964,15 @@ export class ConversationService {
       persistedAssistantResources.actions,
     );
     await this.touchConversation(conversation, dto.content);
+    await this.saveProfileSuggestionsFromAgentOutput(
+      conversation.userId,
+      conversation.id,
+      {
+        reply: agentResponse.reply,
+        reasoning: agentResponse.reasoning,
+        raw: agentResponse.raw,
+      },
+    );
 
     return {
       accepted: agentResponse.accepted,
@@ -1123,6 +1134,15 @@ export class ConversationService {
           persistedAssistantResources.actions,
         );
         await this.touchConversation(conversation, dto.content);
+        await this.saveProfileSuggestionsFromAgentOutput(
+          conversation.userId,
+          conversation.id,
+          {
+            reply: event.reply,
+            reasoning: event.reasoning,
+            raw: event.raw,
+          },
+        );
 
         yield {
           type: 'message.completed',
@@ -1443,6 +1463,30 @@ export class ConversationService {
       userMessageId: `msg_user_${prefix}_${suffix}`,
       assistantMessageId: `msg_assistant_${prefix}_${suffix}`,
     };
+  }
+
+  private async saveProfileSuggestionsFromAgentOutput(
+    userId: number,
+    sourceThreadId: string,
+    output: unknown,
+  ) {
+    try {
+      await this.profileService.saveSuggestionsFromOutput({
+        userId,
+        sourceThreadId,
+        output,
+      });
+    } catch (error: unknown) {
+      skillLogger.warn(
+        'ConversationService',
+        'Profile suggestion extraction failed',
+        {
+          userId,
+          conversationId: sourceThreadId,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      );
+    }
   }
 
   private async appendRuntimeUserMessage(

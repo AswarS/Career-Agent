@@ -5,6 +5,8 @@ import {
   Optional,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
+import { dirname, join } from 'node:path';
+import { readFile } from 'node:fs/promises';
 import {
   SkillRegistry,
   type SkillHandlerResult,
@@ -17,7 +19,9 @@ import { AgentService } from '../agent/agent.service';
 import {
   listUserSkills,
   listAllUserSkills,
+  listExternalSkills,
   readSkillFile,
+  readSkillFileByPath,
   writeSkillFile,
   deleteSkillFile,
   type ParsedSkillFile,
@@ -25,6 +29,7 @@ import {
 import { substituteArguments } from '../../../utils/argumentSubstitution.js';
 import { CAREER_AGENT_SKILL_ROUTER_GUIDANCE } from '../../prompts/careerAgentLearningPrompt.js';
 import { skillLogger } from '../../utils/skillLogger.js';
+import { ProfileService } from '../profile/profile.service';
 
 type SkillRouteCandidate = {
   name: string;
@@ -114,6 +119,44 @@ const CODE_ROUTE_KEYWORDS = [
   'analyse code',
   'review this code',
 ];
+const CAREER_PROFILE_ROUTE_KEYWORDS = [
+  '职业画像',
+  '画像',
+  '个人画像',
+  '背景梳理',
+  '自我评估',
+  '梳理我的背景',
+  '整理我的背景',
+  'profile',
+  'career profile',
+  'self assessment',
+];
+const CAREER_STAGE_ROUTE_KEYWORDS = [
+  '职业阶段',
+  '求职阶段',
+  '当前阶段',
+  '下一步行动',
+  'next best action',
+  'career stage',
+];
+const CAREER_PREFERENCE_ROUTE_KEYWORDS = [
+  '职业偏好',
+  '工作偏好',
+  '价值观',
+  '动机',
+  '取舍',
+  'preference',
+  'motivation',
+];
+const CAREER_RISK_ROUTE_KEYWORDS = [
+  '职业风险',
+  'ai 替代',
+  'ai替代',
+  '行业风险',
+  '转型风险',
+  'risk',
+  'replacement',
+];
 
 @Injectable()
 export class SkillService implements OnModuleInit {
@@ -121,6 +164,7 @@ export class SkillService implements OnModuleInit {
     public readonly registry: SkillRegistry,
     @Optional() private readonly settingsService?: SettingsService,
     @Optional() private readonly agentService?: AgentService,
+    @Optional() private readonly profileService?: ProfileService,
   ) {}
 
   async onModuleInit() {
@@ -374,7 +418,9 @@ export class SkillService implements OnModuleInit {
       userId: mergedContext.userId ?? null,
       conversationId: mergedContext.conversationId ?? null,
     };
-    const finishInvocation = (result: SkillHandlerResult): SkillHandlerResult => {
+    const finishInvocation = async (
+      result: SkillHandlerResult,
+    ): Promise<SkillHandlerResult> => {
       skillLogger.info('SkillService', 'Skill invocation completed', {
         ...invocationLogContext,
         durationMs: Date.now() - invocationStartedAt,
@@ -383,6 +429,13 @@ export class SkillService implements OnModuleInit {
         outputFileCount: result.outputFiles?.length ?? 0,
         artifactCount: result.artifacts?.length ?? 0,
       });
+      await this.saveProfileSuggestionsFromSkillResult(
+        result,
+        mergedContext.userId,
+        typeof mergedContext.conversationId === 'string'
+          ? mergedContext.conversationId
+          : null,
+      );
       return result;
     };
     skillLogger.info('SkillService', 'Skill invocation started', {
@@ -397,7 +450,7 @@ export class SkillService implements OnModuleInit {
 
     if (entry.source === 'builtin') {
       try {
-        return finishInvocation(await entry.handler(args, mergedContext));
+        return await finishInvocation(await entry.handler(args, mergedContext));
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         skillLogger.error('SkillService', 'Skill invocation threw', {
@@ -405,7 +458,7 @@ export class SkillService implements OnModuleInit {
           durationMs: Date.now() - invocationStartedAt,
           error: this.routeReasonForLog(message),
         });
-        return finishInvocation({
+        return await finishInvocation({
           success: false,
           reply: `Skill execution failed: ${message}`,
         });
@@ -416,7 +469,9 @@ export class SkillService implements OnModuleInit {
       throw new ForbiddenException({ error: 'Skill not loaded', skill: name });
     }
 
-    const custom = await readSkillFile(mergedContext.userId, name);
+    const custom = entry.filePath
+      ? await readSkillFileByPath(entry.filePath)
+      : await readSkillFile(mergedContext.userId, name);
     if (!custom) {
       this.registry.setStatus(name, 'unloaded', mergedContext.userId);
       skillLogger.warn('SkillService', 'Skill invocation rejected', {
@@ -427,7 +482,36 @@ export class SkillService implements OnModuleInit {
       throw new ForbiddenException({ error: 'Skill not loaded', skill: name });
     }
 
-    return finishInvocation(await this.invokeCustomSkill(custom, args, mergedContext));
+    return await finishInvocation(
+      await this.invokeCustomSkill(custom, args, mergedContext),
+    );
+  }
+
+  private async saveProfileSuggestionsFromSkillResult(
+    result: SkillHandlerResult,
+    userId: number | undefined,
+    sourceThreadId: string | null,
+  ) {
+    if (!userId || !this.profileService) {
+      return;
+    }
+
+    try {
+      await this.profileService.saveSuggestionsFromOutput({
+        userId,
+        sourceThreadId,
+        output: {
+          reply: result.reply,
+          metadata: result.metadata,
+        },
+      });
+    } catch (error: unknown) {
+      skillLogger.warn('SkillService', 'Profile suggestion extraction failed', {
+        userId,
+        conversationId: sourceThreadId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   private async invokeCustomSkill(
@@ -443,8 +527,9 @@ export class SkillService implements OnModuleInit {
       };
     }
 
+    const skillPrompt = await this.buildCustomSkillPrompt(skill);
     const expanded = substituteArguments(
-      skill.content,
+      skillPrompt,
       args,
       true,
       skill.argumentNames,
@@ -844,6 +929,22 @@ export class SkillService implements OnModuleInit {
       this.addCandidatesMatchingKeywords(candidates, CODE_ROUTE_KEYWORDS, matchedNames);
     }
 
+    if (this.matchesAny(normalized, CAREER_PROFILE_ROUTE_KEYWORDS)) {
+      addIfAvailable('career-profile-building');
+    }
+
+    if (this.matchesAny(normalized, CAREER_STAGE_ROUTE_KEYWORDS)) {
+      addIfAvailable('career-stage-identification');
+    }
+
+    if (this.matchesAny(normalized, CAREER_PREFERENCE_ROUTE_KEYWORDS)) {
+      addIfAvailable('career-motivation-preference-analysis');
+    }
+
+    if (this.matchesAny(normalized, CAREER_RISK_ROUTE_KEYWORDS)) {
+      addIfAvailable('career-risk-assessment');
+    }
+
     const matched = candidates.filter((candidate) => matchedNames.has(candidate.name));
     if (matched.length === 0) {
       return { kind: 'none' };
@@ -909,8 +1010,16 @@ export class SkillService implements OnModuleInit {
 
   private async syncUserSkills(userId: number): Promise<void> {
     const diskSkills = await listUserSkills(userId);
-    const diskNames = new Set(diskSkills.map((skill) => skill.name));
+    const externalSkills = await listExternalSkills();
+    const diskNames = new Set(
+      [...diskSkills, ...externalSkills].map((skill) =>
+        this.normalizeSkillName(skill.name),
+      ),
+    );
 
+    for (const skill of externalSkills) {
+      this.registerCustomSkill(userId, skill);
+    }
     for (const skill of diskSkills) {
       this.registerCustomSkill(userId, skill);
     }
@@ -955,5 +1064,48 @@ export class SkillService implements OnModuleInit {
       name: argumentName,
       description: `Argument: ${argumentName}`,
     }));
+  }
+
+  private normalizeSkillName(name: string): string {
+    return name.trim().toLowerCase().replace(/[\s_]+/g, '-');
+  }
+
+  private async buildCustomSkillPrompt(skill: ParsedSkillFile): Promise<string> {
+    const referenceContent = await this.loadProfileSkillReferenceContent(skill);
+    if (!referenceContent) {
+      return skill.content;
+    }
+
+    return [
+      skill.content,
+      referenceContent,
+      [
+        '## Runtime Profile Suggestion Requirement',
+        'When the user provides grounded career profile facts, output an API-facing `profile_suggestion` as compact JSON in the final response.',
+        '`profile_suggestion.patch` must be a DeepPartial<ProfileRecord>; do not output a full ProfileRecord and do not include unsupported fields.',
+        'Use only supported profile groups and fields from the output contract. If sourceThreadId is unknown, set it to null; the backend will attach the conversation source.',
+      ].join('\n'),
+    ].join('\n\n');
+  }
+
+  private async loadProfileSkillReferenceContent(skill: ParsedSkillFile): Promise<string> {
+    const skillDir = dirname(skill.filePath);
+    const references = [
+      ['output_contract.md', 'Output Contract'],
+      ['verifier.md', 'Verifier'],
+    ];
+    const sections: string[] = [];
+
+    for (const [fileName, title] of references) {
+      const filePath = join(skillDir, 'references', fileName);
+      try {
+        const content = await readFile(filePath, 'utf-8');
+        sections.push(`## ${title}\n\n${content}`);
+      } catch {
+        // Missing references should not block skill execution.
+      }
+    }
+
+    return sections.join('\n\n');
   }
 }

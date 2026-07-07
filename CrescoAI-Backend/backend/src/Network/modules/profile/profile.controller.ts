@@ -18,7 +18,7 @@ export class ProfileController {
   }
 
   @Get('suggestions')
-  listSuggestions() {
-    return this.profileService.listSuggestions();
+  listSuggestions(@Req() req: Request) {
+    return this.profileService.listSuggestions(req.userId!);
   }
 }

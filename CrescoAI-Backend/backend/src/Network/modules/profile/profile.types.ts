@@ -90,6 +90,22 @@ export interface ProfileRecord {
   chinaResumeSupplement: ChinaResumeSupplementResource;
 }
 
+export type DeepPartial<T> = {
+  [K in keyof T]?: T[K] extends Array<infer U>
+    ? U[]
+    : T[K] extends object
+      ? DeepPartial<T[K]>
+      : T[K];
+};
+
+export interface ProfileSuggestion {
+  id: string;
+  title: string;
+  rationale: string;
+  sourceThreadId: string | null;
+  patch: DeepPartial<ProfileRecord>;
+}
+
 type UnknownRecord = Record<string, unknown>;
 
 const scalarFieldAliases = {
@@ -299,6 +315,203 @@ function normalizeList(value: unknown) {
         .filter(Boolean),
     ),
   ];
+}
+
+const profilePatchFields = {
+  basicInfo: {
+    fullName: 'scalar',
+    displayName: 'scalar',
+    contactEmail: 'scalar',
+    phoneOrPreferredContact: 'scalar',
+    currentCity: 'scalar',
+    profileAssets: 'list',
+  },
+  careerProfile: {
+    candidateType: 'scalar',
+    currentRole: 'scalar',
+    employmentStatus: 'scalar',
+    careerStage: 'scalar',
+    educationBackground: 'scalar',
+    workExperience: 'scalar',
+    projectExperience: 'scalar',
+    skills: 'list',
+    interests: 'list',
+    strengthTags: 'list',
+    weaknessTags: 'list',
+    personalityTraits: 'list',
+  },
+  intentConstraints: {
+    targetIndustry: 'scalar',
+    targetIndustries: 'list',
+    targetRole: 'scalar',
+    targetCity: 'scalar',
+    expectedSalary: 'scalar',
+    availableTime: 'scalar',
+    jobSearchStatus: 'scalar',
+    constraints: 'list',
+    workPreferences: 'list',
+    learningPreferences: 'list',
+    careerGoal: 'scalar',
+  },
+  activityRecords: {
+    learningRecords: 'list',
+    projectRecords: 'list',
+    applicationRecords: 'list',
+    interviewRecords: 'list',
+    offerRecords: 'list',
+    workRecords: 'list',
+  },
+  artifacts: {
+    resumeSummary: 'scalar',
+    portfolioLinks: 'list',
+    projectMaterials: 'list',
+    coverLetters: 'list',
+  },
+  feedbackSignals: {
+    userFeedback: 'list',
+    interviewFeedback: 'list',
+    mentorFeedback: 'list',
+    managerFeedback: 'list',
+    systemAssessmentFeedback: 'list',
+  },
+  planState: {
+    learningPlan: 'scalar',
+    projectPlan: 'scalar',
+    applicationPlan: 'scalar',
+    interviewPlan: 'scalar',
+    onboardingPlan: 'scalar',
+    promotionPlan: 'scalar',
+  },
+  chinaResumeSupplement: {
+    jobIntentionStatement: 'scalar',
+    educationDetail: 'scalar',
+    awardsCertificatesHighlights: 'scalar',
+    conditionalFields: 'scalar',
+  },
+} as const;
+
+type ProfilePatchSection = keyof typeof profilePatchFields;
+type ProfilePatchField<S extends ProfilePatchSection> =
+  keyof (typeof profilePatchFields)[S];
+
+const sectionAliases: Record<string, ProfilePatchSection> = {
+  basicInfo: 'basicInfo',
+  basic_info: 'basicInfo',
+  careerProfile: 'careerProfile',
+  career_profile: 'careerProfile',
+  intentConstraints: 'intentConstraints',
+  intent_constraints: 'intentConstraints',
+  activityRecords: 'activityRecords',
+  activity_records: 'activityRecords',
+  artifacts: 'artifacts',
+  feedbackSignals: 'feedbackSignals',
+  feedback_signals: 'feedbackSignals',
+  planState: 'planState',
+  plan_state: 'planState',
+  chinaResumeSupplement: 'chinaResumeSupplement',
+  china_resume_supplement: 'chinaResumeSupplement',
+};
+
+const patchFieldAliases: Record<string, Record<string, string>> = {
+  careerProfile: {
+    riskSignals: 'weaknessTags',
+    risk_signals: 'weaknessTags',
+  },
+  intentConstraints: {
+    nonNegotiables: 'constraints',
+    non_negotiables: 'constraints',
+  },
+};
+
+function snakeToCamel(value: string) {
+  return value.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase());
+}
+
+function normalizePatchValue(
+  value: unknown,
+  kind: 'scalar' | 'list',
+): string | string[] | undefined {
+  if (kind === 'scalar') {
+    const text = normalizeText(value);
+    return text ? text : undefined;
+  }
+
+  const list = Array.isArray(value)
+    ? normalizeList(value)
+    : typeof value === 'string'
+      ? normalizeList([value])
+      : [];
+  return list.length ? list : undefined;
+}
+
+function resolvePatchField<S extends ProfilePatchSection>(
+  section: S,
+  rawField: string,
+): ProfilePatchField<S> | null {
+  const fields = profilePatchFields[section];
+  const alias = patchFieldAliases[section]?.[rawField];
+  const candidates = [rawField, snakeToCamel(rawField), alias].filter(
+    (candidate): candidate is string => Boolean(candidate),
+  );
+
+  for (const candidate of candidates) {
+    if (candidate in fields) {
+      return candidate as ProfilePatchField<S>;
+    }
+  }
+
+  return null;
+}
+
+export function normalizeProfilePatch(
+  input: unknown,
+): DeepPartial<ProfileRecord> {
+  if (!isRecord(input)) {
+    return {};
+  }
+
+  const patch: Record<string, Record<string, string | string[]>> = {};
+
+  for (const [rawSection, rawSectionPatch] of Object.entries(input)) {
+    const section = sectionAliases[rawSection];
+    if (!section || !isRecord(rawSectionPatch)) {
+      continue;
+    }
+
+    const fields = profilePatchFields[section];
+    const sectionPatch: Record<string, string | string[]> = {};
+
+    for (const [rawField, rawValue] of Object.entries(rawSectionPatch)) {
+      const field = resolvePatchField(section, rawField);
+      if (!field) {
+        continue;
+      }
+
+      const kind = fields[field];
+      const value = normalizePatchValue(rawValue, kind);
+      if (value !== undefined) {
+        sectionPatch[field as string] = value;
+      }
+    }
+
+    if (Object.keys(sectionPatch).length > 0) {
+      patch[section] = sectionPatch;
+    }
+  }
+
+  return patch as DeepPartial<ProfileRecord>;
+}
+
+export function hasProfilePatchFields(input: DeepPartial<ProfileRecord>) {
+  return Object.values(input).some(
+    (section) =>
+      isRecord(section) &&
+      Object.values(section).some((value) =>
+        Array.isArray(value)
+          ? value.length > 0
+          : typeof value === 'string' && value.length > 0,
+      ),
+  );
 }
 
 function readText(
