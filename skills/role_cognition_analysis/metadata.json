@@ -1,0 +1,90 @@
+{
+  "original_metadata": {
+    "skill_id": "role_cognition_analysis",
+    "name": "岗位认知分析",
+    "type": "career_exploration_and_positioning",
+    "kag_role": "skill_action",
+    "description": "解释岗位日常任务、核心能力、工具、交付物、压力、路径和误区。",
+    "inputs": [
+      "role_requirement_resource",
+      "user_profile_resource optional"
+    ],
+    "outputs": [
+      "role_explanation",
+      "daily_tasks",
+      "core_capabilities",
+      "deliverables",
+      "misunderstandings"
+    ],
+    "preconditions": [
+      "用户已提出相关职业发展请求，或上一步 action 已产生可用上下文"
+    ],
+    "postconditions": [
+      "产生可进入下一步 action 的 state_update 或 intermediate_artifact"
+    ],
+    "possible_next_skills": [
+      "target_role_positioning",
+      "role_competency_modeling",
+      "skill_gap_diagnosis"
+    ],
+    "required_context_types": [
+      "role_requirement_resource",
+      "organization_context_resource"
+    ],
+    "allowed_tools": [
+      "WebSearchTool",
+      "WebFetchTool",
+      "ReadMcpResourceTool"
+    ],
+    "recommended_verifiers": [
+      "evidence_support_check"
+    ]
+  },
+  "compiled_metadata": {
+    "skill_id": "role_cognition_analysis",
+    "claude_skill_name": "role_cognition_analysis",
+    "display_name": "岗位认知分析",
+    "type": "career_exploration_and_positioning",
+    "kag_role": "skill_action",
+    "summary": "Explains a role's real work, capabilities, tools, deliverables, pressure, path, and misconceptions.",
+    "minimum_required_inputs": [
+      "role_requirement_resource"
+    ],
+    "optional_inputs": [
+      "user_profile_resource",
+      "organization_context_resource"
+    ],
+    "required_context_types": [
+      "role_requirement_resource",
+      "organization_context_resource"
+    ],
+    "allowed_tools": [
+      "WebSearchTool",
+      "WebFetchTool",
+      "ReadMcpResourceTool"
+    ],
+    "recommended_verifiers": [
+      "evidence_support_check"
+    ],
+    "trigger_examples": [
+      "What does a product operations manager actually do?",
+      "Explain the daily work and deliverables of a data analyst.",
+      "What are common misunderstandings about UX researcher roles?"
+    ],
+    "negative_trigger_examples": [
+      "Which of these roles should I target?",
+      "What skills am I missing for this role?",
+      "Build a 6-month study plan."
+    ],
+    "handoff_conditions": {
+      "target_role_positioning": "Use when the user compares this role against other candidates.",
+      "role_competency_modeling": "Use when the user needs a structured capability model.",
+      "skill_gap_diagnosis": "Use when the user wants a gap analysis against the role."
+    },
+    "output_artifact_type": "role_cognition_report",
+    "risk_level": "medium",
+    "requires_current_information": true,
+    "requires_user_profile": false,
+    "requires_external_evidence": true
+  }
+}

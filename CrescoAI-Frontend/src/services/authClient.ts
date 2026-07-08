@@ -146,6 +146,40 @@ function createMockAuthClient(): AuthClient {
   };
 }
 
+function createSkipAuthClient(config: RuntimeConfig): AuthClient {
+  const createSession = (): AuthSession => ({
+    user: {
+      id: config.userId,
+      email: null,
+      username: 'local-dev',
+      displayName: '本地用户',
+    },
+    accessToken: null,
+    refreshToken: null,
+    tokenType: 'Bearer',
+    expiresAt: null,
+    expiresIn: null,
+  });
+
+  return {
+    async getSession() {
+      return createSession();
+    },
+    async refreshSession() {
+      return createSession();
+    },
+    async login() {
+      return createSession();
+    },
+    async register() {
+      return createSession();
+    },
+    async logout() {
+      writeStoredAuthSession(null);
+    },
+  };
+}
+
 function formatAuthError(error: unknown, fallbackMessage: string) {
   if (axios.isAxiosError(error)) {
     const responseData = error.response?.data;
@@ -254,8 +288,10 @@ function createUpstreamAuthClient(config: RuntimeConfig, httpClient?: AxiosInsta
 }
 
 export function createAuthClient(config: RuntimeConfig = runtimeConfig): AuthClient {
-  if (config.clientMode === 'upstream' && !config.skipAuth) {
-    return createUpstreamAuthClient(config);
+  if (config.clientMode === 'upstream') {
+    return config.skipAuth
+      ? createSkipAuthClient(config)
+      : createUpstreamAuthClient(config);
   }
 
   return createMockAuthClient();

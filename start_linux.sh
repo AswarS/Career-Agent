@@ -41,7 +41,12 @@ echo "[联调] 安装后端依赖..."
 (cd "$BACKEND_DIR" && bun install)
 
 echo "[联调] 启动后端：http://localhost:4000"
-(cd "$BACKEND_DIR" && exec bun run network:dev) &
+(
+  cd "$BACKEND_DIR"
+  export CAREER_AGENT_SKIP_AUTH="${CAREER_AGENT_SKIP_AUTH:-true}"
+  export CAREER_AGENT_SKIP_AUTH_USER_ID="${CAREER_AGENT_SKIP_AUTH_USER_ID:-1}"
+  exec bun run network:dev
+) &
 BACKEND_PID=$!
 
 echo "[联调] 启动前端：http://127.0.0.1:4173"
@@ -51,6 +56,7 @@ echo "[联调] 启动前端：http://127.0.0.1:4173"
   export VITE_CAREER_AGENT_API_BASE_URL=http://localhost:4000
   export VITE_CAREER_AGENT_USER_ID=1
   export VITE_CAREER_AGENT_WITH_CREDENTIALS=false
+  export VITE_CAREER_AGENT_SKIP_AUTH="${VITE_CAREER_AGENT_SKIP_AUTH:-true}"
   exec npm run dev -- --host 127.0.0.1 --port 4173
 ) &
 FRONTEND_PID=$!

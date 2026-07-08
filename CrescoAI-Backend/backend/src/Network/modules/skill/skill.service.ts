@@ -1,10 +1,10 @@
 import {
   ForbiddenException,
   Injectable,
+  NotImplementedException,
   OnModuleInit,
   Optional,
 } from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
 import {
   SkillRegistry,
   type SkillHandlerResult,
@@ -23,97 +23,14 @@ import {
   type ParsedSkillFile,
 } from './skill-file-store';
 import { substituteArguments } from '../../../utils/argumentSubstitution.js';
-import { CAREER_AGENT_SKILL_ROUTER_GUIDANCE } from '../../prompts/careerAgentLearningPrompt.js';
 import { skillLogger } from '../../utils/skillLogger.js';
+import { getBundledSkills } from '../../../skills/bundledSkills.js';
+import {
+  getGlobalDiskSkillCatalog,
+  type GlobalDiskSkillCatalogEntry,
+} from '../../../skills/bundled/careerAgent.js';
 
-type SkillRouteCandidate = {
-  name: string;
-  description: string;
-  category: string;
-  source: string;
-};
-
-type AutoSkillRouteDecision = {
-  routeId: string;
-  useSkill: boolean;
-  skillName?: string;
-  args?: string;
-  reason?: string;
-};
-
-const FAST_ROUTE_MAX_DIRECT_MATCHES = 1;
-const LEARNING_ROUTE_KEYWORDS = [
-  '学习计划',
-  '学习路线',
-  '怎么学',
-  '系统学习',
-  '从零开始',
-  '备考',
-  '面试准备',
-  '求职准备',
-  '技能提升',
-  '考试复习',
-  '课程规划',
-  '知识体系',
-  'study plan',
-  'learning plan',
-  'learning path',
-  'roadmap',
-  'interview prep',
-  'exam prep',
-  'curriculum',
-];
-const INTERACTIVE_ROUTE_KEYWORDS = [
-  '互动',
-  '可视化',
-  '模拟',
-  '动画',
-  '小游戏',
-  '图解',
-  '交互练习',
-  '仪表盘',
-  '算法演示',
-  '数据结构',
-  '流程',
-  '时间线',
-  'interactive',
-  'visualize',
-  'visualise',
-  'simulation',
-  'simulator',
-  'animation',
-  'game',
-  'dashboard',
-  'diagram',
-  'timeline',
-];
-const IMAGE_ROUTE_KEYWORDS = [
-  '生成图片',
-  '画一张',
-  '做一张图',
-  '图片生成',
-  'image generation',
-  'generate image',
-  'draw an image',
-  'create an image',
-];
-const VIDEO_ROUTE_KEYWORDS = [
-  '生成视频',
-  '视频生成',
-  '做一个视频',
-  'generate video',
-  'video generation',
-  'create a video',
-];
-const CODE_ROUTE_KEYWORDS = [
-  '代码分析',
-  '分析代码',
-  '代码审查',
-  'code analysis',
-  'analyze code',
-  'analyse code',
-  'review this code',
-];
+export const USER_DEFINED_SKILLS_ENABLED = false;
 
 @Injectable()
 export class SkillService implements OnModuleInit {
@@ -127,10 +44,13 @@ export class SkillService implements OnModuleInit {
     registerBuiltinSkills((entry) => {
       this.registry.register(entry);
     });
-    await this.loadCustomSkillsFromDisk();
+    if (USER_DEFINED_SKILLS_ENABLED) {
+      await this.loadCustomSkillsFromDisk();
+    }
+    const loadedSkills = await this.listSkills();
     console.log(
       '[SkillService] Skills loaded:',
-      this.registry.getAll().map((s) => s.name).join(', '),
+      loadedSkills.map((skill) => skill.name).join(', '),
     );
   }
 
@@ -138,15 +58,17 @@ export class SkillService implements OnModuleInit {
     userId?: number,
     category?: string,
   ): Promise<Array<Record<string, unknown>>> {
-    if (userId) {
+    if (USER_DEFINED_SKILLS_ENABLED && userId) {
       await this.syncUserSkills(userId);
     }
 
-    const loadedSkills = category
-      ? this.registry.getByCategory(category as SkillEntry['category'], userId)
-      : this.registry.getAll(userId);
+    const registryUserId = USER_DEFINED_SKILLS_ENABLED ? userId : undefined;
 
-    return loadedSkills.map((entry) => ({
+    const loadedSkills = category
+      ? this.registry.getByCategory(category as SkillEntry['category'], registryUserId)
+      : this.registry.getAll(registryUserId);
+
+    const result = loadedSkills.map((entry) => ({
       name: entry.name,
       description: entry.description,
       category: entry.category,
@@ -159,19 +81,31 @@ export class SkillService implements OnModuleInit {
       source: entry.source,
       arguments: entry.argumentNames ?? [],
     }));
+
+    const registeredNames = new Set(result.map((entry) => entry.name));
+    const globalDiskSkills = getGlobalDiskSkillCatalog()
+      .filter((entry) => !category || entry.category === category)
+      .filter((entry) => !registeredNames.has(entry.name))
+      .map((entry) => this.globalDiskSkillListItem(entry));
+
+    return [...result, ...globalDiskSkills];
   }
 
   async getSkillDetail(
     name: string,
     userId?: number,
   ): Promise<Record<string, unknown> | null> {
-    if (userId) {
+    if (USER_DEFINED_SKILLS_ENABLED && userId) {
       await this.syncUserSkills(userId);
     }
 
-    const entry = this.registry.get(name, userId);
+    const entry = this.registry.get(
+      name,
+      USER_DEFINED_SKILLS_ENABLED ? userId : undefined,
+    );
     if (!entry) {
-      return null;
+      const globalSkill = this.findGlobalDiskSkillEntry(name);
+      return globalSkill ? this.globalDiskSkillListItem(globalSkill) : null;
     }
 
     return {
@@ -197,6 +131,13 @@ export class SkillService implements OnModuleInit {
     category: string = 'utility',
     argNames?: string,
   ): Promise<{ name: string; filePath: string }> {
+    if (!USER_DEFINED_SKILLS_ENABLED) {
+      throw new NotImplementedException({
+        error: 'USER_DEFINED_SKILLS_DISABLED',
+        message: 'User-defined skills are not supported yet.',
+      });
+    }
+
     const normalizedName = name.trim().toLowerCase().replace(/[\s_]+/g, '-');
 
     if (this.registry.get(normalizedName)) {
@@ -236,6 +177,13 @@ export class SkillService implements OnModuleInit {
       argNames?: string;
     },
   ): Promise<boolean> {
+    if (!USER_DEFINED_SKILLS_ENABLED) {
+      throw new NotImplementedException({
+        error: 'USER_DEFINED_SKILLS_DISABLED',
+        message: 'User-defined skills are not supported yet.',
+      });
+    }
+
     const existing = await readSkillFile(userId, name);
     if (!existing) return false;
 
@@ -257,6 +205,13 @@ export class SkillService implements OnModuleInit {
   }
 
   async deleteCustomSkill(userId: number, name: string): Promise<boolean> {
+    if (!USER_DEFINED_SKILLS_ENABLED) {
+      throw new NotImplementedException({
+        error: 'USER_DEFINED_SKILLS_DISABLED',
+        message: 'User-defined skills are not supported yet.',
+      });
+    }
+
     const deleted = await deleteSkillFile(userId, name);
     if (deleted) {
       this.registry.unregisterCustom(userId, name);
@@ -284,6 +239,50 @@ export class SkillService implements OnModuleInit {
     return context;
   }
 
+  async invokeSkillThroughCc(
+    name: string,
+    args: string,
+    context: SkillExecutionContext,
+  ): Promise<SkillHandlerResult> {
+    if (!this.agentService) {
+      return {
+        success: false,
+        reply: 'Skill execution is unavailable because AgentService is missing.',
+      };
+    }
+
+    const resolvedName = this.resolveCcSkillName(name, context.userId);
+    if (!resolvedName) {
+      throw new ForbiddenException({
+        error: 'Skill not loaded',
+        skill: name,
+      });
+    }
+
+    const executionContext = await this.buildExecutionContext(
+      context.userId,
+      context.conversationId,
+    );
+    const prompt = `/${resolvedName}${args.trim() ? ` ${args.trim()}` : ''}`;
+    const result = await this.agentService.runIsolatedPrompt({
+      userId: String(context.userId ?? 1),
+      conversationId: context.conversationId,
+      apiKey: executionContext.llmConfig?.apiKey,
+      baseUrl: executionContext.llmConfig?.baseUrl,
+      model: executionContext.llmConfig?.model,
+      content: prompt,
+      abortSignal: context.abortSignal,
+      onProgress: context.onProgress,
+    });
+
+    return {
+      success: result.success,
+      reply: result.reply ?? 'Skill execution failed: empty CC result.',
+      outputFiles: result.generatedFiles,
+      metadata: result.model ? { model: result.model } : undefined,
+    };
+  }
+
   async invokeSkill(
     name: string,
     args: string,
@@ -291,10 +290,7 @@ export class SkillService implements OnModuleInit {
   ): Promise<SkillHandlerResult> {
     const invocationStartedAt = Date.now();
     const mergedContext: SkillExecutionContext = { ...(context ?? {}) };
-    const autoSkillRouteId = typeof mergedContext.autoSkillRouteId === 'string'
-      ? mergedContext.autoSkillRouteId
-      : null;
-    if (mergedContext.userId) {
+    if (USER_DEFINED_SKILLS_ENABLED && mergedContext.userId) {
       await this.syncUserSkills(mergedContext.userId);
     }
     if (!mergedContext.llmConfig && mergedContext.userId && this.settingsService) {
@@ -342,7 +338,6 @@ export class SkillService implements OnModuleInit {
     const entry = this.registry.get(name, mergedContext.userId);
     if (!entry) {
       skillLogger.warn('SkillService', 'Skill invocation rejected', {
-        autoSkillRouteId,
         name,
         userId: mergedContext.userId ?? null,
         conversationId: mergedContext.conversationId ?? null,
@@ -352,12 +347,11 @@ export class SkillService implements OnModuleInit {
     }
 
     console.log(
-      `[SkillService] invokeSkill source=${entry.source} name=${name} userId=${mergedContext.userId ?? 'unknown'} conversationId=${mergedContext.conversationId ?? 'unknown'} autoSkillRouteId=${autoSkillRouteId ?? 'none'}`,
+      `[SkillService] invokeSkill source=${entry.source} name=${name} userId=${mergedContext.userId ?? 'unknown'} conversationId=${mergedContext.conversationId ?? 'unknown'}`,
     );
 
     if (entry.status !== 'loaded') {
       skillLogger.warn('SkillService', 'Skill invocation rejected', {
-        autoSkillRouteId,
         source: entry.source,
         name,
         userId: mergedContext.userId ?? null,
@@ -368,7 +362,6 @@ export class SkillService implements OnModuleInit {
     }
 
     const invocationLogContext = {
-      autoSkillRouteId,
       source: entry.source,
       name,
       userId: mergedContext.userId ?? null,
@@ -403,7 +396,7 @@ export class SkillService implements OnModuleInit {
         skillLogger.error('SkillService', 'Skill invocation threw', {
           ...invocationLogContext,
           durationMs: Date.now() - invocationStartedAt,
-          error: this.routeReasonForLog(message),
+          error: this.sanitizeLogMessage(message),
         });
         return finishInvocation({
           success: false,
@@ -492,10 +485,10 @@ export class SkillService implements OnModuleInit {
   }
 
   async skillExists(name: string, userId?: number): Promise<boolean> {
-    if (userId) {
+    if (USER_DEFINED_SKILLS_ENABLED && userId) {
       await this.syncUserSkills(userId);
     }
-    return this.registry.has(name, userId);
+    return this.resolveCcSkillName(name, userId) !== null;
   }
 
   parseSkillInvocation(
@@ -522,269 +515,54 @@ export class SkillService implements OnModuleInit {
     const parsed = this.parseSkillInvocation(content);
     if (!parsed) return false;
     if (parsed.skillName === 'skills') return true;
-    if (userId) {
+    if (USER_DEFINED_SKILLS_ENABLED && userId) {
       await this.syncUserSkills(userId);
     }
-    return this.registry.has(parsed.skillName, userId);
+    return this.resolveCcSkillName(parsed.skillName, userId) !== null;
   }
 
-  async autoSelectSkill(
-    content: string,
-    userId: number,
-    conversationId?: string,
-  ): Promise<AutoSkillRouteDecision> {
-    const routeId = randomUUID();
-    const startedAt = Date.now();
-    const logContext = {
-      routeId,
-      userId,
-      conversationId: conversationId ?? null,
+  private resolveCcSkillName(name: string, userId?: number): string | null {
+    const requestedName = name.trim().toLowerCase();
+    if (!requestedName) return null;
+
+    const legacyHyphenName = requestedName.replace(/[\s_]+/g, '-');
+    const underscoreName = requestedName.replace(/[\s-]+/g, '_');
+    const bundledSkills = getBundledSkills();
+    const bundled =
+      bundledSkills.find((skill) => skill.name === requestedName) ??
+      bundledSkills.find((skill) => skill.name === legacyHyphenName) ??
+      bundledSkills.find((skill) => skill.name === underscoreName);
+    if (bundled) return bundled.name;
+
+    const registryUserId = USER_DEFINED_SKILLS_ENABLED ? userId : undefined;
+    const registryEntry =
+      this.registry.get(requestedName, registryUserId) ??
+      this.registry.get(legacyHyphenName, registryUserId);
+    return registryEntry?.name ?? null;
+  }
+
+  private findGlobalDiskSkillEntry(
+    name: string,
+  ): GlobalDiskSkillCatalogEntry | undefined {
+    const requestedName = name.trim().toLowerCase();
+    const underscoreName = requestedName.replace(/-/g, '_');
+    return getGlobalDiskSkillCatalog().find(
+      (entry) =>
+        entry.name === requestedName || entry.name === underscoreName,
+    );
+  }
+
+  private globalDiskSkillListItem(entry: GlobalDiskSkillCatalogEntry) {
+    return {
+      name: entry.name,
+      description: entry.description,
+      category: entry.category,
+      parameters: this.argumentNamesToParameters(entry.argumentNames),
+      requiresLlm: true,
+      status: 'loaded' as const,
+      source: 'bundled',
+      arguments: entry.argumentNames,
     };
-    const finish = (
-      decision: Omit<AutoSkillRouteDecision, 'routeId'>,
-      stage: 'precheck' | 'local' | 'llm',
-      details: Record<string, unknown> = {},
-    ): AutoSkillRouteDecision => {
-      skillLogger.info('AutoSkillRouter', 'Route completed', {
-        ...logContext,
-        stage,
-        durationMs: Date.now() - startedAt,
-        useSkill: decision.useSkill,
-        skillName: decision.skillName ?? null,
-        reason: this.routeReasonForLog(decision.reason),
-        argsLength: decision.args?.length ?? 0,
-        ...details,
-      });
-      return { routeId, ...decision };
-    };
-
-    skillLogger.info('AutoSkillRouter', 'Route started', {
-      ...logContext,
-      contentLength: content.length,
-      trimmedContentLength: content.trim().length,
-    });
-
-    if (!this.agentService) {
-      return finish(
-        { useSkill: false, reason: 'agent_service_unavailable' },
-        'precheck',
-      );
-    }
-
-    const skills = await this.listSkills(userId);
-    const candidates: SkillRouteCandidate[] = skills
-      .filter((s) => typeof s.name === 'string' && s.name !== 'skills')
-      .map((s) => ({
-        name: String(s.name),
-        description: String(s.description ?? ''),
-        category: String(s.category ?? 'utility'),
-        source: String(s.source ?? 'unknown'),
-      }));
-
-    skillLogger.info('AutoSkillRouter', 'Candidate snapshot created', {
-      ...logContext,
-      candidateCount: candidates.length,
-      candidates: candidates.map(({ name, category, source }) => ({
-        name,
-        category,
-        source,
-      })),
-    });
-
-    if (!candidates.length) {
-      return finish({ useSkill: false, reason: 'no_skills' }, 'precheck');
-    }
-
-    const fastRoute = this.tryFastRouteSkill(content, candidates);
-    const fastRouteCandidates = fastRoute.kind === 'direct'
-      ? [fastRoute.skillName]
-      : fastRoute.kind === 'ambiguous'
-        ? fastRoute.candidates.map((candidate) => candidate.name)
-        : [];
-    skillLogger.info('AutoSkillRouter', 'Local route evaluated', {
-      ...logContext,
-      result: fastRoute.kind,
-      reason: 'reason' in fastRoute ? fastRoute.reason : 'no_keyword_match',
-      matchedSkills: fastRouteCandidates,
-    });
-    if (fastRoute.kind === 'skip') {
-      return finish({ useSkill: false, reason: fastRoute.reason }, 'local');
-    }
-    const routerCandidates =
-      fastRoute.kind === 'ambiguous' && fastRoute.candidates.length > 0
-        ? fastRoute.candidates
-        : candidates;
-
-    let llmConfig: SkillExecutionContext['llmConfig'] | undefined;
-    if (this.settingsService) {
-      const saved = await this.settingsService.getApiSettings(userId);
-      if (saved) {
-        llmConfig = {
-          apiKey: saved.apiKey ?? undefined,
-          baseUrl: saved.baseUrl ?? undefined,
-          model: saved.model ?? undefined,
-        };
-      }
-    }
-    skillLogger.info('AutoSkillRouter', 'LLM configuration evaluated', {
-      ...logContext,
-      hasApiKey: Boolean(llmConfig?.apiKey),
-      hasBaseUrl: Boolean(llmConfig?.baseUrl),
-      hasModel: Boolean(llmConfig?.model),
-    });
-    if (!llmConfig?.apiKey || !llmConfig?.baseUrl) {
-      return finish({ useSkill: false, reason: 'llm_not_configured' }, 'precheck');
-    }
-
-    if (fastRoute.kind === 'direct') {
-      return finish(
-        {
-          useSkill: true,
-          skillName: fastRoute.skillName,
-          args: content,
-          reason: fastRoute.reason,
-        },
-        'local',
-      );
-    }
-
-    const routerPrompt =
-      'You are a strict skill router for CareerAgent.\n' +
-      'Given user message and available skills, decide whether to call one skill.\n\n' +
-      `${CAREER_AGENT_SKILL_ROUTER_GUIDANCE}\n\n` +
-      'Rules:\n' +
-      '1) Return ONLY compact JSON.\n' +
-      '2) If no skill is beneficial, set useSkill=false.\n' +
-      '3) If useSkill=true, skillName must exactly match one available name.\n' +
-      '4) args should be concise, preserving the user intent and language.\n' +
-      '5) For simple learning queries, prefer using a suitable skill over answering only in text.\n\n' +
-      'Examples:\n' +
-      'User: "帮我规划三个月 Java 后端学习路线" -> {"useSkill":true,"skillName":"learning-plan","args":"帮我规划三个月 Java 后端学习路线","reason":"structured learning plan request"}\n' +
-      'User: "用互动方式教我理解递归" -> {"useSkill":true,"skillName":"develop-web-game","args":"用互动方式教我理解递归","reason":"interactive visual learning request"}\n' +
-      'User: "你好" -> {"useSkill":false,"skillName":"","args":"","reason":"greeting"}\n\n' +
-      `Available skills JSON:\n${JSON.stringify(routerCandidates)}\n\n` +
-      `User message:\n${content}\n\n` +
-      'Output schema:\n{"useSkill":boolean,"skillName":"string","args":"string","reason":"string"}';
-
-    const llmStartedAt = Date.now();
-    skillLogger.info('AutoSkillRouter', 'LLM route started', {
-      ...logContext,
-      requestMode: 'non_streaming',
-      candidateCount: routerCandidates.length,
-      candidateNames: routerCandidates.map((candidate) => candidate.name),
-      promptLength: routerPrompt.length,
-      model: llmConfig.model ?? null,
-    });
-    let route: Awaited<ReturnType<AgentService['runIsolatedNonStreamingPrompt']>>;
-    try {
-      route = await this.agentService.runIsolatedNonStreamingPrompt({
-        userId: String(userId),
-        apiKey: llmConfig.apiKey,
-        baseUrl: llmConfig.baseUrl,
-        model: llmConfig.model,
-        content: routerPrompt,
-      });
-    } catch (error: unknown) {
-      const llmDurationMs = Date.now() - llmStartedAt;
-      skillLogger.error('AutoSkillRouter', 'LLM route threw', {
-        ...logContext,
-        durationMs: llmDurationMs,
-        errorType: error instanceof Error ? error.name : typeof error,
-      });
-      finish(
-        { useSkill: false, reason: 'router_exception' },
-        'llm',
-        { llmDurationMs, parseStatus: 'not_attempted' },
-      );
-      throw error;
-    }
-    const llmDurationMs = Date.now() - llmStartedAt;
-    skillLogger.info('AutoSkillRouter', 'LLM route completed', {
-      ...logContext,
-      requestMode: 'non_streaming',
-      durationMs: llmDurationMs,
-      success: route.success,
-      replyLength: route.reply?.length ?? 0,
-      model: route.model ?? llmConfig.model ?? null,
-    });
-    skillLogger.info('AutoSkillRouter', 'LLM raw response', {
-      ...logContext,
-      requestMode: 'non_streaming',
-      rawReply: route.reply ?? null,
-    });
-
-    if (!route.success || !route.reply) {
-      return finish(
-        { useSkill: false, reason: 'router_failed' },
-        'llm',
-        { llmDurationMs, parseStatus: 'not_attempted' },
-      );
-    }
-
-    try {
-      const matched = route.reply.match(/\{[\s\S]*\}/);
-      if (!matched) {
-        return finish(
-          { useSkill: false, reason: 'router_no_json' },
-          'llm',
-          { llmDurationMs, parseStatus: 'no_json' },
-        );
-      }
-      const parsed = JSON.parse(matched[0]) as {
-        useSkill?: boolean;
-        skillName?: string;
-        args?: string;
-        reason?: string;
-      };
-      skillLogger.info('AutoSkillRouter', 'LLM decision parsed', {
-        ...logContext,
-        useSkill: Boolean(parsed.useSkill),
-        skillName: parsed.skillName ?? null,
-        reason: this.routeReasonForLog(parsed.reason),
-        argsLength: parsed.args?.length ?? 0,
-      });
-      if (!parsed.useSkill || !parsed.skillName) {
-        return finish(
-          { useSkill: false, reason: parsed.reason ?? 'router_declined' },
-          'llm',
-          { llmDurationMs, parseStatus: 'parsed' },
-        );
-      }
-      const exists = await this.skillExists(parsed.skillName, userId);
-      skillLogger.info('AutoSkillRouter', 'LLM skill validated', {
-        ...logContext,
-        skillName: parsed.skillName,
-        exists,
-      });
-      if (!exists) {
-        return finish(
-          { useSkill: false, reason: 'router_skill_not_found' },
-          'llm',
-          { llmDurationMs, parseStatus: 'parsed' },
-        );
-      }
-      return finish(
-        {
-          useSkill: true,
-          skillName: parsed.skillName,
-          args: parsed.args ?? content,
-          reason: parsed.reason ?? 'router_selected',
-        },
-        'llm',
-        { llmDurationMs, parseStatus: 'parsed' },
-      );
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      skillLogger.warn('AutoSkillRouter', 'LLM decision parse failed', {
-        ...logContext,
-        error: this.routeReasonForLog(message),
-      });
-      return finish(
-        { useSkill: false, reason: 'router_parse_failed' },
-        'llm',
-        { llmDurationMs, parseStatus: 'invalid_json' },
-      );
-    }
   }
 
   private async loadCustomSkillsFromDisk(): Promise<void> {
@@ -792,119 +570,6 @@ export class SkillService implements OnModuleInit {
     for (const { userId, skill } of allSkills) {
       this.registerCustomSkill(userId, skill);
     }
-  }
-
-  private tryFastRouteSkill(
-    content: string,
-    candidates: SkillRouteCandidate[],
-  ):
-    | { kind: 'direct'; skillName: string; reason: string }
-    | { kind: 'ambiguous'; candidates: SkillRouteCandidate[]; reason: string }
-    | { kind: 'skip'; reason: string }
-    | { kind: 'none' } {
-    const normalized = content.trim().toLowerCase();
-    if (!normalized) {
-      return { kind: 'skip', reason: 'empty_message' };
-    }
-
-    if (this.isClearlyNonSkillMessage(normalized)) {
-      return { kind: 'skip', reason: 'local_non_skill_message' };
-    }
-
-    const candidateNames = new Set(candidates.map((candidate) => candidate.name));
-    const matchedNames = new Set<string>();
-    const addIfAvailable = (skillName: string) => {
-      if (candidateNames.has(skillName)) {
-        matchedNames.add(skillName);
-      }
-    };
-
-    if (this.matchesAny(normalized, LEARNING_ROUTE_KEYWORDS)) {
-      addIfAvailable('learning-plan');
-      this.addCandidatesMatchingKeywords(candidates, LEARNING_ROUTE_KEYWORDS, matchedNames);
-    }
-
-    if (this.matchesAny(normalized, INTERACTIVE_ROUTE_KEYWORDS)) {
-      addIfAvailable('develop-web-game');
-      this.addCandidatesMatchingKeywords(candidates, INTERACTIVE_ROUTE_KEYWORDS, matchedNames);
-    }
-
-    if (this.matchesAny(normalized, IMAGE_ROUTE_KEYWORDS)) {
-      addIfAvailable('image-generation');
-      this.addCandidatesMatchingKeywords(candidates, IMAGE_ROUTE_KEYWORDS, matchedNames);
-    }
-
-    if (this.matchesAny(normalized, VIDEO_ROUTE_KEYWORDS)) {
-      addIfAvailable('video-generation');
-      this.addCandidatesMatchingKeywords(candidates, VIDEO_ROUTE_KEYWORDS, matchedNames);
-    }
-
-    if (this.matchesAny(normalized, CODE_ROUTE_KEYWORDS)) {
-      addIfAvailable('code-analysis');
-      this.addCandidatesMatchingKeywords(candidates, CODE_ROUTE_KEYWORDS, matchedNames);
-    }
-
-    const matched = candidates.filter((candidate) => matchedNames.has(candidate.name));
-    if (matched.length === 0) {
-      return { kind: 'none' };
-    }
-
-    if (matched.length <= FAST_ROUTE_MAX_DIRECT_MATCHES) {
-      return {
-        kind: 'direct',
-        skillName: matched[0]!.name,
-        reason: 'local_fast_route',
-      };
-    }
-
-    return {
-      kind: 'ambiguous',
-      candidates: matched,
-      reason: 'local_fast_route_ambiguous',
-    };
-  }
-
-  private isClearlyNonSkillMessage(normalized: string): boolean {
-    const compact = normalized.replace(/[!！.。?？,，\s]/g, '');
-    return new Set([
-      '你好',
-      '您好',
-      'hello',
-      'hi',
-      'hey',
-      '谢谢',
-      'thanks',
-      'thankyou',
-    ]).has(compact);
-  }
-
-  private addCandidatesMatchingKeywords(
-    candidates: SkillRouteCandidate[],
-    keywords: string[],
-    matchedNames: Set<string>,
-  ): void {
-    for (const candidate of candidates) {
-      if (this.matchesAny(this.candidateSearchText(candidate), keywords)) {
-        matchedNames.add(candidate.name);
-      }
-    }
-  }
-
-  private candidateSearchText(candidate: SkillRouteCandidate): string {
-    return [
-      candidate.name,
-      candidate.description,
-      candidate.category,
-    ].join(' ').toLowerCase();
-  }
-
-  private matchesAny(value: string, needles: string[]): boolean {
-    return needles.some((needle) => value.includes(needle.toLowerCase()));
-  }
-
-  private routeReasonForLog(reason?: string): string | null {
-    if (!reason) return null;
-    return reason.replace(/\s+/g, ' ').trim().slice(0, 300);
   }
 
   private async syncUserSkills(userId: number): Promise<void> {
@@ -920,6 +585,11 @@ export class SkillService implements OnModuleInit {
         this.registry.unregisterCustom(userId, entry.name);
       }
     }
+  }
+
+  private sanitizeLogMessage(message?: string): string | null {
+    if (!message) return null;
+    return message.replace(/\s+/g, ' ').trim().slice(0, 300);
   }
 
   private registerCustomSkill(userId: number, skill: ParsedSkillFile): void {

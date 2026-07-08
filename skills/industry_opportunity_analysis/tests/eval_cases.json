@@ -1,0 +1,98 @@
+{
+  "skill_id": "industry_opportunity_analysis",
+  "positive_cases": [
+    {
+      "id": "pos_001",
+      "user_query": "Analyze AI healthcare trends, opportunities, and entry roles.",
+      "available_context": {
+        "market_trend_resource": "Recent market notes"
+      },
+      "expected_behavior": "Produce trend summary, opportunities, risks, roles, and entry suggestions.",
+      "must_include": ["trend_summary", "opportunities", "risks"],
+      "must_not_include": ["guaranteed growth"]
+    },
+    {
+      "id": "pos_002",
+      "user_query": "Is climate tech a good direction for someone with operations experience?",
+      "available_context": {
+        "user_profile_resource": "Operations experience"
+      },
+      "expected_behavior": "Analyze industry opportunity and include profile-fit notes.",
+      "must_include": ["recommended_roles", "entry_suggestions"],
+      "must_not_include": ["unsupported personal guarantee"]
+    },
+    {
+      "id": "pos_003",
+      "user_query": "What are the risks and opportunities in fintech careers now?",
+      "available_context": {},
+      "expected_behavior": "Ask for geography/scope or provide a first pass with assumptions and evidence caveats.",
+      "must_include": ["assumptions", "risks"],
+      "must_not_include": ["timeless market claims"]
+    }
+  ],
+  "negative_cases": [
+    {
+      "id": "neg_001",
+      "user_query": "Choose my primary role from data analyst and PM.",
+      "reason_should_not_trigger": "The user needs target role positioning.",
+      "better_skill": "target_role_positioning"
+    },
+    {
+      "id": "neg_002",
+      "user_query": "Explain what a data analyst does.",
+      "reason_should_not_trigger": "The user asks for role cognition.",
+      "better_skill": "role_cognition_analysis"
+    }
+  ],
+  "ambiguous_cases": [
+    {
+      "id": "amb_001",
+      "user_query": "Is AI a good career?",
+      "expected_behavior": "Clarify industry scope, role type, geography, and personal-fit need.",
+      "clarifying_question_if_needed": "Which AI area and geography should be analyzed, and do you want personal fit included?"
+    },
+    {
+      "id": "amb_002",
+      "user_query": "What should I apply for in fintech?",
+      "expected_behavior": "Clarify whether the user wants opportunity analysis or application strategy.",
+      "clarifying_question_if_needed": "Do you want a market opportunity analysis first, or an application strategy for already chosen fintech roles?"
+    }
+  ],
+  "handoff_cases": [
+    {
+      "id": "handoff_001",
+      "user_query": "Now choose which of these recommended roles I should target.",
+      "expected_current_skill_output": "Recommended roles and risks exist.",
+      "expected_next_skill": "target_role_positioning",
+      "handoff_condition": "User asks to choose target roles."
+    },
+    {
+      "id": "handoff_002",
+      "user_query": "Assess whether this move is too risky for me.",
+      "expected_current_skill_output": "Industry risks are identified.",
+      "expected_next_skill": "career_risk_assessment",
+      "handoff_condition": "User asks for deeper personal risk assessment."
+    },
+    {
+      "id": "handoff_003",
+      "user_query": "Help me apply to roles in this industry.",
+      "expected_current_skill_output": "Entry roles and suggestions exist.",
+      "expected_next_skill": "application_strategy_planning",
+      "handoff_condition": "User asks for application execution strategy."
+    }
+  ],
+  "regression_cases": [
+    {
+      "id": "reg_001",
+      "risk": "Hype-driven advice",
+      "user_query": "Is AI education a hot opportunity?",
+      "must_not_regress": "Do not recommend entry based only on hype; include risks and evidence caveats."
+    },
+    {
+      "id": "reg_002",
+      "risk": "Simplistic entry shortcut",
+      "user_query": "How do I enter fintech quickly?",
+      "must_not_regress": "Do not imply a single course or certificate is enough without validation and evidence."
+    }
+  ]
+}

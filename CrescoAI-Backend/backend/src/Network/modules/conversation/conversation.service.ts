@@ -233,11 +233,9 @@ type SkillStreamRoute =
   | { kind: 'list' }
   | {
       kind: 'invoke';
-      source: 'skill' | 'skill:auto';
+      source: 'skill';
       skillName: string;
       args: string;
-      routerReason?: string;
-      autoSkillRouteId?: string;
     };
 
 interface StreamMessageIds {
@@ -577,61 +575,6 @@ export class ConversationService {
       attachments = await this.resolveImplicitAttachments(conversation, dto.content);
     }
 
-    const createSkillCommand = this.parseCreateSkillCommand(dto.content);
-    if (createSkillCommand) {
-      const created = await this.skillService.createCustomSkill(
-        conversation.userId,
-        createSkillCommand.name,
-        createSkillCommand.description,
-        createSkillCommand.content,
-        createSkillCommand.category,
-        createSkillCommand.arguments,
-      );
-
-      const reply =
-        `Skill \`/${created.name}\` created successfully.\n\n` +
-        `You can now invoke it with \`/${created.name}\`.`;
-
-      const userMessageId = `msg_user_skill_${randomUUID().replace(/-/g, '')}`;
-      const assistantMessageId = `msg_assistant_skill_${randomUUID().replace(/-/g, '')}`;
-      const now = new Date();
-      const sessionFilePath = await this.findOrCreateRuntimeSessionFile(
-        conversation.id,
-        conversation.userId,
-      );
-
-      await appendFile(
-        sessionFilePath,
-        `${JSON.stringify({ type: 'user', message: { id: userMessageId, role: 'user', content: dto.content }, uuid: randomUUID(), timestamp: now.toISOString(), sessionId: conversation.id })}\n`,
-        'utf8',
-      );
-      await appendFile(
-        sessionFilePath,
-        `${JSON.stringify({ type: 'assistant', message: { id: assistantMessageId, role: 'assistant', content: this.createAssistantContentBlocks(reply) }, uuid: randomUUID(), timestamp: new Date(now.getTime() + 100).toISOString(), sessionId: conversation.id })}\n`,
-        'utf8',
-      );
-      await this.linkUploadedResourcesToMessage(
-        conversation.userId,
-        conversation.id,
-        userMessageId,
-        attachments,
-      );
-      await this.touchConversation(conversation, dto.content);
-
-      return {
-        accepted: true,
-        status: 'done',
-        conversation_id: conversation.id,
-        conversationId: conversation.id,
-        message_id: userMessageId,
-        messageId: userMessageId,
-        assistant_message_id: assistantMessageId,
-        assistantMessageId: assistantMessageId,
-        reply,
-        raw: { source: 'skill:create', skillName: created.name },
-      };
-    }
-
     const skillInvocation = this.skillService.parseSkillInvocation(dto.content);
     if (skillInvocation && skillInvocation.skillName === 'skills') {
       const skills = await this.skillService.listSkills(conversation.userId);
@@ -700,212 +643,6 @@ export class ConversationService {
         assistantMessageId: assistantMessageId,
         reply,
         raw: { source: 'skill-list', skillCount: skills.length },
-      };
-    }
-
-    if (skillInvocation && await this.skillService.skillExists(skillInvocation.skillName, conversation.userId)) {
-      const skillContext = await this.skillService.buildExecutionContext(
-        conversation.userId,
-        conversation.id,
-      );
-      const skillResult = await this.skillService.invokeSkill(
-        skillInvocation.skillName,
-        skillInvocation.args,
-        { ...dto.context, ...skillContext },
-      );
-
-      const userMessageId = `msg_user_skill_${randomUUID()}`;
-      const assistantMessageId = `msg_assistant_skill_${randomUUID()}`;
-      const now = new Date();
-      const userEventUuid = randomUUID();
-      const replyEventUuid = randomUUID();
-      const sessionFilePath = await this.findOrCreateRuntimeSessionFile(conversation.id, conversation.userId);
-
-      await appendFile(
-        sessionFilePath,
-        `${JSON.stringify({ type: 'user', message: { id: userMessageId, role: 'user', content: dto.content }, uuid: userEventUuid, timestamp: now.toISOString(), sessionId: conversation.id })}\n`,
-        'utf8',
-      );
-
-      // For skill results with output files (e.g. games), show a concise description
-      // and tuck the full AI reply into a collapsible "thinking" block.
-      const hasOutputFiles = Boolean(skillResult.outputFiles?.length);
-      const visibleReply = sanitizeServerPhysicalPaths(hasOutputFiles
-        ? (skillResult.outputFiles![0].title ?? '应用已生成，请点击「打开应用」查看。')
-        : skillResult.reply);
-      const thinkingContent = hasOutputFiles
-        ? sanitizeServerPhysicalPaths(skillResult.reply)
-        : undefined;
-
-      const assistantContentBlocks = this.createAssistantContentBlocks(
-        visibleReply,
-        thinkingContent,
-      );
-
-      await appendFile(
-        sessionFilePath,
-        `${JSON.stringify({ type: 'assistant', message: { id: assistantMessageId, role: 'assistant', content: assistantContentBlocks }, uuid: replyEventUuid, timestamp: new Date(now.getTime() + 500).toISOString(), sessionId: conversation.id })}\n`,
-        'utf8',
-      );
-
-      let responseMedia: MessageMedia[] = [];
-      let responseActions: MessageAction[] = [];
-      if (skillResult.outputFiles?.length) {
-        skillLogger.info('ConversationService', 'Skill outputFiles:', skillResult.outputFiles);
-        const media = this.skillOutputFilesToMedia(skillResult.outputFiles, conversation.userId);
-        skillLogger.info('ConversationService', 'Mapped media:', media.map(m => ({ id: m.id, kind: m.kind, url: m.url })));
-        const persisted = await this.persistAssistantGeneratedResources(
-          conversation.userId,
-          conversation.id,
-          assistantMessageId,
-          media,
-        );
-        responseMedia = persisted.media;
-        responseActions = persisted.actions;
-        await this.replaceMessageResourceMappings(conversation.userId, conversation.id, assistantMessageId, persisted.media);
-        await this.mergeAssistantMessageActions(sessionFilePath, assistantMessageId, persisted.actions);
-      } else {
-        skillLogger.warn('ConversationService', 'No outputFiles returned from skill');
-      }
-
-      await this.linkUploadedResourcesToMessage(
-        conversation.userId,
-        conversation.id,
-        userMessageId,
-        attachments,
-      );
-      await this.touchConversation(conversation, dto.content);
-
-      return {
-        accepted: true,
-        status: 'done',
-        conversation_id: conversation.id,
-        conversationId: conversation.id,
-        message_id: userMessageId,
-        messageId: userMessageId,
-        assistant_message_id: assistantMessageId,
-        assistantMessageId: assistantMessageId,
-        reply: visibleReply,
-        reasoning: thinkingContent,
-        think: thinkingContent,
-        media: responseMedia,
-        actions: responseActions,
-        raw: sanitizeServerPhysicalPathsInValue({
-          source: 'skill',
-          skillName: skillInvocation.skillName,
-          ...skillResult.metadata,
-        }),
-      };
-    }
-
-    // Auto skill routing: user does not need to type `/skill`.
-    // Let model decide whether a suitable skill should be used.
-    const autoRoute = await this.skillService.autoSelectSkill(
-      dto.content,
-      conversation.userId,
-      conversation.id,
-    );
-    console.log(
-      `[ConversationService] autoSkill routeId=${autoRoute.routeId} useSkill=${autoRoute.useSkill} skillName=${autoRoute.skillName ?? 'none'} reason=${autoRoute.reason ?? 'n/a'} userId=${conversation.userId} conversationId=${conversation.id}`,
-    );
-    if (autoRoute.useSkill && autoRoute.skillName) {
-      const skillContext = await this.skillService.buildExecutionContext(
-        conversation.userId,
-        conversation.id,
-      );
-      const skillResult = await this.skillService.invokeSkill(
-        autoRoute.skillName,
-        autoRoute.args ?? dto.content,
-        {
-          ...dto.context,
-          ...skillContext,
-          autoSkillRouteId: autoRoute.routeId,
-        },
-      );
-
-      const userMessageId = `msg_user_skill_${randomUUID()}`;
-      const assistantMessageId = `msg_assistant_skill_${randomUUID()}`;
-      const now = new Date();
-      const userEventUuid = randomUUID();
-      const replyEventUuid = randomUUID();
-      const sessionFilePath = await this.findOrCreateRuntimeSessionFile(conversation.id, conversation.userId);
-
-      await appendFile(
-        sessionFilePath,
-        `${JSON.stringify({ type: 'user', message: { id: userMessageId, role: 'user', content: dto.content }, uuid: userEventUuid, timestamp: now.toISOString(), sessionId: conversation.id })}\n`,
-        'utf8',
-      );
-
-      // For skill results with output files (e.g. games), show a concise description
-      // and tuck the full AI reply into a collapsible "thinking" block.
-      const hasOutputFiles = Boolean(skillResult.outputFiles?.length);
-      const visibleReply = sanitizeServerPhysicalPaths(hasOutputFiles
-        ? (skillResult.outputFiles![0].title ?? '应用已生成，请点击「打开应用」查看。')
-        : skillResult.reply);
-      const thinkingContent = hasOutputFiles
-        ? sanitizeServerPhysicalPaths(skillResult.reply)
-        : undefined;
-
-      const assistantContentBlocks = this.createAssistantContentBlocks(
-        visibleReply,
-        thinkingContent,
-      );
-
-      await appendFile(
-        sessionFilePath,
-        `${JSON.stringify({ type: 'assistant', message: { id: assistantMessageId, role: 'assistant', content: assistantContentBlocks }, uuid: replyEventUuid, timestamp: new Date(now.getTime() + 500).toISOString(), sessionId: conversation.id })}\n`,
-        'utf8',
-      );
-
-      let responseMedia: MessageMedia[] = [];
-      let responseActions: MessageAction[] = [];
-      if (skillResult.outputFiles?.length) {
-        skillLogger.info('ConversationService', 'Skill outputFiles:', skillResult.outputFiles);
-        const media = this.skillOutputFilesToMedia(skillResult.outputFiles, conversation.userId);
-        skillLogger.info('ConversationService', 'Mapped media:', media.map(m => ({ id: m.id, kind: m.kind, url: m.url })));
-        const persisted = await this.persistAssistantGeneratedResources(
-          conversation.userId,
-          conversation.id,
-          assistantMessageId,
-          media,
-        );
-        responseMedia = persisted.media;
-        responseActions = persisted.actions;
-        await this.replaceMessageResourceMappings(conversation.userId, conversation.id, assistantMessageId, persisted.media);
-        await this.mergeAssistantMessageActions(sessionFilePath, assistantMessageId, persisted.actions);
-
-      } else {
-        skillLogger.warn('ConversationService', 'No outputFiles returned from skill');
-      }
-
-      await this.linkUploadedResourcesToMessage(
-        conversation.userId,
-        conversation.id,
-        userMessageId,
-        attachments,
-      );
-      await this.touchConversation(conversation, dto.content);
-
-      return {
-        accepted: true,
-        status: 'done',
-        conversation_id: conversation.id,
-        conversationId: conversation.id,
-        message_id: userMessageId,
-        messageId: userMessageId,
-        assistant_message_id: assistantMessageId,
-        assistantMessageId: assistantMessageId,
-        reply: visibleReply,
-        reasoning: thinkingContent,
-        think: thinkingContent,
-        media: responseMedia,
-        actions: responseActions,
-        raw: sanitizeServerPhysicalPathsInValue({
-          source: 'skill:auto',
-          skillName: autoRoute.skillName,
-          routerReason: autoRoute.reason,
-          ...skillResult.metadata,
-        }),
       };
     }
 
@@ -1149,48 +886,13 @@ export class ConversationService {
     }
   }
 
-  private async resolveSkillStreamRoute(
-    conversation: ConversationEntity,
+  private resolveSkillStreamRoute(
+    _conversation: ConversationEntity,
     dto: SendMultimodalMessageDto,
-  ): Promise<SkillStreamRoute | null> {
-    const createSkillCommand = this.parseCreateSkillCommand(dto.content);
-    if (createSkillCommand) {
-      return { kind: 'create', command: createSkillCommand };
-    }
-
+  ): SkillStreamRoute | null {
     const skillInvocation = this.skillService.parseSkillInvocation(dto.content);
-    if (skillInvocation) {
-      if (skillInvocation.skillName === 'skills') {
-        return { kind: 'list' };
-      }
-      if (await this.skillService.skillExists(skillInvocation.skillName, conversation.userId)) {
-        return {
-          kind: 'invoke',
-          source: 'skill',
-          skillName: skillInvocation.skillName,
-          args: skillInvocation.args,
-        };
-      }
-    }
-
-    const autoRoute = await this.skillService.autoSelectSkill(
-      dto.content,
-      conversation.userId,
-      conversation.id,
-    );
-    console.log(
-      `[ConversationService] autoSkill routeId=${autoRoute.routeId} useSkill=${autoRoute.useSkill} skillName=${autoRoute.skillName ?? 'none'} reason=${autoRoute.reason ?? 'n/a'} userId=${conversation.userId} conversationId=${conversation.id}`,
-    );
-
-    if (autoRoute.useSkill && autoRoute.skillName) {
-      return {
-        kind: 'invoke',
-        source: 'skill:auto',
-        skillName: autoRoute.skillName,
-        args: autoRoute.args ?? dto.content,
-        routerReason: autoRoute.reason,
-        autoSkillRouteId: autoRoute.routeId,
-      };
+    if (skillInvocation?.skillName === 'skills') {
+      return { kind: 'list' };
     }
 
     return null;
@@ -1312,7 +1014,7 @@ export class ConversationService {
     route: Extract<SkillStreamRoute, { kind: 'invoke' }>,
     abortSignal?: AbortSignal,
   ): AsyncGenerator<ConversationStreamEvent> {
-    const ids = this.createStreamMessageIds(route.source === 'skill:auto' ? 'skill_auto' : 'skill');
+    const ids = this.createStreamMessageIds('skill');
     const now = new Date();
     const sessionFilePath = await this.findOrCreateRuntimeSessionFile(conversation.id, conversation.userId);
     const routeTrace = this.formatSkillRouteTrace(route);
@@ -1337,9 +1039,6 @@ export class ConversationService {
       {
         ...dto.context,
         ...skillContext,
-        ...(route.autoSkillRouteId
-          ? { autoSkillRouteId: route.autoSkillRouteId }
-          : {}),
         abortSignal,
         onProgress: (event: SkillProgressEvent) => progressQueue.push(event),
       },
@@ -1431,7 +1130,6 @@ export class ConversationService {
       raw: {
         source: route.source,
         skillName: route.skillName,
-        ...(route.source === 'skill:auto' ? { routerReason: route.routerReason } : {}),
         ...skillResult.metadata,
       },
     });
@@ -1579,11 +1277,6 @@ export class ConversationService {
   }
 
   private formatSkillRouteTrace(route: Extract<SkillStreamRoute, { kind: 'invoke' }>) {
-    if (route.source === 'skill:auto') {
-      const reason = route.routerReason ? ` Router reason: ${route.routerReason}.` : '';
-      return `Auto skill selected: /${route.skillName}.${reason}`;
-    }
-
     return `Skill command selected: /${route.skillName}.`;
   }
 

@@ -23,6 +23,13 @@ export class AuthGuard implements CanActivate {
       return true;
     }
 
+    if (this.isAuthDisabled()) {
+      const userId = this.getSkipAuthUserId();
+      request.user = { id: String(userId) };
+      request.userId = userId;
+      return true;
+    }
+
     const token = this.getBearerToken(request.headers.authorization);
     if (!token) {
       const downloadUser = this.getDownloadTokenUser(request);
@@ -57,6 +64,16 @@ export class AuthGuard implements CanActivate {
     }
 
     return token;
+  }
+
+  private isAuthDisabled() {
+    const value = process.env.CAREER_AGENT_SKIP_AUTH?.trim().toLowerCase();
+    return value === '1' || value === 'true' || value === 'yes' || value === 'on';
+  }
+
+  private getSkipAuthUserId() {
+    const userId = Number(process.env.CAREER_AGENT_SKIP_AUTH_USER_ID ?? 1);
+    return Number.isInteger(userId) && userId > 0 ? userId : 1;
   }
 
   private getDownloadTokenUser(request: AuthenticatedRequest) {

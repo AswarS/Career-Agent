@@ -1,0 +1,92 @@
+{
+  "original_metadata": {
+    "skill_id": "career_path_simulation",
+    "name": "职业路径模拟",
+    "type": "career_exploration_and_positioning",
+    "kag_role": "skill_action",
+    "description": "比较不同方向 1/3/5 年发展、收入、成长、风险和机会成本。",
+    "inputs": [
+      "user_profile_resource",
+      "candidate_roles",
+      "market_trend_resource",
+      "user_intent_constraint_resource"
+    ],
+    "outputs": [
+      "path_comparison",
+      "one_year_outlook",
+      "three_year_outlook",
+      "five_year_outlook",
+      "recommended_path"
+    ],
+    "preconditions": [
+      "用户已提出相关职业发展请求，或上一步 action 已产生可用上下文"
+    ],
+    "postconditions": [
+      "产生可进入下一步 action 的 state_update 或 intermediate_artifact"
+    ],
+    "possible_next_skills": [
+      "target_role_positioning",
+      "learning_path_planning"
+    ],
+    "required_context_types": [
+      "user_profile_resource",
+      "market_trend_resource",
+      "user_intent_constraint_resource"
+    ],
+    "allowed_tools": [
+      "WebSearchTool",
+      "REPLTool"
+    ],
+    "recommended_verifiers": [
+      "evidence_support_check",
+      "constraint_satisfaction_check"
+    ]
+  },
+  "compiled_metadata": {
+    "skill_id": "career_path_simulation",
+    "claude_skill_name": "career_path_simulation",
+    "display_name": "职业路径模拟",
+    "type": "career_exploration_and_positioning",
+    "kag_role": "skill_action",
+    "summary": "Compares candidate paths across 1, 3, and 5 years using fit, market, income, growth, risk, and opportunity cost.",
+    "minimum_required_inputs": [
+      "user_profile_resource",
+      "candidate_roles",
+      "market_trend_resource",
+      "user_intent_constraint_resource"
+    ],
+    "optional_inputs": [],
+    "required_context_types": [
+      "user_profile_resource",
+      "market_trend_resource",
+      "user_intent_constraint_resource"
+    ],
+    "allowed_tools": [
+      "WebSearchTool",
+      "REPLTool"
+    ],
+    "recommended_verifiers": [
+      "evidence_support_check",
+      "constraint_satisfaction_check"
+    ],
+    "trigger_examples": [
+      "Compare data analyst and PM over the next 1, 3, and 5 years.",
+      "Which path has better growth, risk, and opportunity cost?",
+      "Simulate career outcomes for these candidate roles."
+    ],
+    "negative_trigger_examples": [
+      "I do not know which directions to explore.",
+      "Explain what a product manager does.",
+      "Create a learning plan for data analyst."
+    ],
+    "handoff_conditions": {
+      "target_role_positioning": "Use when the simulation suggests role prioritization is needed.",
+      "learning_path_planning": "Use when a recommended path is chosen and the user needs a learning plan."
+    },
+    "output_artifact_type": "career_path_simulation",
+    "risk_level": "medium",
+    "requires_current_information": true,
+    "requires_user_profile": true,
+    "requires_external_evidence": true
+  }
+}

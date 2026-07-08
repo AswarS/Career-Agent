@@ -10,14 +10,21 @@ import 'reflect-metadata';
 // When thinking is enabled, the ISP beta works correctly with an explicit thinkingConfig.
 process.env.DISABLE_INTERLEAVED_THINKING = '1';
 
+// Temporary local-development default: keep the API usable while authentication
+// integration is being stabilized. Set CAREER_AGENT_SKIP_AUTH=false to restore JWT checks.
+process.env.CAREER_AGENT_SKIP_AUTH ??= 'true';
+process.env.CAREER_AGENT_SKIP_AUTH_USER_ID ??= '1';
+
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { enableConfigs } from '../utils/config.js';
 import { ensureBootstrapMacro } from '../bootstrapMacro.js';
+import { initBundledSkills } from '../skills/bundled/index.js';
 
 enableConfigs();
 ensureBootstrapMacro();
+initBundledSkills();
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -36,6 +43,11 @@ async function bootstrap() {
 
   await app.listen(process.env.PORT ?? 4000);
   console.log(`Server started on http://localhost:${process.env.PORT ?? 4000}`);
+  if (process.env.CAREER_AGENT_SKIP_AUTH === 'true') {
+    console.warn(
+      `WARNING: authentication is disabled; requests run as user ${process.env.CAREER_AGENT_SKIP_AUTH_USER_ID}.`,
+    );
+  }
 }
 
 bootstrap().catch((err) => {
