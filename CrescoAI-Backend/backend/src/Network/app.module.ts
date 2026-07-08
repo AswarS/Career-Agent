@@ -24,6 +24,7 @@ import { GeneratedModule } from './modules/generated/generated.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ProfileModule } from './modules/profile/profile.module';
+import { ProfileSuggestionEntity } from './modules/profile/entities/profile-suggestion.entity';
 
 const networkDir = dirname(fileURLToPath(import.meta.url));
 
@@ -43,6 +44,7 @@ const networkDir = dirname(fileURLToPath(import.meta.url));
         ApiSettingsEntity,
         ResourceEntity,
         GeneratedAppEntity,
+        ProfileSuggestionEntity,
       ],
       synchronize: true,
     }),

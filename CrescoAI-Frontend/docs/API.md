@@ -173,27 +173,85 @@
 
 ### 4.5 ProfileRecord
 
-字段（建议完整提供）：
+ProfileRecord 使用 `career_profile_v1` 分组结构。基础信息主要由用户维护；画像、目标、活动、制品、反馈和计划字段可由对话或 skill 产出建议后进入草稿。
 
-- display_name
-- locale
-- timezone
-- current_role
-- employment_status
-- experience_summary
-- education_summary
-- location_region
-- target_role
-- target_industries
-- short_term_goal
-- long_term_goal
-- weekly_time_budget
-- constraints
-- work_preferences
-- learning_preferences
-- key_strengths
-- risk_signals
-- portfolio_links
+```json
+{
+  "schemaVersion": "career_profile_v1",
+  "basicInfo": {
+    "fullName": "王一然",
+    "displayName": "Yiran",
+    "contactEmail": "yiran.wang@example.com",
+    "phoneOrPreferredContact": "138****2468 / WeChat",
+    "currentCity": "天津",
+    "profileAssets": []
+  },
+  "careerProfile": {
+    "candidateType": "应届毕业生",
+    "currentRole": "2026 届市场营销本科生",
+    "employmentStatus": "校招求职中",
+    "careerStage": "求职转化期",
+    "educationBackground": "市场营销本科，2026 届",
+    "workExperience": "校园公众号运营、活动策划和社群协助经历",
+    "projectExperience": "公众号 3 个月涨粉 2000",
+    "skills": ["内容选题", "公众号运营"],
+    "interests": ["互联网内容", "教育科技"],
+    "strengthTags": ["内容表达"],
+    "weaknessTags": ["数据分析深度不足"],
+    "personalityTraits": []
+  },
+  "intentConstraints": {
+    "targetIndustry": "互联网 / 教育科技",
+    "targetIndustries": ["互联网", "教育科技"],
+    "targetRole": "新媒体运营",
+    "targetCity": "北京",
+    "expectedSalary": "8k-12k / 月",
+    "availableTime": "每周 10 小时",
+    "jobSearchStatus": "投递中",
+    "constraints": ["暂不接受强销售压力岗位"],
+    "workPreferences": ["偏稳定团队", "希望有明确反馈"],
+    "learningPreferences": ["案例拆解", "短周期项目练习"],
+    "careerGoal": "3 个月内拿到运营 offer"
+  },
+  "activityRecords": {
+    "learningRecords": [],
+    "projectRecords": [],
+    "applicationRecords": [],
+    "interviewRecords": [],
+    "offerRecords": [],
+    "workRecords": []
+  },
+  "artifacts": {
+    "resumeSummary": "",
+    "portfolioLinks": [],
+    "projectMaterials": [],
+    "coverLetters": []
+  },
+  "feedbackSignals": {
+    "userFeedback": [],
+    "interviewFeedback": [],
+    "mentorFeedback": [],
+    "managerFeedback": [],
+    "systemAssessmentFeedback": []
+  },
+  "planState": {
+    "learningPlan": "",
+    "projectPlan": "",
+    "applicationPlan": "",
+    "interviewPlan": "",
+    "onboardingPlan": "",
+    "promotionPlan": ""
+  },
+  "chinaResumeSupplement": {
+    "jobIntentionStatement": "求职意向：新媒体运营，目标城市北京",
+    "educationDetail": "2022.09-2026.06，某大学，市场营销，本科",
+    "awardsCertificatesHighlights": "",
+    "conditionalFields": ""
+  }
+}
+```
+
+兼容说明：`PUT /api/career-agent/profile` 仍兼容旧版扁平字段，例如 `full_name`、`target_role`、`core_skills`、`portfolio_links`，后端会归一化到 v1 分组结构。
 
 ### 4.6 ProfileSuggestion
 
@@ -204,7 +262,9 @@
   "rationale": "建议目标更聚焦",
   "source_thread_id": "thread-001",
   "patch": {
-    "target_role": "AI 原生前端工程师"
+    "intentConstraints": {
+      "targetRole": "新媒体运营"
+    }
   }
 }
 ```

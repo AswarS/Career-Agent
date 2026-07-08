@@ -1,5 +1,5 @@
-import { join } from 'node:path';
-import { readFile, writeFile, mkdir, readdir, rm } from 'node:fs/promises';
+import { isAbsolute, join, resolve } from 'node:path';
+import { access, readFile, writeFile, mkdir, readdir, rm } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { parseFrontmatter } from '../../../utils/frontmatterParser.js';
 import {
@@ -10,6 +10,7 @@ import { parseArgumentNames } from '../../../utils/argumentSubstitution.js';
 
 const networkRootDir = fileURLToPath(new URL('../../', import.meta.url));
 const userDataRootDir = join(networkRootDir, 'user');
+const externalSkillDirsEnv = 'CAREER_AGENT_EXTERNAL_SKILL_DIRS';
 
 export interface ParsedSkillFile {
   name: string;
@@ -93,6 +94,64 @@ export async function readSkillFile(
 ): Promise<ParsedSkillFile | null> {
   const path = skillFilePath(userId, name);
   return parseSkillFile(path);
+}
+
+export async function readSkillFileByPath(
+  filePath: string,
+): Promise<ParsedSkillFile | null> {
+  return parseSkillFile(filePath);
+}
+
+export async function listExternalSkillDirs(): Promise<string[]> {
+  const configured = process.env[externalSkillDirsEnv];
+  if (!configured) {
+    return [];
+  }
+
+  const dirs: string[] = [];
+  for (const rawDir of configured.split(':')) {
+    const trimmed = rawDir.trim();
+    if (!trimmed) continue;
+
+    const dir = isAbsolute(trimmed)
+      ? trimmed
+      : resolve(process.cwd(), trimmed);
+    try {
+      await access(dir);
+      dirs.push(dir);
+    } catch {
+      // Skip missing or inaccessible external skill directories.
+    }
+  }
+
+  return Array.from(new Set(dirs));
+}
+
+export async function listExternalSkills(): Promise<ParsedSkillFile[]> {
+  const roots = await listExternalSkillDirs();
+  const results: ParsedSkillFile[] = [];
+
+  for (const root of roots) {
+    let entries;
+    try {
+      entries = await readdir(root, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+
+    for (const entry of entries) {
+      if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
+      const path = join(root, entry.name, 'SKILL.md');
+      try {
+        const parsed = await parseSkillFile(path);
+        if (parsed) results.push(parsed);
+      } catch {
+        // skip malformed external skills
+      }
+    }
+  }
+
+  return results;
 }
 
 async function parseSkillFile(filePath: string): Promise<ParsedSkillFile | null> {

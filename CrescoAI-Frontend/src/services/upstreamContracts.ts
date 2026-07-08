@@ -9,6 +9,7 @@ import type {
   MessageMediaKind,
   MessageFileAttachment,
   MessageKind,
+  DeepPartial,
   ProfileRecord,
   ProfileSuggestion,
   ThreadMessage,
@@ -165,7 +166,7 @@ export interface UpstreamProfileSuggestion {
   rationale: string;
   source_thread_id?: string | null;
   sourceThreadId?: string | null;
-  patch: Partial<ProfileRecord>;
+  patch: DeepPartial<ProfileRecord> | Record<string, unknown>;
 }
 
 export interface UpstreamArtifactRecord {
@@ -559,6 +560,11 @@ function readProfileValue(source: UnknownRecord, ...aliases: string[]) {
   return undefined;
 }
 
+function readProfileObject(source: UnknownRecord, ...aliases: string[]): UnknownRecord {
+  const value = readProfileValue(source, ...aliases);
+  return isUnknownRecord(value) ? value : {};
+}
+
 function normalizeProfileText(value: unknown, fallback = '') {
   return typeof value === 'string' ? value.trim() : fallback;
 }
@@ -574,30 +580,188 @@ function normalizeProfileList(value: unknown) {
     .filter(Boolean))];
 }
 
+function readProfileText(
+  nested: UnknownRecord,
+  root: UnknownRecord,
+  aliases: string[],
+  fallback = '',
+) {
+  return normalizeProfileText(
+    readProfileValue(nested, ...aliases) ?? readProfileValue(root, ...aliases),
+    fallback,
+  );
+}
+
+function readProfileListFrom(
+  nested: UnknownRecord,
+  root: UnknownRecord,
+  aliases: string[],
+) {
+  return normalizeProfileList(
+    readProfileValue(nested, ...aliases) ?? readProfileValue(root, ...aliases),
+  );
+}
+
 /** Accept the canonical camelCase API shape plus legacy snake_case and sample `{ profile }` envelopes. */
 export function sanitizeProfileRecord(input: unknown): ProfileRecord {
   const source = unwrapProfilePayload(input);
+  const basicInfo = readProfileObject(source, 'basicInfo', 'basic_info');
+  const careerProfile = readProfileObject(source, 'careerProfile', 'career_profile');
+  const intentConstraints = readProfileObject(source, 'intentConstraints', 'intent_constraints');
+  const activityRecords = readProfileObject(source, 'activityRecords', 'activity_records');
+  const artifacts = readProfileObject(source, 'artifacts');
+  const feedbackSignals = readProfileObject(source, 'feedbackSignals', 'feedback_signals');
+  const planState = readProfileObject(source, 'planState', 'plan_state');
+  const chinaResumeSupplement = readProfileObject(
+    source,
+    'chinaResumeSupplement',
+    'china_resume_supplement',
+  );
+  const fullName = readProfileText(
+    basicInfo,
+    source,
+    ['fullName', 'full_name', 'displayName', 'display_name'],
+  );
+  const displayName = readProfileText(
+    basicInfo,
+    source,
+    ['displayName', 'display_name', 'fullName', 'full_name'],
+    fullName,
+  );
+  const targetIndustries = readProfileListFrom(
+    intentConstraints,
+    source,
+    ['targetIndustries', 'target_industries'],
+  );
 
   return {
-    displayName: normalizeProfileText(readProfileValue(source, 'displayName', 'display_name')),
-    locale: normalizeProfileText(readProfileValue(source, 'locale'), 'zh-CN'),
-    timezone: normalizeProfileText(readProfileValue(source, 'timezone'), 'Asia/Shanghai'),
-    currentRole: normalizeProfileText(readProfileValue(source, 'currentRole', 'current_role')),
-    employmentStatus: normalizeProfileText(readProfileValue(source, 'employmentStatus', 'employment_status')),
-    experienceSummary: normalizeProfileText(readProfileValue(source, 'experienceSummary', 'experience_summary')),
-    educationSummary: normalizeProfileText(readProfileValue(source, 'educationSummary', 'education_summary')),
-    locationRegion: normalizeProfileText(readProfileValue(source, 'locationRegion', 'location_region')),
-    targetRole: normalizeProfileText(readProfileValue(source, 'targetRole', 'target_role')),
-    targetIndustries: normalizeProfileList(readProfileValue(source, 'targetIndustries', 'target_industries')),
-    shortTermGoal: normalizeProfileText(readProfileValue(source, 'shortTermGoal', 'short_term_goal')),
-    longTermGoal: normalizeProfileText(readProfileValue(source, 'longTermGoal', 'long_term_goal')),
-    weeklyTimeBudget: normalizeProfileText(readProfileValue(source, 'weeklyTimeBudget', 'weekly_time_budget')),
-    constraints: normalizeProfileList(readProfileValue(source, 'constraints')),
-    workPreferences: normalizeProfileList(readProfileValue(source, 'workPreferences', 'work_preferences')),
-    learningPreferences: normalizeProfileList(readProfileValue(source, 'learningPreferences', 'learning_preferences')),
-    keyStrengths: normalizeProfileList(readProfileValue(source, 'keyStrengths', 'key_strengths')),
-    riskSignals: normalizeProfileList(readProfileValue(source, 'riskSignals', 'risk_signals')),
-    portfolioLinks: normalizeProfileList(readProfileValue(source, 'portfolioLinks', 'portfolio_links')),
+    schemaVersion: 'career_profile_v1',
+    basicInfo: {
+      fullName,
+      displayName,
+      contactEmail: readProfileText(basicInfo, source, ['contactEmail', 'contact_email']),
+      phoneOrPreferredContact: readProfileText(
+        basicInfo,
+        source,
+        ['phoneOrPreferredContact', 'phone_or_preferred_contact', 'preferredContact', 'preferred_contact'],
+      ),
+      currentCity: readProfileText(
+        basicInfo,
+        source,
+        ['currentCity', 'current_city', 'currentCityOrTimezone', 'current_city_or_timezone', 'timezone', 'locationRegion', 'location_region', 'target_city'],
+      ),
+      profileAssets: readProfileListFrom(basicInfo, source, ['profileAssets', 'profile_assets']),
+    },
+    careerProfile: {
+      candidateType: readProfileText(careerProfile, source, ['candidateType', 'candidate_type']),
+      currentRole: readProfileText(careerProfile, source, ['currentRole', 'current_role']),
+      employmentStatus: readProfileText(careerProfile, source, ['employmentStatus', 'employment_status']),
+      careerStage: readProfileText(careerProfile, source, ['careerStage', 'career_stage']),
+      educationBackground: readProfileText(
+        careerProfile,
+        source,
+        ['educationBackground', 'education_background', 'educationAndTraining', 'education_and_training', 'educationSummary', 'education_summary'],
+      ),
+      workExperience: readProfileText(
+        careerProfile,
+        source,
+        ['workExperience', 'work_experience', 'workExperienceSummary', 'work_experience_summary', 'experienceSummary', 'experience_summary'],
+      ),
+      projectExperience: readProfileText(
+        careerProfile,
+        source,
+        ['projectExperience', 'project_experience', 'projectOrPracticeExperienceSummary', 'project_or_practice_experience_summary'],
+      ),
+      skills: readProfileListFrom(careerProfile, source, ['skills', 'coreSkills', 'core_skills', 'keyStrengths', 'key_strengths']),
+      interests: readProfileListFrom(careerProfile, source, ['interests', 'interestTags', 'interest_tags']),
+      strengthTags: readProfileListFrom(careerProfile, source, ['strengthTags', 'strength_tags']),
+      weaknessTags: readProfileListFrom(careerProfile, source, ['weaknessTags', 'weakness_tags', 'riskSignals', 'risk_signals']),
+      personalityTraits: readProfileListFrom(careerProfile, source, ['personalityTraits', 'personality_traits']),
+    },
+    intentConstraints: {
+      targetIndustry: readProfileText(intentConstraints, source, ['targetIndustry', 'target_industry'], targetIndustries[0] ?? ''),
+      targetIndustries,
+      targetRole: readProfileText(intentConstraints, source, ['targetRole', 'target_role']),
+      targetCity: readProfileText(
+        intentConstraints,
+        source,
+        ['targetCity', 'target_city', 'targetCityOrWorkLocation', 'target_city_or_work_location'],
+      ),
+      expectedSalary: readProfileText(
+        intentConstraints,
+        source,
+        ['expectedSalary', 'expected_salary', 'compensationExpectation', 'compensation_expectation'],
+      ),
+      availableTime: readProfileText(
+        intentConstraints,
+        source,
+        ['availableTime', 'available_time', 'availabilityAndTimeline', 'availability_and_timeline', 'weeklyTimeBudget', 'weekly_time_budget'],
+      ),
+      jobSearchStatus: readProfileText(intentConstraints, source, ['jobSearchStatus', 'job_search_status']),
+      constraints: readProfileListFrom(intentConstraints, source, ['constraints']),
+      workPreferences: readProfileListFrom(intentConstraints, source, ['workPreferences', 'work_preferences']),
+      learningPreferences: readProfileListFrom(intentConstraints, source, ['learningPreferences', 'learning_preferences']),
+      careerGoal: readProfileText(
+        intentConstraints,
+        source,
+        ['careerGoal', 'career_goal', 'longTermGoal', 'long_term_goal', 'shortTermGoal', 'short_term_goal'],
+      ),
+    },
+    activityRecords: {
+      learningRecords: readProfileListFrom(activityRecords, source, ['learningRecords', 'learning_records']),
+      projectRecords: readProfileListFrom(activityRecords, source, ['projectRecords', 'project_records']),
+      applicationRecords: readProfileListFrom(activityRecords, source, ['applicationRecords', 'application_records']),
+      interviewRecords: readProfileListFrom(activityRecords, source, ['interviewRecords', 'interview_records']),
+      offerRecords: readProfileListFrom(activityRecords, source, ['offerRecords', 'offer_records']),
+      workRecords: readProfileListFrom(activityRecords, source, ['workRecords', 'work_records']),
+    },
+    artifacts: {
+      resumeSummary: readProfileText(artifacts, source, ['resumeSummary', 'resume_summary']),
+      portfolioLinks: readProfileListFrom(artifacts, source, ['portfolioLinks', 'portfolio_links']),
+      projectMaterials: readProfileListFrom(artifacts, source, ['projectMaterials', 'project_materials']),
+      coverLetters: readProfileListFrom(artifacts, source, ['coverLetters', 'cover_letters']),
+    },
+    feedbackSignals: {
+      userFeedback: readProfileListFrom(feedbackSignals, source, ['userFeedback', 'user_feedback']),
+      interviewFeedback: readProfileListFrom(feedbackSignals, source, ['interviewFeedback', 'interview_feedback']),
+      mentorFeedback: readProfileListFrom(feedbackSignals, source, ['mentorFeedback', 'mentor_feedback']),
+      managerFeedback: readProfileListFrom(feedbackSignals, source, ['managerFeedback', 'manager_feedback']),
+      systemAssessmentFeedback: readProfileListFrom(
+        feedbackSignals,
+        source,
+        ['systemAssessmentFeedback', 'system_assessment_feedback'],
+      ),
+    },
+    planState: {
+      learningPlan: readProfileText(planState, source, ['learningPlan', 'learning_plan']),
+      projectPlan: readProfileText(planState, source, ['projectPlan', 'project_plan']),
+      applicationPlan: readProfileText(planState, source, ['applicationPlan', 'application_plan']),
+      interviewPlan: readProfileText(planState, source, ['interviewPlan', 'interview_plan']),
+      onboardingPlan: readProfileText(planState, source, ['onboardingPlan', 'onboarding_plan']),
+      promotionPlan: readProfileText(planState, source, ['promotionPlan', 'promotion_plan']),
+    },
+    chinaResumeSupplement: {
+      jobIntentionStatement: readProfileText(
+        chinaResumeSupplement,
+        source,
+        ['jobIntentionStatement', 'job_intention_statement'],
+      ),
+      educationDetail: readProfileText(
+        chinaResumeSupplement,
+        source,
+        ['educationDetail', 'education_detail', 'educationDetailForChineseResume', 'education_detail_for_chinese_resume'],
+      ),
+      awardsCertificatesHighlights: readProfileText(
+        chinaResumeSupplement,
+        source,
+        ['awardsCertificatesHighlights', 'awards_certificates_highlights'],
+      ),
+      conditionalFields: readProfileText(
+        chinaResumeSupplement,
+        source,
+        ['conditionalFields', 'conditional_fields', 'conditionalChinaResumeFields', 'conditional_china_resume_fields', 'workAuthorizationStatus', 'work_authorization_status', 'relocationRemotePreference', 'relocation_remote_preference'],
+      ),
+    },
   };
 }
 
@@ -761,43 +925,42 @@ export function normalizeMessageStreamEvent(
 }
 
 export function normalizeProfileSuggestion(input: UpstreamProfileSuggestion): ProfileSuggestion {
-  const patch = { ...input.patch };
-
-  if (patch.targetIndustries) {
-    patch.targetIndustries = [...patch.targetIndustries];
-  }
-
-  if (patch.constraints) {
-    patch.constraints = [...patch.constraints];
-  }
-
-  if (patch.workPreferences) {
-    patch.workPreferences = [...patch.workPreferences];
-  }
-
-  if (patch.learningPreferences) {
-    patch.learningPreferences = [...patch.learningPreferences];
-  }
-
-  if (patch.keyStrengths) {
-    patch.keyStrengths = [...patch.keyStrengths];
-  }
-
-  if (patch.riskSignals) {
-    patch.riskSignals = [...patch.riskSignals];
-  }
-
-  if (patch.portfolioLinks) {
-    patch.portfolioLinks = [...patch.portfolioLinks];
-  }
+  const patch = sanitizeProfileRecord(input.patch);
 
   return {
     id: input.id,
     title: input.title,
     rationale: input.rationale,
     sourceThreadId: input.sourceThreadId ?? input.source_thread_id ?? null,
-    patch,
+    patch: pruneEmptyProfilePatch(patch),
   };
+}
+
+function pruneEmptyProfilePatch(profile: ProfileRecord): DeepPartial<ProfileRecord> {
+  const patch: DeepPartial<ProfileRecord> = {};
+
+  for (const [sectionKey, sectionValue] of Object.entries(profile) as Array<[keyof ProfileRecord, unknown]>) {
+    if (sectionKey === 'schemaVersion' || typeof sectionValue !== 'object' || sectionValue === null || Array.isArray(sectionValue)) {
+      continue;
+    }
+
+    const sectionPatch: Record<string, unknown> = {};
+    for (const [fieldKey, fieldValue] of Object.entries(sectionValue)) {
+      if (Array.isArray(fieldValue)) {
+        if (fieldValue.length > 0) {
+          sectionPatch[fieldKey] = [...fieldValue];
+        }
+      } else if (typeof fieldValue === 'string' && fieldValue.trim()) {
+        sectionPatch[fieldKey] = fieldValue;
+      }
+    }
+
+    if (Object.keys(sectionPatch).length > 0) {
+      patch[sectionKey] = sectionPatch as never;
+    }
+  }
+
+  return patch;
 }
 
 export function normalizeArtifactRecord(input: UpstreamArtifactRecord): ArtifactRecord {

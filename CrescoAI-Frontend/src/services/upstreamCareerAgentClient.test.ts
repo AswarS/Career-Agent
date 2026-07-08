@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { AxiosInstance } from 'axios';
 import { createUpstreamCareerAgentClient } from './upstreamCareerAgentClient';
+import { sanitizeProfileRecord } from './upstreamContracts';
 
 function createHttpClient(request: ReturnType<typeof vi.fn>) {
   return {
@@ -381,8 +382,10 @@ describe('createUpstreamCareerAgentClient', () => {
     await expect(client.listArtifacts()).resolves.toEqual([]);
     await expect(client.listProfileSuggestions()).resolves.toEqual([]);
     await expect(client.getProfile()).resolves.toMatchObject({
-      locale: 'zh-CN',
-      timezone: 'Asia/Shanghai',
+      basicInfo: {
+        fullName: '',
+        currentCity: '',
+      },
     });
   });
 
@@ -407,26 +410,6 @@ describe('createUpstreamCareerAgentClient', () => {
       httpClient: createHttpClient(request),
     });
 
-    await expect(client.updateProfile({
-      displayName: '',
-      locale: 'zh-CN',
-      timezone: 'Asia/Singapore',
-      currentRole: '',
-      employmentStatus: '',
-      experienceSummary: '',
-      educationSummary: '',
-      locationRegion: '',
-      targetRole: '',
-      targetIndustries: [],
-      shortTermGoal: '',
-      longTermGoal: '',
-      weeklyTimeBudget: '',
-      constraints: [],
-      workPreferences: [],
-      learningPreferences: [],
-      keyStrengths: [],
-      riskSignals: [],
-      portfolioLinks: [],
-    })).rejects.toThrow('code=PROFILE_VALIDATION_FAILED, request_id=req-123');
+    await expect(client.updateProfile(sanitizeProfileRecord({}))).rejects.toThrow('code=PROFILE_VALIDATION_FAILED, request_id=req-123');
   });
 });

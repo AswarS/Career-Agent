@@ -20,19 +20,37 @@ describe('sanitizeProfileRecord', () => {
         locale: 'zh-CN',
         timezone: 'Asia/Shanghai',
         currentRole: '独立开发者 / 自由职业全栈工程师',
-        targetIndustries: ['开发者工具', '效率工具', 'AI 应用层'],
-        constraints: ['收入不稳定，不能长时间不产出'],
+        employmentStatus: '自由职业',
+        targetIndustries: ['开发者工具', 'SaaS'],
+        workPreferences: ['远程优先', '自主决策空间'],
+        learningPreferences: ['项目驱动', '英文文档'],
+        keyStrengths: ['快速交付'],
+        portfolio_links: ['https://example.com'],
       },
     });
 
     expect(profile).toMatchObject({
-      displayName: '苏远',
-      timezone: 'Asia/Shanghai',
-      currentRole: '独立开发者 / 自由职业全栈工程师',
-      targetIndustries: ['开发者工具', '效率工具', 'AI 应用层'],
+      basicInfo: {
+        fullName: '苏远',
+        currentCity: 'Asia/Shanghai',
+      },
+      careerProfile: {
+        currentRole: '独立开发者 / 自由职业全栈工程师',
+        employmentStatus: '自由职业',
+        skills: ['快速交付'],
+      },
+      intentConstraints: {
+        targetIndustry: '开发者工具',
+        targetIndustries: ['开发者工具', 'SaaS'],
+        workPreferences: ['远程优先', '自主决策空间'],
+        learningPreferences: ['项目驱动', '英文文档'],
+      },
+      artifacts: {
+        portfolioLinks: ['https://example.com'],
+      },
     });
     expect(profile).not.toHaveProperty('_meta');
-    expect(profile.workPreferences).toEqual([]);
+    expect(profile.intentConstraints.expectedSalary).toBe('');
   });
 
   it('migrates legacy snake_case fields and safely fills missing arrays', () => {
@@ -42,10 +60,10 @@ describe('sanitizeProfileRecord', () => {
       key_strengths: ['快速交付', '快速交付', '  '],
     });
 
-    expect(profile.displayName).toBe('苏远');
-    expect(profile.targetRole).toBe('全职独立开发者');
-    expect(profile.keyStrengths).toEqual(['快速交付']);
-    expect(profile.riskSignals).toEqual([]);
+    expect(profile.basicInfo.fullName).toBe('苏远');
+    expect(profile.intentConstraints.targetRole).toBe('全职独立开发者');
+    expect(profile.careerProfile.skills).toEqual(['快速交付']);
+    expect(profile.artifacts.portfolioLinks).toEqual([]);
   });
 });
 
@@ -582,12 +600,12 @@ describe('normalizeProfileSuggestion', () => {
       rationale: 'Use clearer phrasing.',
       source_thread_id: 'thread-002',
       patch: {
-        keyStrengths: incomingArray,
+        coreSkills: incomingArray,
       },
     });
 
     expect(suggestion.sourceThreadId).toBe('thread-002');
-    expect(suggestion.patch.keyStrengths).toEqual(incomingArray);
-    expect(suggestion.patch.keyStrengths).not.toBe(incomingArray);
+    expect(suggestion.patch.careerProfile?.skills).toEqual(incomingArray);
+    expect(suggestion.patch.careerProfile?.skills).not.toBe(incomingArray);
   });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createCareerAgentClient } from './createCareerAgentClient';
 import type { CareerAgentClient } from './careerAgentClient';
+import { sanitizeProfileRecord } from './upstreamContracts';
 
 function createStubClient(): CareerAgentClient {
   return {
@@ -32,27 +33,7 @@ function createStubClient(): CareerAgentClient {
       assistantMessageId: 'message-assistant',
       status: 'done',
     })),
-    getProfile: vi.fn(async () => ({
-      displayName: 'Biter',
-      locale: 'zh-CN',
-      timezone: 'Asia/Shanghai',
-      currentRole: '',
-      employmentStatus: '',
-      experienceSummary: '',
-      educationSummary: '',
-      locationRegion: '',
-      targetRole: '',
-      targetIndustries: [],
-      shortTermGoal: '',
-      longTermGoal: '',
-      weeklyTimeBudget: '',
-      constraints: [],
-      workPreferences: [],
-      learningPreferences: [],
-      keyStrengths: [],
-      riskSignals: [],
-      portfolioLinks: [],
-    })),
+    getProfile: vi.fn(async () => sanitizeProfileRecord({ displayName: 'Biter' })),
     updateProfile: vi.fn(async (profile) => profile),
     listProfileSuggestions: vi.fn(async () => []),
     listArtifacts: vi.fn(async () => []),
