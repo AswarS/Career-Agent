@@ -228,7 +228,7 @@ describe('workspace streamed block presentation', () => {
     const assistantMessage = workspaceStore.messages.find((message) => message.id === 'message-assistant');
     expect(assistantMessage?.content).toBe('Authoritative final reply');
     expect(assistantMessage?.blocks?.filter((block) => block.type === 'text')).toEqual([
-      { id: 'final-text-0', type: 'text', text: 'Authoritative final reply' },
+      { id: 'text-0', type: 'text', text: 'Authoritative final reply' },
     ]);
   });
 
@@ -319,6 +319,14 @@ describe('workspace streamed block presentation', () => {
     expect(assistantMessage?.streaming).toBe(false);
     expect(assistantMessage?.reasoning).toBeNull();
     expect(assistantMessage?.blocks).toEqual([
+      {
+        id: 'skill-loaded-learning-plan',
+        type: 'status',
+        title: 'Skill',
+        name: 'learning-plan',
+        status: 'completed',
+        text: 'Skill learning-plan loaded',
+      },
       {
         id: 'text-0',
         type: 'text',

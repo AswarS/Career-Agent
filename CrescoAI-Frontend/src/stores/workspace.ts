@@ -3,6 +3,14 @@ import { matchesMobileLayoutViewport } from '../app/responsive';
 import { runtimeConfig } from '../config/runtime';
 import { createCareerAgentClient } from '../services/createCareerAgentClient';
 import { MessageStreamUnavailableError } from '../services/careerAgentClient';
+import {
+  createSkillLoadedBlock,
+  extractSkillName,
+  extractSkillNameFromBlock,
+  isInternalSkillBlock,
+  normalizeMessageBlocks,
+  THINKING_BLOCK_TITLE,
+} from '../modules/conversation/messageBlockNormalization';
 import { shouldSimulateArtifactRefreshLifecycle } from './artifactRefreshPolicy';
 import type {
   ArtifactRecord,
@@ -195,59 +203,11 @@ function deriveMessageContentFromBlocks(blocks: MessageBlock[] | undefined, fall
   return text || fallback;
 }
 
-function isInternalSkillText(value: string | null | undefined): boolean {
-  return /Skill command selected:|Launching skill:|Base directory for this skill:/i.test(value ?? '');
-}
-
-function isInternalSkillBlock(block: MessageBlock | undefined): boolean {
-  if (!block) {
-    return false;
-  }
-
-  if (block.type === 'skill') {
-    return true;
-  }
-
-  const name = block.name?.trim().toLowerCase();
-  if (name === 'skill') {
-    return true;
-  }
-
-  const text = [block.title, block.text].filter(Boolean).join('\n');
-  return isInternalSkillText(text);
-}
-
-function filterPublicMessageBlocks(blocks: MessageBlock[] | undefined) {
-  const filtered = (blocks ?? []).filter((block) => !isInternalSkillBlock(block));
-  return filtered.length ? filtered : undefined;
-}
-
 function reconcileCompletedReplyBlock(
   blocks: MessageBlock[] | undefined,
   reply: string,
 ) {
-  const filteredBlocks = filterPublicMessageBlocks(blocks) ?? [];
-  const authoritativeTextBlock = filteredBlocks.find((block) => block.type === 'text');
-  const publicBlocks = filteredBlocks.filter((block) => block.type !== 'text');
-  const finalReply = reply.trim();
-  if (!finalReply) {
-    return publicBlocks.length ? publicBlocks : undefined;
-  }
-
-  const finalBlock: MessageBlock = {
-    id: authoritativeTextBlock?.id ?? 'final-text-0',
-    type: 'text',
-    text: finalReply,
-  };
-  const artifactIndex = publicBlocks.findIndex((block) => block.type === 'artifact');
-  if (artifactIndex < 0) {
-    return [...publicBlocks, finalBlock];
-  }
-  return [
-    ...publicBlocks.slice(0, artifactIndex),
-    finalBlock,
-    ...publicBlocks.slice(artifactIndex),
-  ];
+  return normalizeMessageBlocks(blocks, { authoritativeText: reply });
 }
 
 function mergeMessageBlock(existing: MessageBlock | undefined, incoming: MessageBlock): MessageBlock {
@@ -1019,8 +979,8 @@ export const useWorkspaceStore = defineStore('workspace', {
           usage: payload.usage !== undefined ? payload.usage : existingMessage.usage,
           stopReason: payload.stopReason !== undefined ? payload.stopReason : existingMessage.stopReason,
           blocks: payload.blocks !== undefined
-            ? filterPublicMessageBlocks(payload.blocks)
-            : filterPublicMessageBlocks(existingMessage.blocks),
+            ? normalizeMessageBlocks(payload.blocks)
+            : normalizeMessageBlocks(existingMessage.blocks),
           raw: payload.raw !== undefined ? payload.raw : existingMessage.raw,
           streaming: payload.streaming !== undefined ? payload.streaming : existingMessage.streaming,
         };
@@ -1047,6 +1007,32 @@ export const useWorkspaceStore = defineStore('workspace', {
       };
       const structuredTextMessageIds = new Set<string>();
       const legacyReplyMessageIds = new Set<string>();
+      const showSkillLoaded = (
+        messageId: string,
+        skillName: string,
+        sourceBlockId?: string,
+        clearReasoning = false,
+      ) => {
+        const index = ensureAssistantMessage(messageId);
+        const retainedBlocks = (this.messages[index].blocks ?? []).filter((block) => {
+          if (block.id === sourceBlockId) return false;
+          if (sourceBlockId === 'legacy-text-0' && block.type === 'text') return false;
+          if (clearReasoning && block.type === 'status' && block.title === THINKING_BLOCK_TITLE) {
+            return false;
+          }
+          return true;
+        });
+        const blocks = normalizeMessageBlocks([
+          ...retainedBlocks,
+          createSkillLoadedBlock(skillName),
+        ]);
+        this.messages[index] = {
+          ...this.messages[index],
+          blocks,
+          content: deriveMessageContentFromBlocks(blocks, ''),
+          reasoning: clearReasoning ? null : this.messages[index].reasoning,
+        };
+      };
       const applyStreamEvent = (event: ThreadMessageStreamEvent) => {
         if (event.type === 'message.created') {
           mergePendingUserMessage(event.messageId, event.createdAt);
@@ -1055,7 +1041,9 @@ export const useWorkspaceStore = defineStore('workspace', {
         }
 
         if (event.type === 'reasoning.delta') {
-          if (isInternalSkillText(event.delta)) {
+          const skillName = extractSkillName(event.delta);
+          if (skillName) {
+            showSkillLoaded(event.messageId, skillName, 'legacy-status-0', true);
             return;
           }
           const index = ensureAssistantMessage(event.messageId);
@@ -1069,7 +1057,7 @@ export const useWorkspaceStore = defineStore('workspace', {
             block: {
               id: 'legacy-status-0',
               type: 'status',
-              title: '过程',
+              title: THINKING_BLOCK_TITLE,
               text: '',
             },
           });
@@ -1082,7 +1070,9 @@ export const useWorkspaceStore = defineStore('workspace', {
         }
 
         if (event.type === 'reply.delta') {
-          if (isInternalSkillText(event.delta)) {
+          const skillName = extractSkillName(event.delta);
+          if (skillName) {
+            showSkillLoaded(event.messageId, skillName, 'legacy-text-0');
             return;
           }
           const index = ensureAssistantMessage(event.messageId);
@@ -1109,6 +1099,12 @@ export const useWorkspaceStore = defineStore('workspace', {
         }
 
         if (event.type === 'message.block.delta') {
+          const skillName = extractSkillNameFromBlock(event.block)
+            ?? extractSkillName(event.delta);
+          if (skillName) {
+            showSkillLoaded(event.messageId, skillName, event.blockId);
+            return;
+          }
           if (event.blockType === 'skill' || isInternalSkillBlock(event.block)) {
             return;
           }
@@ -1141,6 +1137,11 @@ export const useWorkspaceStore = defineStore('workspace', {
         }
 
         if (event.type === 'message.block.completed') {
+          const skillName = extractSkillNameFromBlock(event.block);
+          if (skillName) {
+            showSkillLoaded(event.messageId, skillName, event.block.id);
+            return;
+          }
           if (isInternalSkillBlock(event.block)) {
             return;
           }

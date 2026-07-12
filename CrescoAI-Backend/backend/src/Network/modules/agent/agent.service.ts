@@ -33,6 +33,12 @@ import {
   getNetworkUserDir,
   networkRootDir,
 } from '../../utils/networkTranscriptStorage.js';
+import {
+  createSkillLoadedBlock,
+  extractLoadedSkillNameFromText,
+  normalizeCanonicalMessageBlocks,
+  THINKING_BLOCK_TITLE,
+} from '../conversation/canonical-message-blocks.js';
 
 // ---------------------------------------------------------------------------
 // JSONL helpers
@@ -176,6 +182,47 @@ function stringifyToolResultValue(value: unknown): string {
   }
 }
 
+function extractLoadedSkillNameFromSdkMessage(value: unknown): string | null {
+  if (typeof value !== 'object' || value === null) return null;
+
+  const record = value as Record<string, unknown>;
+  const message = typeof record.message === 'object' && record.message !== null
+    ? record.message as Record<string, unknown>
+    : null;
+  if (!message) return null;
+
+  const content = message.content;
+  if (record.isMeta === true) {
+    return extractLoadedSkillNameFromText(stringifyToolResultValue(content));
+  }
+
+  for (const block of Array.isArray(content) ? content : []) {
+    if (typeof block !== 'object' || block === null) continue;
+    const typedBlock = block as Record<string, unknown>;
+    if (typedBlock.type !== 'tool_result') continue;
+    const skillName = extractLoadedSkillNameFromText(
+      stringifyToolResultValue(typedBlock.content),
+    );
+    if (skillName) return skillName;
+  }
+  return null;
+}
+
+function extractSkillNameFromToolUseBlock(value: unknown): string | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const block = value as Record<string, unknown>;
+  const blockType = typeof block.type === 'string' ? block.type : '';
+  const toolName = typeof block.name === 'string' ? block.name.trim().toLowerCase() : '';
+  if (!blockType.endsWith('tool_use')) return null;
+  if (toolName !== 'skill') return null;
+  const input = typeof block.input === 'object' && block.input !== null
+    ? block.input as Record<string, unknown>
+    : null;
+  return typeof input?.skill === 'string' && input.skill.trim()
+    ? input.skill.trim()
+    : null;
+}
+
 function redactSensitiveProcessText(input: string): string {
   let output = input;
   output = output.replace(/(Bearer\s+)[A-Za-z0-9._~+/=-]+/gi, '$1******');
@@ -222,7 +269,11 @@ function createTextAgentBlock(id: string, text = ''): AgentMessageBlock {
   };
 }
 
-function createStatusAgentBlock(id: string, text: string, title = '过程'): AgentMessageBlock {
+function createStatusAgentBlock(
+  id: string,
+  text: string,
+  title = THINKING_BLOCK_TITLE,
+): AgentMessageBlock {
   return {
     id,
     type: 'status',
@@ -1164,6 +1215,7 @@ export class AgentService {
           return await runWithSessionContext(ctx, async () => {
             const textParts: string[] = [];
             const thinkingParts: string[] = [];
+            const loadedSkillNames = new Set<string>();
             let finalAssistantText: string | undefined;
             let finalResultText: string | undefined;
             let blocks: AgentMessageBlock[] = [];
@@ -1192,6 +1244,24 @@ export class AgentService {
                 };
               }
 
+              const loadedSkillName = extractLoadedSkillNameFromSdkMessage(msg);
+              if (loadedSkillName) {
+                if (!loadedSkillNames.has(loadedSkillName)) {
+                  loadedSkillNames.add(loadedSkillName);
+                  emitMessageCreated(actualAssistantMessageId);
+                  const skillLoadedBlock = createSkillLoadedBlock<AgentMessageBlock>(
+                    loadedSkillName,
+                  );
+                  blocks = mergeAgentBlock(blocks, skillLoadedBlock);
+                  pushBlockEvent({
+                    type: 'message.block.completed',
+                    messageId: actualAssistantMessageId,
+                    block: skillLoadedBlock,
+                  });
+                }
+                continue;
+              }
+
               const msgMessage = (msg as any).message;
               if (msgMessage && Array.isArray(msgMessage.content)) {
                 const currentMessageTextParts: string[] = [];
@@ -1200,6 +1270,22 @@ export class AgentService {
                 }
                 for (const block of msgMessage.content) {
                   const blockType = typeof block.type === 'string' ? block.type : '';
+                  const skillToolName = extractSkillNameFromToolUseBlock(block);
+                  if (skillToolName) {
+                    if (!loadedSkillNames.has(skillToolName)) {
+                      loadedSkillNames.add(skillToolName);
+                      const skillLoadedBlock = createSkillLoadedBlock<AgentMessageBlock>(
+                        skillToolName,
+                      );
+                      blocks = mergeAgentBlock(blocks, skillLoadedBlock);
+                      pushBlockEvent({
+                        type: 'message.block.completed',
+                        messageId: actualAssistantMessageId,
+                        block: skillLoadedBlock,
+                      });
+                    }
+                    continue;
+                  }
                   if (blockType === 'text' && typeof block.text === 'string' && block.text) {
                     const safeText = sanitizeServerPhysicalPaths(block.text);
                     textParts.push(safeText);
@@ -1283,18 +1369,9 @@ export class AgentService {
               ?? textParts.join('\n').trim(),
             );
             const thinking = sanitizeServerPhysicalPaths(thinkingParts.join('\n').trim());
-            if (reply) {
-              const executionBlocks = blocks.filter((block) => block.type !== 'text');
-              const finalTextBlock = createTextAgentBlock('final-text-0', reply);
-              const artifactIndex = executionBlocks.findIndex((block) => block.type === 'artifact');
-              blocks = artifactIndex < 0
-                ? [...executionBlocks, finalTextBlock]
-                : [
-                    ...executionBlocks.slice(0, artifactIndex),
-                    finalTextBlock,
-                    ...executionBlocks.slice(artifactIndex),
-                  ];
-            }
+            blocks = normalizeCanonicalMessageBlocks(blocks, {
+              authoritativeText: reply,
+            }) ?? [];
 
             if (reply || thinking) {
               emitMessageCreated(actualAssistantMessageId);

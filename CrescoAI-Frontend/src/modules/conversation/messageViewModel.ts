@@ -8,6 +8,7 @@ import type {
 } from '../../types/entities';
 import { formatMessageFileSize, formatMessageFileType } from './attachmentPresentation';
 import { getPresentedMessageContent } from './messagePresentation';
+import { normalizeMessageBlocks } from './messageBlockNormalization';
 
 export interface MessageMediaView extends MessageMedia {
   altText: string;
@@ -100,8 +101,12 @@ function createMessageBlockViews(
   const sourceBlocks = message.blocks?.length
     ? message.blocks
     : createFallbackBlocks(message, presentedMessage);
-  const normalizedBlocks = sourceBlocks
-    .filter((block) => !isInternalSkillSourceBlock(block))
+  const canonicalBlocks = normalizeMessageBlocks(sourceBlocks, {
+    authoritativeText: message.role === 'assistant'
+      ? presentedMessage.content
+      : undefined,
+  }) ?? [];
+  const normalizedBlocks = canonicalBlocks
     .map(toBlockView)
     .filter((block): block is MessageBlockView => Boolean(block));
   const withArtifactBlock = appendArtifactBlockIfNeeded(
@@ -292,19 +297,6 @@ function createLegacyMarkedBlock(marker: string, content: string, index: number)
     title: '思考',
     text: cleanPublicBlockText(content) || '正在处理过程事件。',
   };
-}
-
-function isInternalSkillSourceBlock(block: MessageBlock): boolean {
-  if (block.type === 'skill') {
-    return true;
-  }
-
-  if (block.name?.trim().toLowerCase() === 'skill') {
-    return true;
-  }
-
-  const text = [block.title, block.text].filter(Boolean).join('\n');
-  return /Skill command selected:|Launching skill:|Base directory for this skill:/i.test(text);
 }
 
 function toBlockView(block: MessageBlock): MessageBlockView | null {

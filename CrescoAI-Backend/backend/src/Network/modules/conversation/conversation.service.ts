@@ -25,6 +25,11 @@ import type { SkillHandlerResult, SkillProgressEvent } from '../skill/skill.regi
 import { ArtifactService } from '../artifact/artifact.service';
 import { ProfileService } from '../profile/profile.service';
 import { ConversationTranscriptProjectionService } from './transcript-projection.service.js';
+import {
+  createSkillLoadedBlock,
+  normalizeCanonicalMessageBlocks,
+  THINKING_BLOCK_TITLE,
+} from './canonical-message-blocks.js';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { SendMultimodalMessageDto } from './dto/send-multimodal-message.dto';
 import { ConversationEntity } from './entities/conversation.entity';
@@ -780,11 +785,14 @@ export class ConversationService {
         : undefined,
       media: persistedAssistantResources.media,
       actions: persistedAssistantResources.actions,
-      blocks: this.appendArtifactBlockToMessageBlocks(
-        (agentResponse.blocks ?? []) as MessageBlock[],
-        persistedAssistantResources.media,
-        persistedAssistantResources.actions,
-      ),
+      blocks: normalizeCanonicalMessageBlocks(
+        this.appendArtifactBlockToMessageBlocks(
+          (agentResponse.blocks ?? []) as MessageBlock[],
+          persistedAssistantResources.media,
+          persistedAssistantResources.actions,
+        ),
+        { authoritativeText: agentResponse.reply },
+      ) as MessageBlock[] | undefined,
       raw: sanitizeServerPhysicalPathsInValue(agentResponse.raw),
     };
   }
@@ -964,6 +972,22 @@ export class ConversationService {
           },
         );
 
+        const completedBlocksSource = event.blocks
+          ? this.appendArtifactBlockToMessageBlocks(
+              event.blocks as MessageBlock[],
+              persistedAssistantResources.media,
+              persistedAssistantResources.actions,
+            )
+          : this.createBlocksFromReplyAndArtifacts(
+              event.reply,
+              undefined,
+              persistedAssistantResources.media,
+              persistedAssistantResources.actions,
+            );
+        const completedBlocks = normalizeCanonicalMessageBlocks(completedBlocksSource, {
+          authoritativeText: event.reply,
+        }) as MessageBlock[] | undefined;
+
         yield {
           type: 'message.completed',
           accepted: event.accepted,
@@ -983,20 +1007,7 @@ export class ConversationService {
             : undefined,
           media: persistedAssistantResources.media.length ? persistedAssistantResources.media : undefined,
           actions: persistedAssistantResources.actions.length ? persistedAssistantResources.actions : undefined,
-          blocks: event.blocks
-            ? sanitizeServerPhysicalPathsInValue(
-              this.appendArtifactBlockToMessageBlocks(
-                event.blocks as MessageBlock[],
-                persistedAssistantResources.media,
-                persistedAssistantResources.actions,
-              ),
-            ) as MessageBlock[]
-            : this.createBlocksFromReplyAndArtifacts(
-              event.reply,
-              undefined,
-              persistedAssistantResources.media,
-              persistedAssistantResources.actions,
-            ),
+          blocks: sanitizeServerPhysicalPathsInValue(completedBlocks) as MessageBlock[] | undefined,
           raw: sanitizeServerPhysicalPathsInValue(event.raw),
         };
       }
@@ -1147,6 +1158,10 @@ export class ConversationService {
     await this.linkUploadedResourcesToMessage(conversation.userId, conversation.id, ids.userMessageId, attachments);
 
     yield this.createMessageCreatedStreamEvent(conversation.id, ids, now.toISOString());
+    yield this.createBlockCompletedStreamEvent(
+      ids.assistantMessageId,
+      createSkillLoadedBlock<MessageBlock>(route.skillName),
+    );
 
     const skillContext = await this.skillService.buildExecutionContext(
       conversation.userId,
@@ -1187,7 +1202,7 @@ export class ConversationService {
     }
 
     const skillResult = skillOutcome.result;
-    const presentation = this.buildSkillReplyPresentation(skillResult);
+    const presentation = this.buildSkillReplyPresentation(skillResult, route.skillName);
 
     await this.appendRuntimeAssistantMessage(
       sessionFilePath,
@@ -1337,12 +1352,15 @@ export class ConversationService {
       raw?: Record<string, unknown>;
     } = {},
   ): ConversationStreamEvent {
-    const blocks = options.blocks ?? this.createBlocksFromReplyAndArtifacts(
+    const sourceBlocks = options.blocks ?? this.createBlocksFromReplyAndArtifacts(
       reply,
       options.reasoning,
       options.media,
       options.actions,
     );
+    const blocks = normalizeCanonicalMessageBlocks(sourceBlocks, {
+      authoritativeText: reply,
+    }) as MessageBlock[] | undefined;
 
     return {
       type: 'message.completed',
@@ -1382,7 +1400,7 @@ export class ConversationService {
       blocks.push({
         id: 'status-0',
         type: 'status',
-        title: '过程',
+        title: THINKING_BLOCK_TITLE,
         text: sanitizedStatus,
       });
     }
@@ -1453,7 +1471,7 @@ export class ConversationService {
     return {
       id,
       type: 'status',
-      title: '过程',
+      title: THINKING_BLOCK_TITLE,
       text: sanitizeServerPhysicalPaths(text),
     };
   }
@@ -1564,6 +1582,7 @@ export class ConversationService {
 
   private buildSkillReplyPresentation(
     skillResult: SkillHandlerResult,
+    skillName: string,
   ) {
     const hasOutputFiles = Boolean(skillResult.outputFiles?.length);
     const visibleReply = sanitizeServerPhysicalPaths(hasOutputFiles
@@ -1572,8 +1591,14 @@ export class ConversationService {
 
     return {
       visibleReply,
-      messageBlocks: this.createBlocksFromReplyAndArtifacts(visibleReply),
-      assistantContentBlocks: this.createAssistantContentBlocks(visibleReply),
+      messageBlocks: this.createBlocksFromReplyAndArtifacts(
+        visibleReply,
+        `Skill ${skillName} loaded`,
+      ),
+      assistantContentBlocks: this.createAssistantContentBlocks(
+        visibleReply,
+        `Skill ${skillName} loaded`,
+      ),
     };
   }
 

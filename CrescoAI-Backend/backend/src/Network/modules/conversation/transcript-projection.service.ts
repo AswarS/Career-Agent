@@ -16,6 +16,12 @@ import type {
   MessageAction,
   MessageMedia,
 } from './conversation.service.js';
+import {
+  createSkillLoadedBlock,
+  extractLoadedSkillNameFromText,
+  normalizeCanonicalMessageBlocks,
+  THINKING_BLOCK_TITLE,
+} from './canonical-message-blocks.js';
 
 type ProjectedConversationMessage = ConversationMessage & {
   uuid?: string;
@@ -83,7 +89,7 @@ export class ConversationTranscriptProjectionService {
   ): ConversationMessage[] {
     const order: string[] = [];
     const map = new Map<string, ProjectedConversationMessage>();
-    let lastAssistantMessageId: string | null = null;
+    let activeAssistantMessageId: string | null = null;
     const hiddenSkillToolUseIds = new Set<string>();
 
     for (const event of events) {
@@ -96,10 +102,10 @@ export class ConversationTranscriptProjectionService {
           event,
           hiddenSkillToolUseIds,
         );
-        if (toolResultBlocks.length && lastAssistantMessageId) {
-          const existing = map.get(lastAssistantMessageId);
+        if (toolResultBlocks.length && activeAssistantMessageId) {
+          const existing = map.get(activeAssistantMessageId);
           if (existing) {
-            map.set(lastAssistantMessageId, {
+            map.set(activeAssistantMessageId, {
               ...existing,
               blocks: this.mergeBlocks(existing.blocks, toolResultBlocks),
             });
@@ -112,15 +118,24 @@ export class ConversationTranscriptProjectionService {
       if (!projected) {
         continue;
       }
-      this.upsertProjectedMessage(projected, map, order);
       if (projected.role === 'assistant') {
-        lastAssistantMessageId = projected.id;
+        const targetMessageId = activeAssistantMessageId ?? projected.id;
+        this.upsertProjectedMessage(
+          { ...projected, id: targetMessageId },
+          map,
+          order,
+        );
+        activeAssistantMessageId = targetMessageId;
+      } else {
+        this.upsertProjectedMessage(projected, map, order);
+        activeAssistantMessageId = null;
       }
     }
 
     return order
       .map((id) => this.attachMedia(map.get(id), mediaByMessageId))
-      .filter((message): message is ConversationMessage => Boolean(message));
+      .filter((message): message is ConversationMessage => Boolean(message))
+      .map((message) => this.normalizeProjectedMessage(message));
   }
 
   private projectTranscriptMessage(
@@ -318,7 +333,8 @@ export class ConversationTranscriptProjectionService {
     }
 
     if (this.isInternalSkillAssistantBlock(block)) {
-      return null;
+      const skillName = this.readInternalSkillName(block);
+      return skillName ? createSkillLoadedBlock<MessageBlock>(skillName) : null;
     }
 
     if (this.isToolResultAssistantBlock(blockType, block)) {
@@ -363,6 +379,10 @@ export class ConversationTranscriptProjectionService {
         return;
       }
       if (this.isInternalSkillToolResultBlock(item, hiddenSkillToolUseIds)) {
+        const skillName = extractLoadedSkillNameFromText(
+          this.stringifyAssistantToolResultValue(item.content ?? item.result ?? item.output ?? ''),
+        );
+        if (skillName) blocks.push(createSkillLoadedBlock<MessageBlock>(skillName));
         return;
       }
       blocks.push(this.createToolResultBlock(item, index));
@@ -382,7 +402,7 @@ export class ConversationTranscriptProjectionService {
     return {
       id,
       type: 'status',
-      title: '过程',
+      title: THINKING_BLOCK_TITLE,
       text: sanitizeServerPhysicalPaths(text),
     };
   }
@@ -450,6 +470,16 @@ export class ConversationTranscriptProjectionService {
       this.isRecord(input)
       && typeof input.skill === 'string'
       && input.skill.trim().length > 0
+    );
+  }
+
+  private readInternalSkillName(block: Record<string, unknown>): string | null {
+    const input = block.input;
+    if (this.isRecord(input) && typeof input.skill === 'string' && input.skill.trim()) {
+      return input.skill.trim();
+    }
+    return extractLoadedSkillNameFromText(
+      this.stringifyAssistantToolResultValue(block.content ?? block.text ?? ''),
     );
   }
 
@@ -652,6 +682,19 @@ export class ConversationTranscriptProjectionService {
   private mergeBlocks(existing?: MessageBlock[], incoming?: MessageBlock[]): MessageBlock[] | undefined {
     const merged = [...(existing ?? []), ...(incoming ?? [])];
     return merged.length ? merged : undefined;
+  }
+
+  private normalizeProjectedMessage(message: ConversationMessage): ConversationMessage {
+    if (message.role !== 'assistant') return message;
+    const authoritativeText = message.content === 'Assistant is thinking...'
+      ? ''
+      : message.content;
+    return {
+      ...message,
+      blocks: normalizeCanonicalMessageBlocks(message.blocks, {
+        authoritativeText,
+      }) as MessageBlock[] | undefined,
+    };
   }
 
   private timestampMs(event: TranscriptMessage): number {

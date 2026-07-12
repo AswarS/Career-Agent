@@ -23,6 +23,7 @@ import type {
 import { CAREER_AGENT_API_ROUTES } from './careerAgentApiRoutes';
 import { resolveUpstreamAssetUrl } from './upstreamAssetUrls';
 import { findUploadedAssetPresentation } from './uploadedAssetPresentationCache';
+import { normalizeMessageBlocks } from '../modules/conversation/messageBlockNormalization';
 
 const supportedMessageMediaKinds = new Set<MessageMediaKind>(['image', 'audio', 'video', 'html', 'app']);
 
@@ -470,8 +471,8 @@ function normalizeMessageBlock(input: unknown, index: number): MessageBlock | nu
           ? name ? `Skill · /${name}` : 'Skill'
           : type === 'artifact'
             ? '生成内容'
-            : type === 'status'
-              ? '过程'
+             : type === 'status'
+              ? '思考'
               : undefined);
   const text = normalizeBlockText(
     input.text
@@ -1020,6 +1021,11 @@ export function normalizeThreadMessage(input: UpstreamThreadMessage, fallbackThr
     : typeof raw?.stopReason === 'string'
       ? raw.stopReason
       : undefined;
+  const blocks = normalizeMessageBlocks(normalizeBlocks(input.blocks), {
+    authoritativeText: input.role === 'assistant'
+      ? extractedReasoning.content
+      : undefined,
+  });
 
   return {
     id: normalizeId(input.id, 'message-unknown'),
@@ -1043,7 +1049,7 @@ export function normalizeThreadMessage(input: UpstreamThreadMessage, fallbackThr
     model: normalizeOptionalText(input.model ?? rawModel),
     usage: normalizeRecord(input.usage) ?? rawUsage,
     stopReason: normalizeOptionalText(input.stopReason ?? input.stop_reason ?? rawStopReason) ?? null,
-    blocks: normalizeBlocks(input.blocks),
+    blocks,
     raw,
     createdAt: normalizeTimestamp(input.createdAt ?? input.created_at),
   };

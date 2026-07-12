@@ -76,6 +76,7 @@ describe('createMessageViewModel', () => {
       'tool_result',
       'text',
     ]);
+    expect(viewModel.blocks[0]?.title).toBe('思考');
     expect(viewModel.blocks[0]?.text).toBe('先确认数据来源。');
     expect(viewModel.blocks[1]?.title).toBe('工具调用 · Read');
     expect(viewModel.blocks[1]?.text).toBe('正在调用 Read。');
@@ -86,7 +87,7 @@ describe('createMessageViewModel', () => {
     expect(viewModel.content).toBe('最终答复。');
   });
 
-  it('groups static execution blocks behind final output and filters internal skill blocks', () => {
+  it('groups static execution blocks and replaces internal skill content with a loaded notice', () => {
     const viewModel = createMessageViewModel(createMessage({
       content: 'Final answer',
       blocks: [
@@ -99,16 +100,22 @@ describe('createMessageViewModel', () => {
     }));
 
     expect(viewModel.blocks.map((block) => block.id)).toEqual([
+      'skill-loaded-learning-plan',
       'status-0',
       'tool-call-1',
       'tool-result-1',
       'text-0',
     ]);
     expect(viewModel.finalBlocks.map((block) => block.id)).toEqual(['text-0']);
-    expect(viewModel.executionBlocks.map((block) => block.id)).toEqual(['status-0', 'tool-call-1']);
-    expect(viewModel.executionBlocks[1]?.resultBlocks?.map((block) => block.id)).toEqual(['tool-result-1']);
+    expect(viewModel.executionBlocks.map((block) => block.id)).toEqual([
+      'skill-loaded-learning-plan',
+      'status-0',
+      'tool-call-1',
+    ]);
+    expect(viewModel.executionBlocks[2]?.resultBlocks?.map((block) => block.id)).toEqual(['tool-result-1']);
     expect(viewModel.hasHiddenExecutionBlocks).toBe(true);
-    expect(viewModel.hiddenExecutionBlockCount).toBe(2);
+    expect(viewModel.hiddenExecutionBlockCount).toBe(3);
+    expect(viewModel.executionBlocks[0]?.text).toBe('Skill learning-plan loaded');
   });
 
   it('falls back to message content when canonical blocks contain execution only', () => {
