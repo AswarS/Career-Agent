@@ -234,6 +234,7 @@ export class SkillService implements OnModuleInit {
         context.llmConfig = {
           apiKey: saved.apiKey ?? undefined,
           baseUrl: saved.baseUrl ?? undefined,
+          provider: saved.provider ?? undefined,
           model: saved.model ?? undefined,
         };
       }
@@ -272,6 +273,7 @@ export class SkillService implements OnModuleInit {
       conversationId: context.conversationId,
       apiKey: executionContext.llmConfig?.apiKey,
       baseUrl: executionContext.llmConfig?.baseUrl,
+      provider: executionContext.llmConfig?.provider,
       model: executionContext.llmConfig?.model,
       content: prompt,
       abortSignal: context.abortSignal,
@@ -302,6 +304,7 @@ export class SkillService implements OnModuleInit {
         mergedContext.llmConfig = {
           apiKey: saved.apiKey ?? undefined,
           baseUrl: saved.baseUrl ?? undefined,
+          provider: saved.provider ?? undefined,
           model: saved.model ?? undefined,
         };
       }
@@ -313,6 +316,7 @@ export class SkillService implements OnModuleInit {
           conversationId: input.conversationId ?? mergedContext.conversationId,
           apiKey: input.apiKey ?? mergedContext.llmConfig?.apiKey,
           baseUrl: input.baseUrl ?? mergedContext.llmConfig?.baseUrl,
+          provider: input.provider ?? mergedContext.llmConfig?.provider,
           model: input.model ?? mergedContext.llmConfig?.model,
           content: input.content,
           abortSignal: mergedContext.abortSignal,
@@ -322,6 +326,7 @@ export class SkillService implements OnModuleInit {
         this.agentService!.runInSessionContext({
           userId: String(mergedContext.userId ?? 1),
           conversationId: mergedContext.conversationId,
+          config: mergedContext.llmConfig,
           callback: async (sessionContext) => {
             const abortSession = () => sessionContext.abortController.abort();
             if (mergedContext.abortSignal?.aborted) {
@@ -503,6 +508,7 @@ export class SkillService implements OnModuleInit {
             : undefined,
         apiKey: llmConfig.apiKey,
         baseUrl: llmConfig.baseUrl,
+        provider: llmConfig.provider,
         model: llmConfig.model,
         content: `${expanded}\n\nUser request:\n${args || 'Please execute.'}`,
       });

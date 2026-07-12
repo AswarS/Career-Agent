@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import MarkdownContent from '../../components/MarkdownContent.vue';
-import type { MessageAction, MessageFileAttachment, MessageMedia, ThreadMessage } from '../../types/entities';
-import { formatMessageFileSize, formatMessageFileType } from './attachmentPresentation';
-import { getPresentedMessageContent } from './messagePresentation';
+import type { MessageAction, ThreadMessage } from '../../types/entities';
 import { downloadMessageFile } from '../../services/messageFileDownloads';
+import {
+  createMessageViewModel,
+  type MessageBlockView,
+  type MessageFileAttachmentView,
+} from './messageViewModel';
 
 const props = defineProps<{
   message: ThreadMessage;
@@ -15,191 +18,42 @@ const emit = defineEmits<{
   action: [action: MessageAction];
 }>();
 
-const presentedMessage = computed(() => getPresentedMessageContent(props.message));
-const visibleReasoning = computed(() => presentedMessage.value.reasoning);
-const reasoningSegments = computed(() => parseReasoningSegments(visibleReasoning.value));
-const visibleActions = computed(() => props.message.role === 'assistant' ? props.message.actions ?? [] : []);
-const visibleMedia = computed(() => props.message.media ?? []);
-const visibleFiles = computed(() => (props.message.files ?? []).map((file) => ({
-  ...file,
-  canDownload: canDownloadFile(file.url),
-})));
-const showSpeakerIdentity = computed(() => props.message.role !== 'user');
-
-type ReasoningSegmentKind = 'thought' | 'tool-call' | 'tool-result' | 'structured';
-
-interface ReasoningSegment {
-  id: string;
-  kind: ReasoningSegmentKind;
-  title: string;
-  content: string;
-}
-
-function parseReasoningSegments(source: string | null | undefined): ReasoningSegment[] {
-  const text = source?.trim();
-  if (!text) {
-    return [];
-  }
-
-  const markerPattern = /^\[(工具调用|工具调用已过滤|工具返回|工具返回已过滤|过程事件|结构化过程事件已过滤)\]\s*$/gm;
-  const matches = [...text.matchAll(markerPattern)];
-  if (!matches.length) {
-    return [createReasoningSegment('thought', text, 0)];
-  }
-
-  const segments: ReasoningSegment[] = [];
-  let cursor = 0;
-
-  matches.forEach((match, index) => {
-    const matchIndex = match.index ?? 0;
-    const thoughtContent = text.slice(cursor, matchIndex).trim();
-    if (thoughtContent) {
-      segments.push(createReasoningSegment('thought', thoughtContent, segments.length));
-    }
-
-    const marker = match[1] ?? '';
-    const contentStart = matchIndex + match[0].length;
-    const nextIndex = matches[index + 1]?.index ?? text.length;
-    const content = text.slice(contentStart, nextIndex).trim();
-    segments.push(createReasoningSegment(kindFromReasoningMarker(marker), content, segments.length));
-    cursor = nextIndex;
-  });
-
-  const trailingThought = text.slice(cursor).trim();
-  if (trailingThought) {
-    segments.push(createReasoningSegment('thought', trailingThought, segments.length));
-  }
-
-  return segments;
-}
-
-function kindFromReasoningMarker(marker: string): ReasoningSegmentKind {
-  if (marker.includes('工具调用')) {
-    return 'tool-call';
-  }
-  if (marker.includes('工具返回')) {
-    return 'tool-result';
-  }
-  return 'structured';
-}
-
-function createReasoningSegment(
-  kind: ReasoningSegmentKind,
-  content: string,
-  index: number,
-): ReasoningSegment {
-  const titles: Record<ReasoningSegmentKind, string> = {
-    thought: '思考',
-    'tool-call': '工具调用',
-    'tool-result': '工具返回',
-    structured: '过程事件',
-  };
-
-  const fallback: Record<ReasoningSegmentKind, string> = {
-    thought: '正在整理思路。',
-    'tool-call': '正在调用工具。',
-    'tool-result': '工具已返回。',
-    structured: '正在处理过程事件。',
-  };
-
-  return {
-    id: `${kind}-${index}`,
-    kind,
-    title: titles[kind],
-    content: cleanReasoningSegmentContent(kind, content) || fallback[kind],
-  };
-}
-
-function cleanReasoningSegmentContent(kind: ReasoningSegmentKind, content: string) {
-  if (kind === 'tool-call') {
-    return '正在调用工具。';
-  }
-
-  const cleaned = content
-    .replace(/\[(?:工具调用已过滤|工具返回已过滤|结构化过程事件已过滤)\]/g, '')
-    .replace(/\[(?:JWT|密钥|长密钥或哈希|长密钥或编码内容)已过滤\]/g, '******')
-    .replace(/\[已过滤\]/g, '******')
-    .split(/\r?\n/)
-    .filter((line) => !/(已隐藏|已过滤|已脱敏|脱敏|过滤内容|filtered fields|hidden|redacted)/i.test(line))
-    .join('\n')
-    .trim();
-
-  return cleaned;
-}
-
-function canDownloadFile(value: string) {
-  const nextValue = value.trim();
-
-  if (!nextValue || nextValue.startsWith('//')) {
-    return false;
-  }
-
-  if (!/^[a-zA-Z][a-zA-Z\d+.-]*:/.test(nextValue)) {
-    return true;
-  }
-
-  try {
-    const protocol = new URL(nextValue).protocol.toLowerCase();
-    if (protocol === 'blob:' || protocol === 'http:' || protocol === 'https:') {
-      return true;
-    }
-  } catch {
-    return false;
-  }
-
-  return false;
-}
-
-function formatRoleLabel(role: ThreadMessage['role']) {
-  switch (role) {
-    case 'user':
-      return '用户';
-    case 'assistant':
-      return '助手';
-    case 'system':
-      return '系统';
-    default:
-      return role;
-  }
-}
-
-function formatSpeakerName(message: ThreadMessage, multiAgentMode: boolean) {
-  if (!multiAgentMode) {
-    return formatRoleLabel(message.role);
-  }
-
-  return message.agentName ?? formatRoleLabel(message.role);
-}
-
-function formatSpeakerMeta(message: ThreadMessage, multiAgentMode: boolean) {
-  if (!multiAgentMode || !message.agentName) {
-    return null;
-  }
-
-  return formatRoleLabel(message.role);
-}
-
-function formatAgentAccentClass(message: ThreadMessage, multiAgentMode: boolean) {
-  if (!multiAgentMode || !message.agentAccent) {
-    return null;
-  }
-
-  return `agent-${message.agentAccent}`;
-}
+const viewModel = computed(() => createMessageViewModel(props.message, {
+  multiAgentMode: Boolean(props.multiAgentMode),
+}));
+const executionExpanded = ref(false);
+const expandedToolResultIds = ref(new Set<string>());
+const executionToggleLabel = computed(() => (
+  executionExpanded.value
+    ? 'Hide execution steps'
+    : `Show execution steps (${viewModel.value.hiddenExecutionBlockCount})`
+));
 
 function handleAction(action: MessageAction) {
   emit('action', action);
 }
 
-function formatMediaAlt(media: MessageMedia) {
-  const fallbacks: Record<string, string> = {
-    image: '对话图片',
-    video: '对话视频',
-    html: '网页预览',
-    app: '应用预览',
-    file: '文件',
-  };
-  return media.alt ?? media.title ?? fallbacks[media.kind] ?? media.kind;
+function toggleExecutionBlocks() {
+  executionExpanded.value = !executionExpanded.value;
+}
+
+function isToolResultExpanded(block: MessageBlockView) {
+  return expandedToolResultIds.value.has(`${viewModel.value.id}:${block.id}`);
+}
+
+function toggleToolResult(block: MessageBlockView) {
+  if (!block.hasResultBlocks) {
+    return;
+  }
+
+  const key = `${viewModel.value.id}:${block.id}`;
+  const nextIds = new Set(expandedToolResultIds.value);
+  if (nextIds.has(key)) {
+    nextIds.delete(key);
+  } else {
+    nextIds.add(key);
+  }
+  expandedToolResultIds.value = nextIds;
 }
 
 function openFullscreen(event: MouseEvent) {
@@ -210,16 +64,8 @@ function openFullscreen(event: MouseEvent) {
   req?.call(iframe);
 }
 
-function formatFileSize(file: MessageFileAttachment) {
-  return formatMessageFileSize(file.sizeBytes);
-}
-
-function formatFileType(file: MessageFileAttachment) {
-  return formatMessageFileType(file.mimeType);
-}
-
-async function handleFileDownload(file: MessageFileAttachment) {
-  if (!canDownloadFile(file.url)) {
+async function handleFileDownload(file: MessageFileAttachmentView) {
+  if (!file.canDownload) {
     return;
   }
 
@@ -229,152 +75,247 @@ async function handleFileDownload(file: MessageFileAttachment) {
     console.error(error);
   }
 }
+
 </script>
 
 <template>
-  <article class="message-card" :class="[props.message.role, formatAgentAccentClass(props.message, Boolean(props.multiAgentMode))]">
-    <div class="message-topline" :class="{ compact: !showSpeakerIdentity }">
-      <div v-if="showSpeakerIdentity" class="speaker-group">
-        <strong>{{ formatSpeakerName(props.message, Boolean(props.multiAgentMode)) }}</strong>
-        <span v-if="formatSpeakerMeta(props.message, Boolean(props.multiAgentMode))" class="speaker-meta">
-          {{ formatSpeakerMeta(props.message, Boolean(props.multiAgentMode)) }}
+  <article class="message-card" :class="[viewModel.role, viewModel.accentClass]">
+    <div class="message-topline" :class="{ compact: !viewModel.showSpeakerIdentity }">
+      <div v-if="viewModel.showSpeakerIdentity" class="speaker-group">
+        <strong>{{ viewModel.speakerName }}</strong>
+        <span v-if="viewModel.speakerMeta" class="speaker-meta">
+          {{ viewModel.speakerMeta }}
+        </span>
+        <span v-if="viewModel.runtimeMetaLabel" class="speaker-meta runtime">
+          {{ viewModel.runtimeMetaLabel }}
         </span>
       </div>
-      <span class="message-timestamp">{{ props.message.createdAt }}</span>
+      <span class="message-timestamp">{{ viewModel.createdAt }}</span>
     </div>
 
-    <details v-if="visibleReasoning" class="reasoning-block">
-      <summary>思考过程</summary>
-      <div class="reasoning-segments">
-        <section
-          v-for="segment in reasoningSegments"
-          :key="segment.id"
-          class="reasoning-segment"
-          :class="segment.kind"
+    <div class="message-block-list">
+      <div v-if="viewModel.hasHiddenExecutionBlocks" class="execution-fold">
+        <button
+          type="button"
+          class="execution-toggle"
+          :aria-expanded="executionExpanded"
+          @click="toggleExecutionBlocks"
         >
-          <div class="reasoning-segment-label">{{ segment.title }}</div>
-          <MarkdownContent :source="segment.content" />
-        </section>
-      </div>
-    </details>
+          <span>{{ executionToggleLabel }}</span>
+        </button>
 
-    <MarkdownContent v-if="props.message.kind === 'markdown'" :source="presentedMessage.content" />
-    <p v-else class="status-copy">{{ presentedMessage.content }}</p>
-
-    <div v-if="visibleMedia.length || visibleFiles.length" class="message-attachment-list" aria-label="附件内容">
-      <figure
-        v-for="media in visibleMedia"
-        :key="media.id"
-        class="message-media-card"
-        :class="media.kind"
-      >
-        <img
-          v-if="media.kind === 'image'"
-          class="message-image"
-          :src="media.url"
-          :alt="formatMediaAlt(media)"
-          loading="lazy"
-        />
-
-        <video
-          v-else-if="media.kind === 'video'"
-          class="message-video"
-          :src="media.url"
-          :poster="media.posterUrl"
-          :aria-label="formatMediaAlt(media)"
-          controls
-          playsinline
-          preload="metadata"
-        >
-          当前浏览器不支持视频播放。
-        </video>
-
-        <audio
-          v-else-if="media.kind === 'audio'"
-          class="message-audio"
-          :src="media.url"
-          :aria-label="formatMediaAlt(media)"
-          controls
-          preload="metadata"
-        >
-          当前浏览器不支持音频播放。
-        </audio>
-
-        <template v-else-if="media.kind === 'html'">
-          <iframe
-            class="message-iframe"
-            :src="media.url"
-            :title="formatMediaAlt(media)"
-            sandbox="allow-scripts"
-            loading="lazy"
-          />
-        </template>
-
-        <template v-else-if="media.kind === 'app'">
-          <div class="message-app-wrapper">
-            <iframe
-              class="message-iframe"
-              :src="media.url"
-              :title="formatMediaAlt(media)"
-              sandbox="allow-scripts allow-same-origin allow-forms"
-              loading="lazy"
-            />
-            <button
-              type="button"
-              class="app-fullscreen-btn"
-              :aria-label="`全屏显示 ${media.title ?? '应用'}`"
-              @click="openFullscreen($event)"
-            >全屏</button>
-          </div>
-        </template>
-
-        <template v-else-if="media.kind === 'file'">
-          <a
-            class="message-file-media"
-            :href="media.url"
-            :download="media.title ?? true"
-            :aria-label="`下载 ${media.title ?? '文件'}`"
+        <div v-if="executionExpanded" class="execution-block-list">
+          <section
+            v-for="block in viewModel.executionBlocks"
+            :key="`execution-${block.id}`"
+            class="message-timeline-block"
+            :class="[block.type, { error: block.isError }]"
           >
-            <span class="file-icon" aria-hidden="true">FILE</span>
-            <span class="file-copy">
-              <strong>{{ media.title ?? '生成文件' }}</strong>
-              <small>点击下载</small>
-            </span>
-          </a>
-        </template>
-      </figure>
+            <div
+              v-if="block.type === 'tool_call'"
+              class="tool-call-header"
+            >
+              <button
+                v-if="block.hasResultBlocks"
+                type="button"
+                class="tool-result-toggle"
+                :aria-expanded="isToolResultExpanded(block)"
+                @click="toggleToolResult(block)"
+              >
+                {{ isToolResultExpanded(block) ? 'Hide result' : 'Show result' }}
+              </button>
+              <span class="tool-call-title">{{ block.title }}</span>
+              <small v-if="block.status">{{ block.status }}</small>
+            </div>
+            <div v-else class="timeline-block-label">
+              <span>{{ block.title }}</span>
+              <small v-if="block.status">{{ block.status }}</small>
+            </div>
 
-      <button
-        v-for="file in visibleFiles"
-        type="button"
-        :key="file.id"
-        class="message-file-card"
-        :class="{ disabled: !file.canDownload }"
-        :disabled="!file.canDownload"
-        @click="handleFileDownload(file)"
-      >
-        <span class="file-icon" aria-hidden="true">
-          FILE
-        </span>
-        <span class="file-copy">
-          <strong>{{ file.name }}</strong>
-          <small>{{ formatFileType(file) }} · {{ formatFileSize(file) }}</small>
-        </span>
-        <span class="file-action">{{ file.canDownload ? '下载' : '不可下载' }}</span>
-      </button>
+            <MarkdownContent v-if="block.text" :source="block.text" />
+
+            <div
+              v-if="block.type === 'tool_call' && block.hasResultBlocks && isToolResultExpanded(block)"
+              class="tool-result-nested"
+            >
+              <section
+                v-for="resultBlock in block.resultBlocks ?? []"
+                :key="`result-${resultBlock.id}`"
+                class="message-timeline-block tool_result"
+                :class="{ error: resultBlock.isError }"
+              >
+                <div class="timeline-block-label">
+                  <span>{{ resultBlock.title }}</span>
+                  <small v-if="resultBlock.status">{{ resultBlock.status }}</small>
+                </div>
+                <MarkdownContent v-if="resultBlock.text" :source="resultBlock.text" />
+              </section>
+            </div>
+          </section>
+
+          <details
+            v-if="viewModel.standaloneToolResultBlocks.length"
+            class="standalone-tool-results"
+          >
+            <summary>Unmatched tool results ({{ viewModel.standaloneToolResultBlocks.length }})</summary>
+            <section
+              v-for="block in viewModel.standaloneToolResultBlocks"
+              :key="`standalone-result-${block.id}`"
+              class="message-timeline-block tool_result"
+              :class="{ error: block.isError }"
+            >
+              <div class="timeline-block-label">
+                <span>{{ block.title }}</span>
+                <small v-if="block.status">{{ block.status }}</small>
+              </div>
+              <MarkdownContent v-if="block.text" :source="block.text" />
+            </section>
+          </details>
+        </div>
+      </div>
+
+      <template v-for="block in viewModel.finalBlocks" :key="block.id">
+        <MarkdownContent
+          v-if="block.type === 'text' && viewModel.kind === 'markdown'"
+          :source="block.text"
+        />
+        <p v-else-if="block.type === 'text'" class="status-copy">{{ block.text }}</p>
+
+        <section
+          v-else
+          class="message-timeline-block"
+          :class="[block.type, { error: block.isError }]"
+        >
+          <div class="timeline-block-label">
+            <span>{{ block.title }}</span>
+            <small v-if="block.status">{{ block.status }}</small>
+          </div>
+          <MarkdownContent v-if="block.text" :source="block.text" />
+
+          <div v-if="block.media.length || block.files.length" class="message-attachment-list" aria-label="附件内容">
+            <figure
+              v-for="media in block.media"
+              :key="media.id"
+              class="message-media-card"
+              :class="media.kind"
+            >
+              <img
+                v-if="media.kind === 'image'"
+                class="message-image"
+                :src="media.url"
+                :alt="media.altText"
+                loading="lazy"
+              />
+
+              <video
+                v-else-if="media.kind === 'video'"
+                class="message-video"
+                :src="media.url"
+                :poster="media.posterUrl"
+                :aria-label="media.altText"
+                controls
+                playsinline
+                preload="metadata"
+              >
+                当前浏览器不支持视频播放。
+              </video>
+
+              <audio
+                v-else-if="media.kind === 'audio'"
+                class="message-audio"
+                :src="media.url"
+                :aria-label="media.altText"
+                controls
+                preload="metadata"
+              >
+                当前浏览器不支持音频播放。
+              </audio>
+
+              <template v-else-if="media.kind === 'html'">
+                <iframe
+                  class="message-iframe"
+                  :src="media.url"
+                  :title="media.altText"
+                  sandbox="allow-scripts"
+                  loading="lazy"
+                />
+              </template>
+
+              <template v-else-if="media.kind === 'app'">
+                <div class="message-app-wrapper">
+                  <iframe
+                    class="message-iframe"
+                    :src="media.url"
+                    :title="media.altText"
+                    sandbox="allow-scripts allow-same-origin allow-forms"
+                    loading="lazy"
+                  />
+                  <button
+                    type="button"
+                    class="app-fullscreen-btn"
+                    :aria-label="`全屏显示 ${media.title ?? '应用'}`"
+                    @click="openFullscreen($event)"
+                  >全屏</button>
+                </div>
+              </template>
+
+              <template v-else-if="media.kind === 'file'">
+                <a
+                  class="message-file-media"
+                  :href="media.url"
+                  :download="media.title ?? true"
+                  :aria-label="`下载 ${media.title ?? '文件'}`"
+                >
+                  <span class="file-icon" aria-hidden="true">FILE</span>
+                  <span class="file-copy">
+                    <strong>{{ media.title ?? '生成文件' }}</strong>
+                    <small>点击下载</small>
+                  </span>
+                </a>
+              </template>
+            </figure>
+
+            <button
+              v-for="file in block.files"
+              type="button"
+              :key="file.id"
+              class="message-file-card"
+              :class="{ disabled: !file.canDownload }"
+              :disabled="!file.canDownload"
+              @click="handleFileDownload(file)"
+            >
+              <span class="file-icon" aria-hidden="true">
+                FILE
+              </span>
+              <span class="file-copy">
+                <strong>{{ file.name }}</strong>
+                <small>{{ file.displayType }} · {{ file.displaySize }}</small>
+              </span>
+              <span class="file-action">{{ file.canDownload ? '下载' : '不可下载' }}</span>
+            </button>
+          </div>
+
+          <div v-if="block.actions.length" class="message-actions">
+            <button
+              v-for="action in block.actions"
+              :key="action.id"
+              type="button"
+              class="message-action"
+              @click="handleAction(action)"
+            >
+              {{ action.label }}
+            </button>
+          </div>
+        </section>
+      </template>
     </div>
 
-    <div v-if="visibleActions.length" class="message-actions">
-      <button
-        v-for="action in visibleActions"
-        :key="action.id"
-        type="button"
-        class="message-action"
-        @click="handleAction(action)"
-      >
-        {{ action.label }}
-      </button>
-    </div>
+    <p
+      v-if="!viewModel.finalBlocks.length && !viewModel.hasHiddenExecutionBlocks"
+      class="status-copy"
+    >
+      {{ viewModel.content }}
+    </p>
   </article>
 </template>
 
@@ -471,82 +412,155 @@ async function handleFileDownload(file: MessageFileAttachment) {
   white-space: nowrap;
 }
 
-.reasoning-block {
-  margin-bottom: 9px;
-  border: 1px dashed var(--color-border);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--color-surface-strong) 88%, white);
+.message-block-list {
+  display: grid;
+  gap: 10px;
 }
 
-.reasoning-block:not([open]) {
-  display: inline-flex;
-  border-color: transparent;
-  background: color-mix(in srgb, var(--color-bg-subtle) 70%, white);
-}
-
-.reasoning-block summary {
-  cursor: pointer;
-  list-style: none;
-  padding: 9px 11px;
-  color: var(--color-text);
-  font-size: 0.78rem;
-  font-weight: 700;
-}
-
-.reasoning-block:not([open]) summary {
-  padding: 4px 8px;
-}
-
-.reasoning-block summary::-webkit-details-marker {
-  display: none;
-}
-
-.reasoning-segments {
+.execution-fold {
   display: grid;
   gap: 8px;
-  padding: 0 12px 12px;
 }
 
-.reasoning-segment {
-  border: 1px solid color-mix(in srgb, var(--color-border) 84%, transparent);
-  border-left-width: 3px;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--color-surface-strong) 92%, white);
-  overflow: hidden;
+.execution-toggle {
+  appearance: none;
+  justify-self: start;
+  padding: 0.34rem 0.62rem;
+  border: 1px solid color-mix(in srgb, var(--color-border) 88%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-bg-subtle) 78%, var(--color-surface-strong));
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 800;
 }
 
-.reasoning-segment.thought {
-  border-left-color: color-mix(in srgb, var(--color-text-muted) 72%, var(--color-border));
+.execution-toggle:hover {
+  border-color: color-mix(in srgb, var(--color-primary) 28%, var(--color-border));
+  color: var(--color-text);
 }
 
-.reasoning-segment.tool-call {
-  border-left-color: color-mix(in srgb, #b77808 72%, var(--color-border));
-  background: color-mix(in srgb, #fff7e6 52%, var(--color-surface-strong));
+.execution-block-list {
+  display: grid;
+  gap: 8px;
+  padding-left: 10px;
+  border-left: 1px dashed color-mix(in srgb, var(--color-border) 88%, transparent);
 }
 
-.reasoning-segment.tool-result {
-  border-left-color: color-mix(in srgb, #16846f 72%, var(--color-border));
-  background: color-mix(in srgb, #edf9f5 56%, var(--color-surface-strong));
-}
-
-.reasoning-segment.structured {
-  border-left-color: color-mix(in srgb, #687083 70%, var(--color-border));
-  background: color-mix(in srgb, var(--color-bg-subtle) 70%, var(--color-surface-strong));
-}
-
-.reasoning-segment-label {
+.tool-call-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 7px 10px 0;
   color: var(--color-text-muted);
   font-size: 0.72rem;
   font-weight: 800;
-  letter-spacing: 0;
 }
 
-.reasoning-segment :deep(.markdown-body) {
+.tool-result-toggle {
+  appearance: none;
+  flex: 0 0 auto;
+  padding: 0.18rem 0.46rem;
+  border: 1px solid color-mix(in srgb, var(--color-border) 78%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-surface-strong) 76%, #fff7e6);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 900;
+}
+
+.tool-result-toggle:hover {
+  border-color: color-mix(in srgb, #b77808 36%, var(--color-border));
+  color: var(--color-text);
+}
+
+.tool-call-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-call-header small {
+  margin-left: auto;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.tool-result-nested {
+  display: grid;
+  gap: 7px;
+  margin: 0 8px 8px 14px;
+}
+
+.standalone-tool-results {
+  display: grid;
+  gap: 7px;
+  color: var(--color-text-muted);
+  font-size: 0.82rem;
+}
+
+.standalone-tool-results summary {
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.message-timeline-block {
+  border: 1px solid color-mix(in srgb, var(--color-border) 84%, transparent);
+  border-left-width: 3px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-surface-strong) 92%, white);
+  overflow: hidden;
+}
+
+.message-timeline-block.status,
+.message-timeline-block.skill {
+  border-left-color: color-mix(in srgb, #687083 70%, var(--color-border));
+  background: color-mix(in srgb, var(--color-bg-subtle) 70%, var(--color-surface-strong));
+}
+
+.message-timeline-block.tool_call {
+  border-left-color: color-mix(in srgb, #b77808 72%, var(--color-border));
+  background: color-mix(in srgb, #fff7e6 52%, var(--color-surface-strong));
+}
+
+.message-timeline-block.tool_result {
+  border-left-color: color-mix(in srgb, #16846f 72%, var(--color-border));
+  background: color-mix(in srgb, #edf9f5 56%, var(--color-surface-strong));
+}
+
+.message-timeline-block.artifact {
+  border-left-color: color-mix(in srgb, var(--color-primary) 72%, var(--color-border));
+}
+
+.message-timeline-block.error {
+  border-left-color: color-mix(in srgb, var(--color-error, #b3261e) 72%, var(--color-border));
+  background: color-mix(in srgb, #fff1f0 54%, var(--color-surface-strong));
+}
+
+.timeline-block-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 10px 0;
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.timeline-block-label small {
+  font-weight: 700;
+}
+
+.message-timeline-block :deep(.markdown-body) {
   padding: 5px 10px 9px;
 }
 
-.reasoning-segment.tool-result :deep(.markdown-body) {
+.message-timeline-block.tool_result :deep(.markdown-body) {
   max-height: 260px;
   overflow: auto;
 }

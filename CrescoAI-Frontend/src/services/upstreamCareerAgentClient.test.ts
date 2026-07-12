@@ -150,11 +150,10 @@ describe('createUpstreamCareerAgentClient', () => {
     });
   });
 
-  it('creates a thread with the configured user id', async () => {
+  it('creates a thread without trusting a client-supplied user id', async () => {
     const request = vi.fn(async () => ({
       data: {
         id: 2,
-        userId: 1,
         title: '新对话',
         preview: '',
         updatedAt: 1776644879000,
@@ -173,9 +172,11 @@ describe('createUpstreamCareerAgentClient', () => {
       url: '/api/career-agent/threads',
       method: 'POST',
       data: expect.objectContaining({
-        userId: 1,
         title: '新对话',
       }),
+    }));
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.not.objectContaining({ userId: expect.anything() }),
     }));
     expect(thread.id).toBe('2');
   });

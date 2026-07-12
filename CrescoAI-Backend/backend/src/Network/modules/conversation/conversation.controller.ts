@@ -30,6 +30,9 @@ export class ConversationController {
 
   @Post()
   create(@Req() req: Request, @Body() dto: CreateConversationDto) {
+    if (!req.userId) {
+      throw new ForbiddenException('Missing user identity');
+    }
     return this.conversationService.createConversation(dto, req.userId);
   }
 

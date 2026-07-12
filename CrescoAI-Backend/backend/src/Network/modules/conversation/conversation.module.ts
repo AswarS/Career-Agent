@@ -10,10 +10,11 @@ import { SkillModule } from '../skill/skill.module';
 import { AuthModule } from '../auth/auth.module';
 import { ArtifactModule } from '../artifact/artifact.module';
 import { ProfileModule } from '../profile/profile.module';
+import { ConversationTranscriptProjectionService } from './transcript-projection.service';
 
 @Module({
   imports: [TypeOrmModule.forFeature([ConversationEntity, MessageEntity, ResourceEntity]), AgentModule, SkillModule, AuthModule, ArtifactModule, ProfileModule],
   controllers: [ConversationController],
-  providers: [ConversationService],
+  providers: [ConversationService, ConversationTranscriptProjectionService],
 })
 export class ConversationModule {}

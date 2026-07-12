@@ -8,6 +8,9 @@ export class ApiSettingsEntity {
   @Column({ type: 'integer', unique: true })
   userId!: number;
 
+  @Column({ type: 'text', default: 'anthropic' })
+  provider!: string;
+
   @Column({ type: 'text', nullable: true })
   apiKey?: string;
 

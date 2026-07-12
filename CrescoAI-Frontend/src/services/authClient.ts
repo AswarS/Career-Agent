@@ -53,7 +53,10 @@ function normalizeAuthSession(input: UpstreamAuthSession, fallbackIdentifier = '
   const email = normalizeOptionalString(user.email);
   const username = normalizeOptionalString(user.username);
   const fallbackName = fallbackIdentifier.includes('@') ? fallbackIdentifier.split('@')[0] : fallbackIdentifier;
-  const id = String(user.userId ?? user.user_id ?? user.id ?? username ?? email ?? '1');
+  const id = String(user.userId ?? user.user_id ?? user.id ?? fallbackIdentifier).trim();
+  if (!id) {
+    throw new Error('Authentication response is missing the user identity.');
+  }
   const displayName = String(user.displayName ?? user.display_name ?? user.name ?? username ?? fallbackName ?? '用户').trim();
 
   return {
@@ -226,7 +229,7 @@ function createUpstreamAuthClient(config: RuntimeConfig, httpClient?: AxiosInsta
       try {
         const storedSession = readStoredAuthSession();
         const response = await client.get<UpstreamAuthSession>(CAREER_AGENT_API_ROUTES.authSession());
-        const normalizedSession = normalizeAuthSession(response.data);
+        const normalizedSession = normalizeAuthSession(response.data, storedSession?.user.id);
         return mergeAuthSessionWithStored(normalizedSession, storedSession);
       } catch (error) {
         if (axios.isAxiosError(error) && (error.response?.status === 401 || error.response?.status === 404)) {
@@ -248,7 +251,10 @@ function createUpstreamAuthClient(config: RuntimeConfig, httpClient?: AxiosInsta
         const response = await client.post<UpstreamAuthSession>(CAREER_AGENT_API_ROUTES.authRefresh(), {
           refresh_token: refreshToken,
         });
-        return mergeAuthSessionWithStored(normalizeAuthSession(response.data), storedSession);
+        return mergeAuthSessionWithStored(
+          normalizeAuthSession(response.data, storedSession.user.id),
+          storedSession,
+        );
       } catch (error) {
         if (axios.isAxiosError(error) && error.response?.status === 401) {
           return null;

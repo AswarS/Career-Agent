@@ -122,21 +122,11 @@ export const useAuthStore = defineStore('auth', {
       this.errorMessage = null;
 
       try {
-        if (runtimeConfig.skipAuth) {
-          const localSession = await authClient.login({ identifier: runtimeConfig.userId, password: '' });
-          this.setSession(localSession);
-          this.initialized = true;
-          this.status = 'ready';
-          return;
-        }
-
         await authClient.logout();
       } finally {
-        if (!runtimeConfig.skipAuth) {
-          this.setSession(null);
-          this.initialized = true;
-          this.status = 'ready';
-        }
+        this.setSession(null);
+        this.initialized = true;
+        this.status = 'ready';
       }
     },
   },

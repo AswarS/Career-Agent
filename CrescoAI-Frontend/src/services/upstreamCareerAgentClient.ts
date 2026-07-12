@@ -167,11 +167,6 @@ function isOptionalCapabilityError(error: unknown) {
   );
 }
 
-function normalizeUserIdForServer(value: string) {
-  const numericValue = Number(value);
-  return Number.isFinite(numericValue) ? numericValue : value;
-}
-
 function resolveUpstreamRequestUrl(baseUrl: string, path: string) {
   if (/^https?:\/\//i.test(path)) {
     return path;
@@ -317,7 +312,6 @@ export function createUpstreamCareerAgentClient(
         {
           method: 'POST',
           data: {
-            userId: normalizeUserIdForServer(getEffectiveUserId()),
             title: input?.title ?? '新对话',
             preview: input?.preview ?? '',
             updatedAt: now,

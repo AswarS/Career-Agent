@@ -57,13 +57,15 @@ export class SettingsService {
   async upsertSettings(userId: number, dto: UpdateApiSettingsDto) {
     const apiKey = dto.api_key ?? dto.apiKey;
     const baseUrl = dto.base_url ?? dto.baseUrl;
+    const provider = this.normalizeProvider(dto.provider);
 
     let existing = await this.settingsRepo.findOne({ where: { userId } });
 
     if (!existing) {
-      existing = this.settingsRepo.create({ userId });
+      existing = this.settingsRepo.create({ userId, provider: provider ?? 'anthropic' });
     }
 
+    if (provider !== undefined) existing.provider = provider;
     if (apiKey !== undefined) existing.apiKey = apiKey;
     if (baseUrl !== undefined) existing.baseUrl = baseUrl;
     if (dto.model !== undefined) existing.model = dto.model;
@@ -141,20 +143,25 @@ export class SettingsService {
     const apiKey = (dto.api_key ?? dto.apiKey ?? saved?.apiKey ?? '').trim();
     const baseUrl = this.normalizeBaseUrl(dto.base_url ?? dto.baseUrl ?? saved?.baseUrl ?? defaultAnthropicBaseUrl);
     const model = (dto.model ?? saved?.model ?? defaultAnthropicModel).trim();
+    const provider = this.normalizeProvider(dto.provider ?? saved?.provider) ?? 'anthropic';
 
     if (!apiKey) {
       throw new BadRequestException({ code: 'API_KEY_REQUIRED', message: 'api_key is required' });
     }
 
-    const endpoint = `${baseUrl}/v1/messages`;
+    const openAICompatible = provider === 'openai' || provider === 'openrouter';
+    const endpoint = openAICompatible
+      ? this.openAIChatCompletionsUrl(baseUrl)
+      : `${baseUrl}/v1/messages`;
 
     try {
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
+          ...(openAICompatible
+            ? { authorization: `Bearer ${apiKey}` }
+            : { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' }),
         },
         body: JSON.stringify({
           model,
@@ -168,7 +175,7 @@ export class SettingsService {
         const body = await response.text().catch(() => '');
         return {
           ok: false,
-          provider: 'anthropic',
+          provider,
           model,
           base_url: baseUrl,
           baseUrl,
@@ -179,7 +186,7 @@ export class SettingsService {
 
       return {
         ok: true,
-        provider: 'anthropic',
+        provider,
         model,
         base_url: baseUrl,
         baseUrl,
@@ -189,7 +196,7 @@ export class SettingsService {
     } catch (error) {
       return {
         ok: false,
-        provider: 'anthropic',
+        provider,
         model,
         base_url: baseUrl,
         baseUrl,
@@ -203,7 +210,7 @@ export class SettingsService {
     return {
       id: String(setting.id),
       userId: String(setting.userId),
-      provider: 'anthropic',
+      provider: setting.provider ?? 'anthropic',
       model: setting.model ?? defaultAnthropicModel,
       base_url: setting.baseUrl ?? defaultAnthropicBaseUrl,
       baseUrl: setting.baseUrl ?? defaultAnthropicBaseUrl,
@@ -252,6 +259,19 @@ export class SettingsService {
 
   private normalizeBaseUrl(url: string) {
     return url.trim().replace(/\/+$/, '');
+  }
+
+  private normalizeProvider(provider: string | undefined): string | undefined {
+    if (provider === undefined) return undefined;
+    const normalized = provider.trim().toLowerCase().replace(/[_\s]+/g, '-');
+    if (normalized === 'openai-compatible') return 'openai';
+    return normalized || 'anthropic';
+  }
+
+  private openAIChatCompletionsUrl(baseUrl: string): string {
+    if (/\/chat\/completions$/i.test(baseUrl)) return baseUrl;
+    if (/\/v1$/i.test(baseUrl)) return `${baseUrl}/chat/completions`;
+    return `${baseUrl}/v1/chat/completions`;
   }
 
   private isUniqueConstraintError(error: unknown) {

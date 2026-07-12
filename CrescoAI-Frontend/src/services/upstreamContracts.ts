@@ -5,6 +5,8 @@ import type {
   ArtifactStatus,
   ArtifactViewMode,
   MessageAction,
+  MessageBlock,
+  MessageBlockType,
   MessageMedia,
   MessageMediaKind,
   MessageFileAttachment,
@@ -43,6 +45,11 @@ export interface UpstreamThreadSummary {
 
 export interface UpstreamThreadMessage {
   id: string | number;
+  uuid?: string | number | null;
+  parent_uuid?: string | number | null;
+  parentUuid?: string | number | null;
+  session_id?: string | number | null;
+  sessionId?: string | number | null;
   conversation_id?: string | number;
   conversationId?: string | number;
   thread_id?: string | number;
@@ -61,6 +68,12 @@ export interface UpstreamThreadMessage {
   actions?: UpstreamMessageAction[] | null;
   media?: UpstreamMessageMedia[] | null;
   attachments?: UpstreamMessageMedia[] | null;
+  model?: string | null;
+  usage?: Record<string, unknown> | null;
+  stop_reason?: string | null;
+  stopReason?: string | null;
+  blocks?: unknown[] | null;
+  raw?: Record<string, unknown> | null;
   created_at?: string | number | Date;
   createdAt?: string | number | Date;
 }
@@ -90,6 +103,8 @@ export interface UpstreamMessageMedia {
   mimeType?: string | null;
   poster_url?: string | null;
   posterUrl?: string | null;
+  artifact_id?: string | null;
+  artifactId?: string | null;
   storage_path?: string | null;
   storagePath?: string | null;
   size_bytes?: number | string | null;
@@ -148,9 +163,20 @@ export interface UpstreamMessageStreamEvent {
   created_at?: string | number | Date | null;
   createdAt?: string | number | Date | null;
   delta?: string | null;
+  block_id?: string | number | null;
+  blockId?: string | number | null;
+  block_type?: string | null;
+  blockType?: string | null;
+  block?: unknown;
+  blocks?: unknown[] | null;
   reply?: string | null;
   reasoning?: string | null;
   think?: string | null;
+  model?: string | null;
+  usage?: Record<string, unknown> | null;
+  stop_reason?: string | null;
+  stopReason?: string | null;
+  raw?: Record<string, unknown> | null;
   accepted?: boolean | null;
   status?: string | null;
   actions?: UpstreamMessageAction[] | null;
@@ -334,6 +360,188 @@ function normalizeOptionalText(value: string | null | undefined): string | undef
   return nextValue || undefined;
 }
 
+function normalizeOptionalId(value: string | number | null | undefined): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  const nextValue = String(value).trim();
+  return nextValue || null;
+}
+
+function normalizeRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  return { ...(value as Record<string, unknown>) };
+}
+
+function normalizeMessageBlockType(value: unknown): MessageBlockType | null {
+  if (
+    value === 'text'
+    || value === 'status'
+    || value === 'tool_call'
+    || value === 'tool_result'
+    || value === 'skill'
+    || value === 'artifact'
+  ) {
+    return value;
+  }
+
+  if (value === 'tool-use' || value === 'tool_use' || value === 'server_tool_use' || value === 'mcp_tool_use') {
+    return 'tool_call';
+  }
+
+  if (value === 'tool-result' || value === 'tool_result') {
+    return 'tool_result';
+  }
+
+  if (value === 'thinking' || value === 'reasoning' || value === 'redacted_thinking') {
+    return 'status';
+  }
+
+  return null;
+}
+
+function normalizeBlockText(value: unknown): string | undefined {
+  if (typeof value === 'string') {
+    return value.trim() || undefined;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    const text = value
+      .map((item) => {
+        if (typeof item === 'string') {
+          return item;
+        }
+        if (!isUnknownRecord(item)) {
+          return '';
+        }
+        if (item.type === 'text' && typeof item.text === 'string') {
+          return item.text;
+        }
+        if (typeof item.content === 'string') {
+          return item.content;
+        }
+        return '';
+      })
+      .filter(Boolean)
+      .join('\n')
+      .trim();
+    return text || undefined;
+  }
+  return undefined;
+}
+
+function normalizeMessageBlock(input: unknown, index: number): MessageBlock | null {
+  if (!isUnknownRecord(input)) {
+    return null;
+  }
+
+  const rawType = input.type;
+  const type = normalizeMessageBlockType(rawType);
+  if (!type) {
+    return null;
+  }
+
+  const id = normalizeId(input.id as string | number | null | undefined, `${type}-${index}`);
+  const name = normalizeOptionalText(
+    typeof input.name === 'string'
+      ? input.name
+      : typeof input.toolName === 'string'
+        ? input.toolName
+        : typeof input.tool_name === 'string'
+          ? input.tool_name
+          : undefined,
+  ) ?? null;
+  const toolUseId = normalizeOptionalId(
+    (input.toolUseId as string | number | null | undefined)
+    ?? (input.tool_use_id as string | number | null | undefined),
+  );
+  const title = normalizeOptionalText(input.title as string | null | undefined)
+    ?? (type === 'tool_call'
+      ? name ? `工具调用 · ${name}` : '工具调用'
+      : type === 'tool_result'
+        ? name ? `工具返回 · ${name}` : '工具返回'
+        : type === 'skill'
+          ? name ? `Skill · /${name}` : 'Skill'
+          : type === 'artifact'
+            ? '生成内容'
+            : type === 'status'
+              ? '过程'
+              : undefined);
+  const text = normalizeBlockText(
+    input.text
+    ?? input.thinking
+    ?? input.reasoning
+    ?? input.content
+    ?? input.result
+    ?? input.output
+    ?? input.error,
+  );
+
+  const block: MessageBlock = {
+    id,
+    type,
+  };
+
+  if (text) {
+    block.text = text;
+  }
+  if (title) {
+    block.title = title;
+  }
+  if (name) {
+    block.name = name;
+  }
+  if (toolUseId) {
+    block.toolUseId = toolUseId;
+  }
+  if (typeof input.status === 'string') {
+    block.status = input.status;
+  }
+  if (input.isError === true || input.is_error === true) {
+    block.isError = true;
+  }
+
+  const media = normalizeMessageMedia(
+    Array.isArray(input.media) ? input.media as UpstreamMessageMedia[] : undefined,
+  );
+  const files = normalizeMessageFiles(
+    Array.isArray(input.files) ? input.files as UpstreamMessageMedia[] : undefined,
+    '',
+  );
+  const actions = normalizeMessageActions(
+    Array.isArray(input.actions) ? input.actions as UpstreamMessageAction[] : undefined,
+  );
+
+  if (media) {
+    block.media = media;
+  }
+  if (files) {
+    block.files = files;
+  }
+  if (actions) {
+    block.actions = actions;
+  }
+
+  return block;
+}
+
+function normalizeBlocks(value: unknown[] | null | undefined): MessageBlock[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const blocks = value
+    .map((item, index) => normalizeMessageBlock(item, index))
+    .filter((item): item is MessageBlock => Boolean(item));
+  return blocks.length ? blocks : undefined;
+}
+
 function normalizeMessageMedia(media: UpstreamMessageMedia[] | null | undefined): MessageMedia[] | undefined {
   const nextMedia: MessageMedia[] = [];
 
@@ -357,7 +565,7 @@ function normalizeMessageMedia(media: UpstreamMessageMedia[] | null | undefined)
       continue;
     }
 
-    nextMedia.push({
+    const nextItem: MessageMedia = {
       id: normalizeId(item.id, `media-${nextMedia.length + 1}`),
       kind,
       url,
@@ -366,7 +574,26 @@ function normalizeMessageMedia(media: UpstreamMessageMedia[] | null | undefined)
       alt: normalizeOptionalText(item.alt),
       mimeType: normalizeOptionalText(item.mimeType ?? item.mime_type),
       posterUrl: normalizeMediaUrl(item.posterUrl ?? item.poster_url) ?? undefined,
-    });
+    };
+    const artifactId = normalizeOptionalText(item.artifactId ?? item.artifact_id);
+    const downloadUrl = normalizeMediaUrl(item.downloadUrl ?? item.download_url) ?? undefined;
+    const storagePath = normalizeMediaUrl(item.storagePath ?? item.storage_path) ?? undefined;
+    const sizeBytes = normalizeSizeBytes(item.sizeBytes ?? item.size_bytes);
+
+    if (artifactId) {
+      nextItem.artifactId = artifactId;
+    }
+    if (downloadUrl) {
+      nextItem.downloadUrl = downloadUrl;
+    }
+    if (storagePath) {
+      nextItem.storagePath = storagePath;
+    }
+    if (sizeBytes !== undefined) {
+      nextItem.sizeBytes = sizeBytes;
+    }
+
+    nextMedia.push(nextItem);
   }
 
   return nextMedia.length ? nextMedia : undefined;
@@ -785,6 +1012,14 @@ export function normalizeThreadMessage(input: UpstreamThreadMessage, fallbackThr
   const rawAgentId = input.agentId ?? input.agent_id;
   const normalizedAgentId = normalizeId(rawAgentId, '');
   const mergedMedia = mergeMessageMediaSources(input);
+  const raw = normalizeRecord(input.raw);
+  const rawModel = typeof raw?.model === 'string' ? raw.model : undefined;
+  const rawUsage = normalizeRecord(raw?.usage);
+  const rawStopReason = typeof raw?.stop_reason === 'string'
+    ? raw.stop_reason
+    : typeof raw?.stopReason === 'string'
+      ? raw.stopReason
+      : undefined;
 
   return {
     id: normalizeId(input.id, 'message-unknown'),
@@ -802,6 +1037,14 @@ export function normalizeThreadMessage(input: UpstreamThreadMessage, fallbackThr
     actions: input.role === 'assistant' ? normalizeMessageActions(input.actions) : undefined,
     media: normalizeMessageMedia(mergedMedia),
     files: normalizeMessageFiles(mergedMedia, fallbackThreadId),
+    uuid: normalizeOptionalId(input.uuid),
+    parentUuid: normalizeOptionalId(input.parentUuid ?? input.parent_uuid),
+    sessionId: normalizeOptionalId(input.sessionId ?? input.session_id),
+    model: normalizeOptionalText(input.model ?? rawModel),
+    usage: normalizeRecord(input.usage) ?? rawUsage,
+    stopReason: normalizeOptionalText(input.stopReason ?? input.stop_reason ?? rawStopReason) ?? null,
+    blocks: normalizeBlocks(input.blocks),
+    raw,
     createdAt: normalizeTimestamp(input.createdAt ?? input.created_at),
   };
 }
@@ -869,6 +1112,37 @@ export function normalizeMessageStreamEvent(
     };
   }
 
+  if (type === 'message.block.delta') {
+    const blockId = normalizeId(input.blockId ?? input.block_id, '');
+    const blockType = normalizeMessageBlockType(input.blockType ?? input.block_type);
+    if (!messageId || !blockId || !blockType) {
+      return null;
+    }
+
+    const normalizedBlock = normalizeMessageBlock(input.block, 0);
+    return {
+      type,
+      messageId,
+      blockId,
+      blockType,
+      ...(typeof input.delta === 'string' ? { delta: input.delta } : {}),
+      ...(normalizedBlock ? { block: normalizedBlock } : {}),
+    };
+  }
+
+  if (type === 'message.block.completed') {
+    const normalizedBlock = normalizeMessageBlock(input.block, 0);
+    if (!messageId || !normalizedBlock) {
+      return null;
+    }
+
+    return {
+      type,
+      messageId,
+      block: normalizedBlock,
+    };
+  }
+
   if (type === 'artifact.created') {
     const mergedMedia = mergeMessageMediaSources({
       id: messageId || 'stream-artifact',
@@ -897,6 +1171,19 @@ export function normalizeMessageStreamEvent(
       media: input.media,
       attachments: input.attachments,
     });
+    const raw = normalizeRecord(input.raw);
+    const rawModel = typeof raw?.model === 'string' ? raw.model : undefined;
+    const rawUsage = normalizeRecord(raw?.usage);
+    const rawStopReason = typeof raw?.stop_reason === 'string'
+      ? raw.stop_reason
+      : typeof raw?.stopReason === 'string'
+        ? raw.stopReason
+        : undefined;
+    const reasoning = normalizeOptionalText(input.reasoning ?? input.think ?? undefined);
+    const model = normalizeOptionalText(input.model ?? rawModel);
+    const stopReason = normalizeOptionalText(input.stopReason ?? input.stop_reason ?? rawStopReason);
+    const usage = normalizeRecord(input.usage) ?? rawUsage;
+    const blocks = normalizeBlocks(input.blocks);
 
     return {
       type,
@@ -906,10 +1193,15 @@ export function normalizeMessageStreamEvent(
       messageId,
       assistantMessageId,
       reply: input.reply ?? '',
-      reasoning: input.reasoning ?? input.think ?? null,
+      ...(reasoning ? { reasoning } : {}),
       actions: normalizeMessageActions(input.actions),
       media: normalizeMessageMedia(mergedMedia),
       files: normalizeMessageFiles(mergedMedia, threadId),
+      ...(blocks ? { blocks } : {}),
+      ...(model ? { model } : {}),
+      ...(usage ? { usage } : {}),
+      ...(stopReason ? { stopReason } : {}),
+      ...(raw ? { raw } : {}),
     };
   }
 

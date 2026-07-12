@@ -18,13 +18,13 @@ import {
   sanitizeServerPhysicalPaths,
   sanitizeServerPhysicalPathsInValue,
 } from '../../utils/publicOutputSanitizer.js';
-import { fileURLToPath } from 'node:url';
 import { DataSource, Repository } from 'typeorm';
 import { AgentService } from '../agent/agent.service';
 import { SkillService } from '../skill/skill.service';
 import type { SkillHandlerResult, SkillProgressEvent } from '../skill/skill.registry';
 import { ArtifactService } from '../artifact/artifact.service';
 import { ProfileService } from '../profile/profile.service';
+import { ConversationTranscriptProjectionService } from './transcript-projection.service.js';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { SendMultimodalMessageDto } from './dto/send-multimodal-message.dto';
 import { ConversationEntity } from './entities/conversation.entity';
@@ -33,6 +33,11 @@ import { ResourceEntity } from '../resource/entities/resource.entity';
 import { ArtifactEntity } from '../artifact/entities/artifact.entity';
 import { GeneratedAppEntity } from '../generated-app/entities/generated-app.entity';
 import { execFileNoThrow } from '../../../utils/execFileNoThrow.js';
+import {
+  findNetworkTranscriptFile,
+  networkRootDir,
+  userDataRootDir,
+} from '../../utils/networkTranscriptStorage.js';
 
 declare global {
   namespace Express {
@@ -75,6 +80,23 @@ export interface MessageMedia {
   createdAt?: string;
 }
 
+export type MessageBlockType = 'text' | 'status' | 'tool_call' | 'tool_result' | 'skill' | 'artifact';
+
+export interface MessageBlock {
+  id: string;
+  type: MessageBlockType;
+  text?: string;
+  title?: string;
+  name?: string | null;
+  status?: string | null;
+  toolUseId?: string | null;
+  isError?: boolean;
+  media?: MessageMedia[];
+  files?: MessageMedia[];
+  actions?: MessageAction[];
+  raw?: Record<string, unknown> | null;
+}
+
 export interface ConversationMessage {
   id: string;
   thread_id: string;
@@ -95,6 +117,17 @@ export interface ConversationMessage {
   attachments?: MessageMedia[];
   client_request_id?: string;
   clientRequestId?: string;
+  uuid?: string;
+  parent_uuid?: string | null;
+  parentUuid?: string | null;
+  session_id?: string;
+  sessionId?: string;
+  model?: string;
+  usage?: Record<string, unknown>;
+  stop_reason?: string | null;
+  stopReason?: string | null;
+  blocks?: MessageBlock[];
+  raw?: Record<string, unknown>;
   created_at: string;
   createdAt: string;
 }
@@ -148,6 +181,23 @@ export type ConversationStreamEvent =
       delta: string;
     }
   | {
+      type: 'message.block.delta';
+      message_id: string;
+      messageId: string;
+      block_id: string;
+      blockId: string;
+      block_type: MessageBlockType;
+      blockType: MessageBlockType;
+      delta?: string;
+      block?: MessageBlock;
+    }
+  | {
+      type: 'message.block.completed';
+      message_id: string;
+      messageId: string;
+      block: MessageBlock;
+    }
+  | {
       type: 'artifact.created';
       message_id: string;
       messageId: string;
@@ -169,6 +219,7 @@ export type ConversationStreamEvent =
       think?: string;
       media?: MessageMedia[];
       actions?: MessageAction[];
+      blocks?: MessageBlock[];
       raw?: Record<string, unknown>;
     }
   | {
@@ -195,8 +246,6 @@ interface RuntimeJsonlEvent {
   };
 }
 
-const networkRootDir = fileURLToPath(new URL('../../', import.meta.url));
-const userDataRootDir = join(networkRootDir, 'user');
 const conversationFilesRootDir = join(networkRootDir, 'files');
 const maxUploadBytes = 20 * 1024 * 1024;
 const manifestFileName = '_manifest.json';
@@ -389,11 +438,12 @@ export class ConversationService {
     private readonly skillService: SkillService,
     private readonly artifactService: ArtifactService,
     private readonly profileService: ProfileService,
+    private readonly transcriptProjection: ConversationTranscriptProjectionService,
   ) {}
 
-  async createConversation(dto: CreateConversationDto, requestUserId?: number) {
+  async createConversation(dto: CreateConversationDto, requestUserId: number) {
     const now = new Date();
-    const userId = requestUserId ?? dto.userId ?? 1;
+    const userId = requestUserId;
     const agentConversation = await this.agentService.createConversation({
       userId: String(userId),
       title: dto.title,
@@ -644,6 +694,7 @@ export class ConversationService {
         assistant_message_id: assistantMessageId,
         assistantMessageId: assistantMessageId,
         reply,
+        blocks: this.createBlocksFromReplyAndArtifacts(reply),
         raw: { source: 'skill-list', skillCount: skills.length },
       };
     }
@@ -729,6 +780,11 @@ export class ConversationService {
         : undefined,
       media: persistedAssistantResources.media,
       actions: persistedAssistantResources.actions,
+      blocks: this.appendArtifactBlockToMessageBlocks(
+        (agentResponse.blocks ?? []) as MessageBlock[],
+        persistedAssistantResources.media,
+        persistedAssistantResources.actions,
+      ),
       raw: sanitizeServerPhysicalPathsInValue(agentResponse.raw),
     };
   }
@@ -824,6 +880,33 @@ export class ConversationService {
         continue;
       }
 
+      if (event.type === 'message.block.delta') {
+        yield {
+          type: 'message.block.delta',
+          message_id: event.messageId,
+          messageId: event.messageId,
+          block_id: event.blockId,
+          blockId: event.blockId,
+          block_type: event.blockType,
+          blockType: event.blockType,
+          delta: event.delta ? sanitizeServerPhysicalPaths(event.delta) : undefined,
+          block: event.block
+            ? sanitizeServerPhysicalPathsInValue(event.block) as MessageBlock
+            : undefined,
+        };
+        continue;
+      }
+
+      if (event.type === 'message.block.completed') {
+        yield {
+          type: 'message.block.completed',
+          message_id: event.messageId,
+          messageId: event.messageId,
+          block: sanitizeServerPhysicalPathsInValue(event.block) as MessageBlock,
+        };
+        continue;
+      }
+
       if (event.type === 'error') {
         yield {
           type: 'error',
@@ -900,6 +983,20 @@ export class ConversationService {
             : undefined,
           media: persistedAssistantResources.media.length ? persistedAssistantResources.media : undefined,
           actions: persistedAssistantResources.actions.length ? persistedAssistantResources.actions : undefined,
+          blocks: event.blocks
+            ? sanitizeServerPhysicalPathsInValue(
+              this.appendArtifactBlockToMessageBlocks(
+                event.blocks as MessageBlock[],
+                persistedAssistantResources.media,
+                persistedAssistantResources.actions,
+              ),
+            ) as MessageBlock[]
+            : this.createBlocksFromReplyAndArtifacts(
+              event.reply,
+              undefined,
+              persistedAssistantResources.media,
+              persistedAssistantResources.actions,
+            ),
           raw: sanitizeServerPhysicalPathsInValue(event.raw),
         };
       }
@@ -959,6 +1056,10 @@ export class ConversationService {
     await this.linkUploadedResourcesToMessage(conversation.userId, conversation.id, ids.userMessageId, attachments);
 
     yield this.createMessageCreatedStreamEvent(conversation.id, ids, now.toISOString());
+    yield this.createBlockCompletedStreamEvent(
+      ids.assistantMessageId,
+      this.createStatusMessageBlock('status-0', processTrace),
+    );
     yield* this.streamReasoningDeltaEvents(ids.assistantMessageId, `${processTrace}\n`);
 
     const created = await this.skillService.createCustomSkill(
@@ -981,7 +1082,7 @@ export class ConversationService {
       this.createAssistantContentBlocks(reply, processTrace),
       new Date(now.getTime() + 500),
     );
-    yield* this.streamReplyDeltaEvents(ids.assistantMessageId, reply);
+    yield* this.streamTextBlockDeltaEvents(ids.assistantMessageId, reply);
 
     await this.touchConversation(conversation, dto.content);
 
@@ -1005,6 +1106,10 @@ export class ConversationService {
     await this.linkUploadedResourcesToMessage(conversation.userId, conversation.id, ids.userMessageId, attachments);
 
     yield this.createMessageCreatedStreamEvent(conversation.id, ids, now.toISOString());
+    yield this.createBlockCompletedStreamEvent(
+      ids.assistantMessageId,
+      this.createStatusMessageBlock('status-0', processTrace),
+    );
     yield* this.streamReasoningDeltaEvents(ids.assistantMessageId, `${processTrace}\n`);
 
     const skills = await this.skillService.listSkills(conversation.userId);
@@ -1017,7 +1122,7 @@ export class ConversationService {
       this.createAssistantContentBlocks(reply, processTrace),
       new Date(now.getTime() + 500),
     );
-    yield* this.streamReplyDeltaEvents(ids.assistantMessageId, reply);
+    yield* this.streamTextBlockDeltaEvents(ids.assistantMessageId, reply);
 
     await this.touchConversation(conversation, dto.content);
 
@@ -1037,22 +1142,17 @@ export class ConversationService {
     const ids = this.createStreamMessageIds('skill');
     const now = new Date();
     const sessionFilePath = await this.findOrCreateRuntimeSessionFile(conversation.id, conversation.userId);
-    const routeTrace = this.formatSkillRouteTrace(route);
 
     await this.appendRuntimeUserMessage(sessionFilePath, conversation.id, ids.userMessageId, dto.content, now);
     await this.linkUploadedResourcesToMessage(conversation.userId, conversation.id, ids.userMessageId, attachments);
 
     yield this.createMessageCreatedStreamEvent(conversation.id, ids, now.toISOString());
-    yield* this.streamReasoningDeltaEvents(ids.assistantMessageId, `${routeTrace}\n`);
 
     const skillContext = await this.skillService.buildExecutionContext(
       conversation.userId,
       conversation.id,
     );
     const progressQueue = new SkillProgressQueue();
-    const streamedReasoningParts: string[] = [];
-    let streamedReply = false;
-    const streamReplyAsReasoning = route.skillName === 'develop-web-game';
     const skillOutcomePromise = this.skillService.invokeSkill(
       route.skillName,
       route.args,
@@ -1076,24 +1176,6 @@ export class ConversationService {
       if (!delta) {
         continue;
       }
-
-      if (progress.type === 'reasoning.delta' || streamReplyAsReasoning) {
-        streamedReasoningParts.push(delta);
-        yield {
-          type: 'reasoning.delta',
-          message_id: ids.assistantMessageId,
-          messageId: ids.assistantMessageId,
-          delta,
-        };
-      } else {
-        streamedReply = true;
-        yield {
-          type: 'reply.delta',
-          message_id: ids.assistantMessageId,
-          messageId: ids.assistantMessageId,
-          delta,
-        };
-      }
     }
 
     const skillOutcome = await skillOutcomePromise;
@@ -1105,11 +1187,7 @@ export class ConversationService {
     }
 
     const skillResult = skillOutcome.result;
-    const presentation = this.buildSkillReplyPresentation(
-      skillResult,
-      routeTrace,
-      streamedReasoningParts.join('\n'),
-    );
+    const presentation = this.buildSkillReplyPresentation(skillResult);
 
     await this.appendRuntimeAssistantMessage(
       sessionFilePath,
@@ -1137,16 +1215,18 @@ export class ConversationService {
       };
     }
 
-    if (!streamedReply || streamReplyAsReasoning) {
-      yield* this.streamReplyDeltaEvents(ids.assistantMessageId, presentation.visibleReply);
-    }
+    yield* this.streamTextBlockDeltaEvents(ids.assistantMessageId, presentation.visibleReply);
 
     await this.touchConversation(conversation, dto.content);
 
     yield this.createMessageCompletedStreamEvent(conversation.id, ids, presentation.visibleReply, {
-      reasoning: presentation.processTrace,
       media: persisted.media.length ? persisted.media : undefined,
       actions: persisted.actions.length ? persisted.actions : undefined,
+      blocks: this.appendArtifactBlockToMessageBlocks(
+        presentation.messageBlocks,
+        persisted.media,
+        persisted.actions,
+      ),
       raw: {
         source: route.source,
         skillName: route.skillName,
@@ -1253,9 +1333,17 @@ export class ConversationService {
       reasoning?: string;
       media?: MessageMedia[];
       actions?: MessageAction[];
+      blocks?: MessageBlock[];
       raw?: Record<string, unknown>;
     } = {},
   ): ConversationStreamEvent {
+    const blocks = options.blocks ?? this.createBlocksFromReplyAndArtifacts(
+      reply,
+      options.reasoning,
+      options.media,
+      options.actions,
+    );
+
     return {
       type: 'message.completed',
       accepted: true,
@@ -1275,8 +1363,138 @@ export class ConversationService {
         : undefined,
       media: options.media,
       actions: options.actions,
+      blocks,
       raw: sanitizeServerPhysicalPathsInValue(options.raw),
     };
+  }
+
+  private createBlocksFromReplyAndArtifacts(
+    reply: string,
+    statusText?: string,
+    media: MessageMedia[] = [],
+    actions: MessageAction[] = [],
+  ): MessageBlock[] {
+    const blocks: MessageBlock[] = [];
+    const sanitizedStatus = statusText ? sanitizeServerPhysicalPaths(statusText).trim() : '';
+    const sanitizedReply = sanitizeServerPhysicalPaths(reply).trim();
+
+    if (sanitizedStatus) {
+      blocks.push({
+        id: 'status-0',
+        type: 'status',
+        title: '过程',
+        text: sanitizedStatus,
+      });
+    }
+
+    if (sanitizedReply) {
+      blocks.push({
+        id: 'text-0',
+        type: 'text',
+        text: sanitizedReply,
+      });
+    }
+
+    return this.appendArtifactBlockToMessageBlocks(blocks, media, actions);
+  }
+
+  private appendArtifactBlockToMessageBlocks(
+    blocks: MessageBlock[],
+    media: MessageMedia[] = [],
+    actions: MessageAction[] = [],
+  ): MessageBlock[] {
+    const nextBlocks = [...(blocks ?? [])];
+    if (!media.length && !actions.length) {
+      return nextBlocks;
+    }
+
+    const existingArtifactIndex = nextBlocks.findIndex((block) => block.type === 'artifact');
+    const artifactBlock: MessageBlock = {
+      id: 'artifact-0',
+      type: 'artifact',
+      title: '生成内容',
+      text: media.length ? '已生成可打开的内容。' : undefined,
+      media,
+      actions,
+    };
+
+    if (existingArtifactIndex >= 0) {
+      nextBlocks[existingArtifactIndex] = {
+        ...nextBlocks[existingArtifactIndex],
+        media: [
+          ...(nextBlocks[existingArtifactIndex].media ?? []),
+          ...media,
+        ],
+        actions: this.mergeMessageActions(
+          nextBlocks[existingArtifactIndex].actions,
+          actions,
+        ),
+      };
+      return nextBlocks;
+    }
+
+    nextBlocks.push(artifactBlock);
+    return nextBlocks;
+  }
+
+  private createBlockCompletedStreamEvent(
+    messageId: string,
+    block: MessageBlock,
+  ): ConversationStreamEvent {
+    return {
+      type: 'message.block.completed',
+      message_id: messageId,
+      messageId,
+      block: sanitizeServerPhysicalPathsInValue(block) as MessageBlock,
+    };
+  }
+
+  private createStatusMessageBlock(id: string, text: string): MessageBlock {
+    return {
+      id,
+      type: 'status',
+      title: '过程',
+      text: sanitizeServerPhysicalPaths(text),
+    };
+  }
+
+  private createSkillMessageBlock(
+    skillName: string,
+    status: string,
+    text?: string,
+  ): MessageBlock {
+    return {
+      id: `skill-${skillName}`,
+      type: 'skill',
+      title: `Skill · /${skillName}`,
+      name: skillName,
+      status,
+      text: text ? sanitizeServerPhysicalPaths(text) : undefined,
+    };
+  }
+
+  private *streamTextBlockDeltaEvents(
+    messageId: string,
+    text?: string,
+    blockId = 'text-0',
+  ): Generator<ConversationStreamEvent> {
+    for (const delta of this.chunkStreamText(text)) {
+      yield {
+        type: 'message.block.delta',
+        message_id: messageId,
+        messageId,
+        block_id: blockId,
+        blockId,
+        block_type: 'text',
+        blockType: 'text',
+        delta,
+        block: {
+          id: blockId,
+          type: 'text',
+          text: '',
+        },
+      };
+    }
   }
 
   private *streamReasoningDeltaEvents(
@@ -1286,20 +1504,6 @@ export class ConversationService {
     for (const delta of this.chunkStreamText(text)) {
       yield {
         type: 'reasoning.delta',
-        message_id: messageId,
-        messageId,
-        delta,
-      };
-    }
-  }
-
-  private *streamReplyDeltaEvents(
-    messageId: string,
-    text?: string,
-  ): Generator<ConversationStreamEvent> {
-    for (const delta of this.chunkStreamText(text)) {
-      yield {
-        type: 'reply.delta',
         message_id: messageId,
         messageId,
         delta,
@@ -1360,24 +1564,16 @@ export class ConversationService {
 
   private buildSkillReplyPresentation(
     skillResult: SkillHandlerResult,
-    routeTrace: string,
-    streamedReasoning = '',
   ) {
     const hasOutputFiles = Boolean(skillResult.outputFiles?.length);
     const visibleReply = sanitizeServerPhysicalPaths(hasOutputFiles
       ? (skillResult.outputFiles![0].title ?? 'Application generated. Use the open action to view it.')
       : skillResult.reply);
-    const generatedTrace = hasOutputFiles && !streamedReasoning
-      ? sanitizeServerPhysicalPaths(skillResult.reply)
-      : undefined;
-    const processTrace = sanitizeServerPhysicalPaths(
-      [routeTrace, streamedReasoning, generatedTrace].filter(Boolean).join('\n\n'),
-    ) || undefined;
 
     return {
       visibleReply,
-      processTrace,
-      assistantContentBlocks: this.createAssistantContentBlocks(visibleReply, processTrace),
+      messageBlocks: this.createBlocksFromReplyAndArtifacts(visibleReply),
+      assistantContentBlocks: this.createAssistantContentBlocks(visibleReply),
     };
   }
 
@@ -1766,41 +1962,21 @@ export class ConversationService {
     } catch {
       return [];
     }
-    const rawContent = await readFile(sessionFilePath, 'utf8');
-    const lines = rawContent
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean);
-
-    const messageOrder: string[] = [];
-    const messageMap = new Map<string, ConversationMessage>();
     const mediaByMessageId = await this.getMessageResourceMappings(sessionId, userId);
+    const publicMediaByMessageId = new Map<string, MessageMedia[]>();
 
-    for (const line of lines) {
-      const event = JSON.parse(line) as RuntimeJsonlEvent;
-      this.consumeRuntimeEvent(event, sessionId, messageMap, messageOrder);
+    for (const [messageId, media] of mediaByMessageId) {
+      publicMediaByMessageId.set(
+        messageId,
+        media.map((item) => this.toPublicMessageMedia(item)),
+      );
     }
 
-    return messageOrder
-      .map((id) => {
-        const message = messageMap.get(id);
-        if (!message) {
-          return null;
-        }
-        const media = mediaByMessageId.get(id) ?? [];
-        const reasoning = this.normalizeReasoningText(message.reasoning ?? message.think);
-        return {
-          ...message,
-          content: message.role === 'assistant'
-            ? sanitizeServerPhysicalPaths(message.content)
-            : message.content,
-          reasoning: reasoning ?? undefined,
-          think: reasoning ?? undefined,
-          media: media.length ? media.map((item) => this.toPublicMessageMedia(item)) : undefined,
-          attachments: media.length ? media.map((item) => this.toPublicMessageMedia(item)) : undefined,
-        };
-      })
-      .filter(Boolean) as ConversationMessage[];
+    return this.transcriptProjection.projectTranscriptFile({
+      filePath: sessionFilePath,
+      sessionId,
+      mediaByMessageId: publicMediaByMessageId,
+    });
   }
 
   private consumeRuntimeEvent(
@@ -1850,43 +2026,6 @@ export class ConversationService {
         role: 'user',
         kind: 'markdown',
         content,
-        created_at: createdAt,
-        createdAt,
-      };
-    }
-
-    if (Array.isArray(content)) {
-      if (content.some((item) => this.isToolResultContentBlock(item))) {
-        return null;
-      }
-
-      const textParts = content
-        .map((item) => {
-          if (typeof item !== 'object' || item === null) {
-            return null;
-          }
-          const typedItem = item as Record<string, unknown>;
-          return typedItem.type === 'text' && typeof typedItem.text === 'string'
-            ? typedItem.text
-            : null;
-        })
-        .filter((item): item is string => Boolean(item));
-
-      if (!textParts.length) {
-        return null;
-      }
-
-      return {
-        id:
-          event.message?.id ??
-          event.uuid ??
-          event.promptId ??
-          `user-${randomUUID()}`,
-        thread_id: sessionId,
-        threadId: sessionId,
-        role: 'user',
-        kind: 'markdown',
-        content: textParts.join('\n'),
         created_at: createdAt,
         createdAt,
       };
@@ -2096,9 +2235,11 @@ export class ConversationService {
     return (
       blockType === 'tool_result' ||
       blockType.endsWith('_tool_result') ||
-      block.content !== undefined ||
+      typeof block.tool_use_id === 'string' ||
+      typeof block.toolUseId === 'string' ||
       block.result !== undefined ||
-      block.output !== undefined
+      block.output !== undefined ||
+      block.error !== undefined
     );
   }
 
@@ -2238,40 +2379,14 @@ export class ConversationService {
   }
 
   private async findOrCreateRuntimeSessionFile(sessionId: string, userId?: number, readOnly = false) {
-    if (userId !== undefined) {
-      const directPath = join(userDataRootDir, String(userId), `${sessionId}.jsonl`);
-      try {
-        await stat(directPath);
-        return directPath;
-      } catch {
-        // Fall through to legacy scan
+    try {
+      return await findNetworkTranscriptFile(sessionId, userId, { readOnly });
+    } catch (error) {
+      if (readOnly) {
+        throw new NotFoundException(`Runtime session ${sessionId} not found`);
       }
+      throw error;
     }
-
-    const { readdir } = await import('node:fs/promises');
-    const userDirs = await readdir(userDataRootDir, { withFileTypes: true });
-
-    for (const dir of userDirs) {
-      if (!dir.isDirectory()) continue;
-      const candidate = join(userDataRootDir, dir.name, `${sessionId}.jsonl`);
-      try {
-        await stat(candidate);
-        return candidate;
-      } catch {
-        continue;
-      }
-    }
-
-    if (readOnly) {
-      throw new NotFoundException(`Runtime session ${sessionId} not found`);
-    }
-
-    // Session file doesn't exist — create it under the user's directory
-    const targetDir = join(userDataRootDir, String(userId ?? 1));
-    await mkdir(targetDir, { recursive: true });
-    const newPath = join(targetDir, `${sessionId}.jsonl`);
-    await writeFile(newPath, '', 'utf8');
-    return newPath;
   }
 
   private async ensureConversationFileManifest(

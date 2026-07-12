@@ -36,6 +36,10 @@ export interface MessageMedia {
   alt?: string;
   mimeType?: string;
   posterUrl?: string;
+  artifactId?: string;
+  downloadUrl?: string;
+  storagePath?: string;
+  sizeBytes?: number;
 }
 
 export interface MessageFileAttachment {
@@ -44,6 +48,23 @@ export interface MessageFileAttachment {
   url: string;
   mimeType?: string;
   sizeBytes?: number;
+}
+
+export type MessageBlockType = 'text' | 'status' | 'tool_call' | 'tool_result' | 'skill' | 'artifact';
+
+export interface MessageBlock {
+  id: string;
+  type: MessageBlockType;
+  text?: string;
+  title?: string;
+  name?: string | null;
+  status?: string | null;
+  toolUseId?: string | null;
+  isError?: boolean;
+  media?: MessageMedia[];
+  files?: MessageFileAttachment[];
+  actions?: MessageAction[];
+  raw?: Record<string, unknown> | null;
 }
 
 export interface DraftMessageAttachment {
@@ -107,6 +128,19 @@ export type ThreadMessageStreamEvent =
       delta: string;
     }
   | {
+      type: 'message.block.delta';
+      messageId: string;
+      blockId: string;
+      blockType: MessageBlockType;
+      delta?: string;
+      block?: MessageBlock;
+    }
+  | {
+      type: 'message.block.completed';
+      messageId: string;
+      block: MessageBlock;
+    }
+  | {
       type: 'artifact.created';
       messageId: string;
       actions?: MessageAction[];
@@ -125,6 +159,11 @@ export type ThreadMessageStreamEvent =
       actions?: MessageAction[];
       media?: MessageMedia[];
       files?: MessageFileAttachment[];
+      model?: string | null;
+      usage?: Record<string, unknown> | null;
+      stopReason?: string | null;
+      blocks?: MessageBlock[];
+      raw?: Record<string, unknown> | null;
     }
   | {
       type: 'error';
@@ -145,6 +184,15 @@ export interface ThreadMessage {
   actions?: MessageAction[];
   media?: MessageMedia[];
   files?: MessageFileAttachment[];
+  uuid?: string | null;
+  parentUuid?: string | null;
+  sessionId?: string | null;
+  model?: string | null;
+  usage?: Record<string, unknown> | null;
+  stopReason?: string | null;
+  blocks?: MessageBlock[];
+  raw?: Record<string, unknown> | null;
+  streaming?: boolean;
   createdAt: string;
 }
 

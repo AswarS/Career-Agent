@@ -11,6 +11,8 @@ import type {
   DraftMessageSubmission,
   LoadState,
   MessageAction,
+  MessageBlock,
+  MessageBlockType,
   MessageFileAttachment,
   MessageMedia,
   ProfileRecord,
@@ -182,6 +184,131 @@ function mergeById<T extends { id: string }>(existing: T[] | undefined, incoming
 
 function appendText(existing: string | null | undefined, delta: string) {
   return `${existing ?? ''}${delta}`;
+}
+
+function deriveMessageContentFromBlocks(blocks: MessageBlock[] | undefined, fallback = '') {
+  const text = (blocks ?? [])
+    .filter((block) => block.type === 'text')
+    .map((block) => block.text ?? '')
+    .join('')
+    .trim();
+  return text || fallback;
+}
+
+function isInternalSkillText(value: string | null | undefined): boolean {
+  return /Skill command selected:|Launching skill:|Base directory for this skill:/i.test(value ?? '');
+}
+
+function isInternalSkillBlock(block: MessageBlock | undefined): boolean {
+  if (!block) {
+    return false;
+  }
+
+  if (block.type === 'skill') {
+    return true;
+  }
+
+  const name = block.name?.trim().toLowerCase();
+  if (name === 'skill') {
+    return true;
+  }
+
+  const text = [block.title, block.text].filter(Boolean).join('\n');
+  return isInternalSkillText(text);
+}
+
+function filterPublicMessageBlocks(blocks: MessageBlock[] | undefined) {
+  const filtered = (blocks ?? []).filter((block) => !isInternalSkillBlock(block));
+  return filtered.length ? filtered : undefined;
+}
+
+function reconcileCompletedReplyBlock(
+  blocks: MessageBlock[] | undefined,
+  reply: string,
+) {
+  const filteredBlocks = filterPublicMessageBlocks(blocks) ?? [];
+  const authoritativeTextBlock = filteredBlocks.find((block) => block.type === 'text');
+  const publicBlocks = filteredBlocks.filter((block) => block.type !== 'text');
+  const finalReply = reply.trim();
+  if (!finalReply) {
+    return publicBlocks.length ? publicBlocks : undefined;
+  }
+
+  const finalBlock: MessageBlock = {
+    id: authoritativeTextBlock?.id ?? 'final-text-0',
+    type: 'text',
+    text: finalReply,
+  };
+  const artifactIndex = publicBlocks.findIndex((block) => block.type === 'artifact');
+  if (artifactIndex < 0) {
+    return [...publicBlocks, finalBlock];
+  }
+  return [
+    ...publicBlocks.slice(0, artifactIndex),
+    finalBlock,
+    ...publicBlocks.slice(artifactIndex),
+  ];
+}
+
+function mergeMessageBlock(existing: MessageBlock | undefined, incoming: MessageBlock): MessageBlock {
+  if (!existing) {
+    return incoming;
+  }
+
+  return {
+    ...existing,
+    ...incoming,
+    text: incoming.text !== undefined ? incoming.text : existing.text,
+    media: mergeById(existing.media, incoming.media),
+    files: mergeById(existing.files, incoming.files),
+    actions: mergeById(existing.actions, incoming.actions),
+  };
+}
+
+function upsertMessageBlock(
+  blocks: MessageBlock[] | undefined,
+  incoming: MessageBlock,
+) {
+  const nextBlocks = [...(blocks ?? [])];
+  const index = nextBlocks.findIndex((block) => block.id === incoming.id);
+  if (index < 0) {
+    nextBlocks.push(incoming);
+    return nextBlocks;
+  }
+
+  nextBlocks[index] = mergeMessageBlock(nextBlocks[index], incoming);
+  return nextBlocks;
+}
+
+function appendMessageBlockDelta(
+  blocks: MessageBlock[] | undefined,
+  input: {
+    blockId: string;
+    blockType: MessageBlockType;
+    delta?: string;
+    block?: MessageBlock;
+  },
+) {
+  const baseBlock: MessageBlock = input.block ?? {
+    id: input.blockId,
+    type: input.blockType,
+  };
+  const nextBlocks = [...(blocks ?? [])];
+  const index = nextBlocks.findIndex((block) => block.id === input.blockId);
+  if (index < 0) {
+    nextBlocks.push({
+      ...baseBlock,
+      text: input.delta ? appendText(baseBlock.text, input.delta) : baseBlock.text,
+    });
+    return nextBlocks;
+  }
+
+  const existing = nextBlocks[index];
+  nextBlocks[index] = mergeMessageBlock(existing, {
+    ...baseBlock,
+    text: input.delta ? appendText(existing.text, input.delta) : baseBlock.text,
+  });
+  return nextBlocks;
 }
 
 function createUploadedFileMedia(uploadedFiles: UploadedConversationFile[]): MessageMedia[] {
@@ -757,6 +884,11 @@ export const useWorkspaceStore = defineStore('workspace', {
         error: unknown,
       ) => {
         this.messageSubmitStatusByThread[targetThreadId] = 'error';
+        this.messages = this.messages.map((message) => (
+          message.threadId === targetThreadId && message.role === 'assistant' && message.streaming
+            ? { ...message, streaming: false }
+            : message
+        ));
         const rawMessage = error instanceof Error ? error.message : 'Unknown message sending error';
         const stageMessage = stage === 'upload'
           ? '附件上传失败'
@@ -805,6 +937,10 @@ export const useWorkspaceStore = defineStore('workspace', {
       const refreshThreadMessages = async () => {
         const nextMessages = await client.getThreadMessages(targetThreadId);
 
+        revokeLocalMessageResources(this.transientMessagesByThread[targetThreadId] ?? []);
+        delete this.transientMessagesByThread[targetThreadId];
+        this.messageSubmitStatusByThread[targetThreadId] = 'ready';
+
         if (this.activeThreadId !== targetThreadId) {
           return false;
         }
@@ -812,7 +948,6 @@ export const useWorkspaceStore = defineStore('workspace', {
         revokeLocalMessageResources(this.messages);
         this.messages = nextMessages;
         this.messagesStatus = 'ready';
-        this.messageSubmitStatusByThread[targetThreadId] = 'ready';
         return true;
       };
       const sendBufferedAndRefresh = async () => {
@@ -846,6 +981,8 @@ export const useWorkspaceStore = defineStore('workspace', {
           kind: 'markdown',
           content: '',
           reasoning: null,
+          blocks: [],
+          streaming: true,
           createdAt,
         });
 
@@ -859,6 +996,12 @@ export const useWorkspaceStore = defineStore('workspace', {
           media?: MessageMedia[];
           files?: MessageFileAttachment[];
           actions?: MessageAction[];
+          model?: string | null;
+          usage?: Record<string, unknown> | null;
+          stopReason?: string | null;
+          blocks?: MessageBlock[];
+          raw?: Record<string, unknown> | null;
+          streaming?: boolean;
           createdAt?: string;
         },
       ) => {
@@ -872,60 +1015,186 @@ export const useWorkspaceStore = defineStore('workspace', {
           media: mergeById(existingMessage.media, payload.media),
           files: mergeById(existingMessage.files, payload.files),
           actions: mergeById(existingMessage.actions, payload.actions),
+          model: payload.model !== undefined ? payload.model : existingMessage.model,
+          usage: payload.usage !== undefined ? payload.usage : existingMessage.usage,
+          stopReason: payload.stopReason !== undefined ? payload.stopReason : existingMessage.stopReason,
+          blocks: payload.blocks !== undefined
+            ? filterPublicMessageBlocks(payload.blocks)
+            : filterPublicMessageBlocks(existingMessage.blocks),
+          raw: payload.raw !== undefined ? payload.raw : existingMessage.raw,
+          streaming: payload.streaming !== undefined ? payload.streaming : existingMessage.streaming,
         };
       };
+      const mergePendingUserMessage = (serverUserMessageId: string, createdAt?: string) => {
+        if (!serverUserMessageId) {
+          return;
+        }
+
+        const pendingIndex = this.messages.findIndex((message) => message.id === pendingMessageId);
+        if (pendingIndex < 0) {
+          return;
+        }
+
+        const uploadedMedia = createUploadedFileMedia(uploadedFiles);
+        const uploadedAttachments = createUploadedFileAttachments(uploadedFiles);
+        this.messages[pendingIndex] = {
+          ...this.messages[pendingIndex],
+          id: serverUserMessageId,
+          createdAt: createdAt ?? this.messages[pendingIndex].createdAt,
+          media: uploadedMedia.length ? uploadedMedia : this.messages[pendingIndex].media,
+          files: uploadedAttachments.length ? uploadedAttachments : this.messages[pendingIndex].files,
+        };
+      };
+      const structuredTextMessageIds = new Set<string>();
+      const legacyReplyMessageIds = new Set<string>();
       const applyStreamEvent = (event: ThreadMessageStreamEvent) => {
         if (event.type === 'message.created') {
-          const pendingIndex = this.messages.findIndex((message) => message.id === pendingMessageId);
-          if (pendingIndex >= 0) {
-            const uploadedMedia = createUploadedFileMedia(uploadedFiles);
-            const uploadedAttachments = createUploadedFileAttachments(uploadedFiles);
-            this.messages[pendingIndex] = {
-              ...this.messages[pendingIndex],
-              id: event.messageId,
-              createdAt: event.createdAt,
-              media: uploadedMedia.length ? uploadedMedia : this.messages[pendingIndex].media,
-              files: uploadedAttachments.length ? uploadedAttachments : this.messages[pendingIndex].files,
-            };
-          }
+          mergePendingUserMessage(event.messageId, event.createdAt);
           ensureAssistantMessage(event.assistantMessageId, event.createdAt);
           return;
         }
 
         if (event.type === 'reasoning.delta') {
+          if (isInternalSkillText(event.delta)) {
+            return;
+          }
           const index = ensureAssistantMessage(event.messageId);
+          if ((this.messages[index].blocks?.length ?? 0) > 0) {
+            return;
+          }
+          const blocks = appendMessageBlockDelta(this.messages[index].blocks, {
+            blockId: 'legacy-status-0',
+            blockType: 'status',
+            delta: event.delta,
+            block: {
+              id: 'legacy-status-0',
+              type: 'status',
+              title: '过程',
+              text: '',
+            },
+          });
           this.messages[index] = {
             ...this.messages[index],
+            blocks,
             reasoning: appendText(this.messages[index].reasoning, event.delta),
           };
           return;
         }
 
         if (event.type === 'reply.delta') {
+          if (isInternalSkillText(event.delta)) {
+            return;
+          }
           const index = ensureAssistantMessage(event.messageId);
+          if (structuredTextMessageIds.has(event.messageId)) {
+            return;
+          }
+          legacyReplyMessageIds.add(event.messageId);
+          const blocks = appendMessageBlockDelta(this.messages[index].blocks, {
+            blockId: 'legacy-text-0',
+            blockType: 'text',
+            delta: event.delta,
+            block: {
+              id: 'legacy-text-0',
+              type: 'text',
+              text: '',
+            },
+          });
           this.messages[index] = {
             ...this.messages[index],
+            blocks,
             content: appendText(this.messages[index].content, event.delta),
           };
           return;
         }
 
+        if (event.type === 'message.block.delta') {
+          if (event.blockType === 'skill' || isInternalSkillBlock(event.block)) {
+            return;
+          }
+          const index = ensureAssistantMessage(event.messageId);
+          const isFirstStructuredTextDelta = event.blockType === 'text'
+            && !structuredTextMessageIds.has(event.messageId);
+          if (event.blockType === 'text') {
+            structuredTextMessageIds.add(event.messageId);
+          }
+          const existingBlocks = isFirstStructuredTextDelta && legacyReplyMessageIds.has(event.messageId)
+            ? this.messages[index].blocks?.filter((block) => block.id !== 'legacy-text-0')
+            : this.messages[index].blocks;
+          const blocks = appendMessageBlockDelta(existingBlocks, {
+            blockId: event.blockId,
+            blockType: event.blockType,
+            delta: event.delta,
+            block: event.block,
+          });
+          this.messages[index] = {
+            ...this.messages[index],
+            blocks,
+            content: deriveMessageContentFromBlocks(
+              blocks,
+              isFirstStructuredTextDelta && legacyReplyMessageIds.has(event.messageId)
+                ? ''
+                : this.messages[index].content,
+            ),
+          };
+          return;
+        }
+
+        if (event.type === 'message.block.completed') {
+          if (isInternalSkillBlock(event.block)) {
+            return;
+          }
+          const index = ensureAssistantMessage(event.messageId);
+          const blocks = upsertMessageBlock(this.messages[index].blocks, event.block);
+          this.messages[index] = {
+            ...this.messages[index],
+            blocks,
+            content: deriveMessageContentFromBlocks(blocks, this.messages[index].content),
+          };
+          return;
+        }
+
         if (event.type === 'artifact.created') {
+          const artifactBlock: MessageBlock = {
+            id: 'artifact-0',
+            type: 'artifact',
+            title: '生成内容',
+            text: event.media?.length ? '已生成可打开的内容。' : undefined,
+            media: event.media,
+            files: event.files,
+            actions: event.actions,
+          };
+          const index = ensureAssistantMessage(event.messageId);
+          const blocks = upsertMessageBlock(this.messages[index].blocks, artifactBlock);
           mergeAssistantPayload(event.messageId, {
             media: event.media,
             files: event.files,
             actions: event.actions,
+            blocks,
           });
           return;
         }
 
         if (event.type === 'message.completed') {
+          mergePendingUserMessage(event.messageId);
+          const existingBlocks = this.messages.find(
+            (message) => message.id === event.assistantMessageId,
+          )?.blocks;
           mergeAssistantPayload(event.assistantMessageId, {
             content: event.reply,
-            reasoning: event.reasoning ?? null,
+            reasoning: event.reasoning ?? undefined,
             media: event.media,
             files: event.files,
             actions: event.actions,
+            model: event.model,
+            usage: event.usage,
+            stopReason: event.stopReason,
+            blocks: reconcileCompletedReplyBlock(
+              event.blocks ?? existingBlocks,
+              event.reply,
+            ),
+            raw: event.raw,
+            streaming: false,
           });
           return;
         }
