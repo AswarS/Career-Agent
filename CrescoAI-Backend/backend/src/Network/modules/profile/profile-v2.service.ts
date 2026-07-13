@@ -1,0 +1,318 @@
+import { Injectable } from '@nestjs/common';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+import { DataSource, Repository } from 'typeorm';
+import { UserEntity } from '../user/entities/user.entity';
+import { UpdateBaseProfileDto } from './dto/base-profile.dto';
+import { BaseProfileEntity } from './entities/base-profile.entity';
+import { ProfileRevisionEntity } from './entities/profile-revision.entity';
+import { ProfileStateEntity } from './entities/profile-state.entity';
+import { ProfileProjectionJobEntity } from './entities/profile-projection-job.entity';
+import { profileAccessDenied, profileValidationError, profileVersionConflict } from './profile.errors';
+import { profileFeatureFlags } from './profile-feature-flags';
+import { normalizeProfileRecord } from './profile.types';
+import {
+  PROFILE_V2_SCHEMA_VERSION,
+  type BaseProfilePatch,
+  type BaseProfileRecord,
+  type EducationBackgroundItem,
+  type ProfileMutationMeta,
+} from './profile-v2.types';
+
+@Injectable()
+export class ProfileV2Service {
+  constructor(
+    @InjectDataSource() private readonly dataSource: DataSource,
+    @InjectRepository(UserEntity)
+    private readonly userRepo: Repository<UserEntity>,
+    @InjectRepository(BaseProfileEntity)
+    private readonly baseRepo: Repository<BaseProfileEntity>,
+    @InjectRepository(ProfileStateEntity)
+    private readonly stateRepo: Repository<ProfileStateEntity>,
+  ) {}
+
+  async getBaseProfile(userId: number): Promise<BaseProfileRecord> {
+    const entity = await this.ensureBaseProfile(userId);
+    return this.toBaseRecord(entity);
+  }
+
+  async updateBaseProfile(
+    userId: number,
+    input: UpdateBaseProfileDto | BaseProfilePatch,
+    meta: ProfileMutationMeta,
+  ): Promise<BaseProfileRecord> {
+    if (!profileFeatureFlags.v2Write()) {
+      throw profileAccessDenied('Profile V2 writes are disabled');
+    }
+    if (
+      meta.actorType === 'agent'
+      && !meta.userConfirmed
+      && !profileFeatureFlags.l3AutoApply()
+    ) {
+      throw profileAccessDenied(
+        'Agent cannot update base profile fields while L3 auto-apply is disabled',
+      );
+    }
+
+    const patch = this.normalizeBasePatch(input);
+    if (!Object.keys(patch).length) {
+      throw profileValidationError('at least one base profile field is required');
+    }
+
+    await this.ensureBaseProfile(userId);
+    return this.dataSource.transaction(async (manager) => {
+      const entity = await manager.findOneOrFail(BaseProfileEntity, { where: { userId } });
+
+      const expectedVersion = meta.expectedVersion ?? (input as UpdateBaseProfileDto).expectedVersion;
+      if (expectedVersion !== undefined && expectedVersion !== entity.version) {
+        throw profileVersionConflict(expectedVersion, entity.version);
+      }
+
+      const before = this.toBaseRecord(entity);
+      this.applyBasePatch(entity, patch);
+      entity.version += 1;
+      const saved = await manager.save(entity);
+
+      let state = await manager.findOne(ProfileStateEntity, { where: { userId } });
+      if (!state) {
+        state = manager.create(ProfileStateEntity, {
+          userId,
+          aggregateVersion: 1,
+          projectionVersion: 0,
+          projectionStatus: 'pending',
+        });
+      }
+      state.aggregateVersion += 1;
+      state.projectionStatus = 'pending';
+      await manager.save(state);
+      await manager.save(manager.create(ProfileProjectionJobEntity, {
+        userId,
+        targetVersion: state.aggregateVersion,
+        status: 'pending',
+        retryCount: 0,
+        lastError: null,
+      }));
+
+      const after = this.toBaseRecord(saved);
+      await manager.save(
+        manager.create(ProfileRevisionEntity, {
+          userId,
+          aggregateVersion: state.aggregateVersion,
+          targetType: 'base_profile',
+          targetId: String(saved.id),
+          operation: 'update',
+          beforeJson: JSON.stringify(before),
+          afterJson: JSON.stringify(after),
+          sourceType: meta.sourceType,
+          updateLevel: meta.updateLevel ?? 'L3',
+          sourceConversationId: meta.sourceConversationId ?? null,
+          sourceMessageId: meta.sourceMessageId ?? null,
+          userConfirmed: meta.userConfirmed ?? meta.actorType === 'user',
+          actorType: meta.actorType ?? 'user',
+        }),
+      );
+
+      if (patch.name) {
+        const user = await manager.findOne(UserEntity, { where: { id: userId } });
+        if (user) {
+          user.displayName = patch.name;
+          await manager.save(user);
+        }
+      }
+
+      return after;
+    });
+  }
+
+  async getState(userId: number) {
+    await this.ensureBaseProfile(userId);
+    return this.ensureState(userId);
+  }
+
+  private async ensureBaseProfile(userId: number) {
+    const existing = await this.baseRepo.findOne({ where: { userId } });
+    if (existing) return existing;
+
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw profileValidationError('authenticated user does not exist');
+    const legacy = normalizeProfileRecord(
+      this.parseJson(user.profileJson),
+      user.displayName ?? '',
+    );
+    const education = legacy.careerProfile.educationBackground
+      ? [{
+          school: '',
+          major: '',
+          degree: '',
+          graduationDate: null,
+          description: legacy.careerProfile.educationBackground,
+        }]
+      : [];
+    const entity = this.baseRepo.create({
+      userId,
+      name: legacy.basicInfo.fullName || user.displayName || '',
+      gender: '',
+      birthDate: null,
+      educationLevel: '',
+      educationBackgroundJson: JSON.stringify(education),
+      currentCity: legacy.basicInfo.currentCity,
+      currentStatus: legacy.careerProfile.employmentStatus,
+      currentRole: legacy.careerProfile.currentRole,
+      currentIndustry: '',
+      yearsOfExperience: null,
+      contactLanguage: '',
+      version: 1,
+    });
+    const saved = await this.baseRepo.save(entity);
+    const state = await this.ensureState(userId);
+    await this.dataSource.getRepository(ProfileRevisionEntity).save({
+      userId,
+      aggregateVersion: state.aggregateVersion,
+      targetType: 'base_profile',
+      targetId: String(saved.id),
+      operation: 'create',
+      beforeJson: null,
+      afterJson: JSON.stringify(this.toBaseRecord(saved)),
+      sourceType: 'system_migration',
+      updateLevel: 'L3',
+      sourceConversationId: null,
+      sourceMessageId: null,
+      userConfirmed: false,
+      actorType: 'system',
+    });
+    await this.dataSource.getRepository(ProfileProjectionJobEntity).save({
+      userId,
+      targetVersion: state.aggregateVersion,
+      status: 'pending',
+      retryCount: 0,
+      lastError: null,
+    });
+    return saved;
+  }
+
+  private async ensureState(userId: number) {
+    const existing = await this.stateRepo.findOne({ where: { userId } });
+    if (existing) return existing;
+    return this.stateRepo.save(
+      this.stateRepo.create({
+        userId,
+        aggregateVersion: 1,
+        projectionVersion: 0,
+        projectionStatus: 'pending',
+      }),
+    );
+  }
+
+  private normalizeBasePatch(input: UpdateBaseProfileDto | BaseProfilePatch): BaseProfilePatch {
+    const patch: BaseProfilePatch = {};
+    const textFields = [
+      'name',
+      'gender',
+      'educationLevel',
+      'currentCity',
+      'currentStatus',
+      'currentRole',
+      'currentIndustry',
+      'contactLanguage',
+    ] as const;
+    for (const field of textFields) {
+      if (input[field] !== undefined) patch[field] = input[field]!.trim();
+    }
+    if (input.birthDate !== undefined) patch.birthDate = input.birthDate;
+    if (input.yearsOfExperience !== undefined) {
+      patch.yearsOfExperience = input.yearsOfExperience;
+    }
+    if (input.educationBackground !== undefined) {
+      patch.educationBackground = input.educationBackground.map((item) => ({
+        school: item.school.trim(),
+        major: item.major.trim(),
+        degree: item.degree.trim(),
+        graduationDate: item.graduationDate ?? null,
+        description: item.description.trim(),
+      }));
+    }
+    return patch;
+  }
+
+  private applyBasePatch(entity: BaseProfileEntity, patch: BaseProfilePatch) {
+    if (patch.name !== undefined) entity.name = patch.name;
+    if (patch.gender !== undefined) entity.gender = patch.gender;
+    if (patch.birthDate !== undefined) entity.birthDate = patch.birthDate;
+    if (patch.educationLevel !== undefined) entity.educationLevel = patch.educationLevel;
+    if (patch.educationBackground !== undefined) {
+      entity.educationBackgroundJson = JSON.stringify(patch.educationBackground);
+    }
+    if (patch.currentCity !== undefined) entity.currentCity = patch.currentCity;
+    if (patch.currentStatus !== undefined) entity.currentStatus = patch.currentStatus;
+    if (patch.currentRole !== undefined) entity.currentRole = patch.currentRole;
+    if (patch.currentIndustry !== undefined) entity.currentIndustry = patch.currentIndustry;
+    if (patch.yearsOfExperience !== undefined) {
+      entity.yearsOfExperience = patch.yearsOfExperience;
+    }
+    if (patch.contactLanguage !== undefined) entity.contactLanguage = patch.contactLanguage;
+  }
+
+  private toBaseRecord(entity: BaseProfileEntity): BaseProfileRecord {
+    const educationBackground = this.parseEducation(entity.educationBackgroundJson);
+    const missingRequiredFields = [
+      ['name', entity.name],
+      ['gender', entity.gender],
+      ['birthDate', entity.birthDate],
+      ['educationLevel', entity.educationLevel],
+      ['educationBackground', educationBackground.length ? 'present' : ''],
+      ['currentCity', entity.currentCity],
+      ['currentStatus', entity.currentStatus],
+    ].filter(([, value]) => !value).map(([key]) => key as string);
+
+    return {
+      schemaVersion: PROFILE_V2_SCHEMA_VERSION,
+      userId: entity.userId,
+      name: entity.name,
+      gender: entity.gender,
+      birthDate: entity.birthDate,
+      age: this.calculateAge(entity.birthDate),
+      educationLevel: entity.educationLevel,
+      educationBackground,
+      currentCity: entity.currentCity,
+      currentStatus: entity.currentStatus,
+      currentRole: entity.currentRole,
+      currentIndustry: entity.currentIndustry,
+      yearsOfExperience: entity.yearsOfExperience,
+      contactLanguage: entity.contactLanguage,
+      version: entity.version,
+      missingRequiredFields,
+      createdAt: entity.createdAt.toISOString(),
+      updatedAt: entity.updatedAt.toISOString(),
+    };
+  }
+
+  private calculateAge(birthDate: string | null) {
+    if (!birthDate) return null;
+    const birth = new Date(`${birthDate}T00:00:00Z`);
+    if (Number.isNaN(birth.getTime())) return null;
+    const now = new Date();
+    let age = now.getUTCFullYear() - birth.getUTCFullYear();
+    const beforeBirthday =
+      now.getUTCMonth() < birth.getUTCMonth()
+      || (now.getUTCMonth() === birth.getUTCMonth()
+        && now.getUTCDate() < birth.getUTCDate());
+    if (beforeBirthday) age -= 1;
+    return age >= 0 ? age : null;
+  }
+
+  private parseEducation(raw: string): EducationBackgroundItem[] {
+    try {
+      const value = JSON.parse(raw) as unknown;
+      return Array.isArray(value) ? value as EducationBackgroundItem[] : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private parseJson(raw: string) {
+    try {
+      return JSON.parse(raw) as unknown;
+    } catch {
+      return {};
+    }
+  }
+}

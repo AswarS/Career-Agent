@@ -868,6 +868,11 @@ async function getMessagesForPromptSlashCommand(command: CommandBase & PromptCom
   }
   const result = await command.getPromptForCommand(args, context);
 
+  if (command.type === 'prompt' && command.skillRoot) {
+    const { registerSessionSkillReadOnlyRoot } = await import('../../server/SessionContext.js');
+    await registerSessionSkillReadOnlyRoot(command.skillRoot);
+  }
+
   // Register skill hooks if defined. Under ["hooks"]-only (skills not locked),
   // user skills still load and reach this point — block hook REGISTRATION here
   // where source is known. Mirrors the agent frontmatter gate in runAgent.ts.

@@ -10,6 +10,15 @@ import type {
   ThreadSummary,
   UploadedConversationFile,
 } from '../types/entities';
+import type {
+  BaseProfilePatch,
+  BaseProfileRecord,
+  ProfileChangeProposalRecord,
+  ProfileMemoryRecord,
+  ProfileRevisionRecord,
+  ProfileStateRecord,
+  CreateProfileMemoryInput,
+} from '../modules/profile/profileV2Types';
 
 export interface CreateThreadInput {
   title?: string;
@@ -42,6 +51,16 @@ export interface CareerAgentClient {
   getProfile(): Promise<ProfileRecord>;
   updateProfile(profile: ProfileRecord): Promise<ProfileRecord>;
   listProfileSuggestions(): Promise<ProfileSuggestion[]>;
+  getBaseProfile?(): Promise<BaseProfileRecord>;
+  updateBaseProfile?(patch: BaseProfilePatch, expectedVersion: number): Promise<BaseProfileRecord>;
+  listProfileMemories?(filters?: Record<string, string>): Promise<ProfileMemoryRecord[]>;
+  getProfileState?(): Promise<ProfileStateRecord>;
+  createProfileMemory?(input: CreateProfileMemoryInput, expectedVersion: number): Promise<ProfileMemoryRecord>;
+  updateProfileMemory?(id: string, patch: Partial<ProfileMemoryRecord>, expectedVersion: number): Promise<ProfileMemoryRecord>;
+  deleteProfileMemory?(id: string, expectedVersion: number): Promise<void>;
+  listProfileProposals?(): Promise<ProfileChangeProposalRecord[]>;
+  resolveProfileProposal?(id: string, action: 'accept' | 'reject'): Promise<ProfileChangeProposalRecord>;
+  listProfileHistory?(): Promise<ProfileRevisionRecord[]>;
   listArtifacts(): Promise<ArtifactRecord[]>;
   getArtifact(artifactId: string): Promise<ArtifactRecord | null>;
   refreshArtifact(artifactId: string): Promise<ArtifactRecord | null>;

@@ -314,6 +314,8 @@ function createPluginCommand(
       contentLength: content.length,
       source: 'plugin' as const,
       loadedFrom: isSkill || config.isSkillMode ? 'plugin' : undefined,
+      skillRoot:
+        isSkill || config.isSkillMode ? dirname(file.filePath) : undefined,
       pluginInfo: {
         pluginManifest,
         repository: sourceName,

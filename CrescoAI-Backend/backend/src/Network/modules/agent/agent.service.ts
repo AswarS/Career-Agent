@@ -16,9 +16,14 @@ import {
 } from '../../../server/SessionContext.js';
 import { createIsolatedState } from '../../../bootstrap/state.js';
 import { createQueryEngineForSession } from '../../../server/queryEngineFactory.js';
+import {
+  getNetworkSharedReadOnlyRoots,
+  getNetworkTrustedSkillCatalogRoots,
+} from '../../../server/networkFilesystemPolicy.js';
+import { NETWORK_READ_ONLY_FILE_TOOLS } from '../../../server/filesystemPolicyTypes.js';
 import { QueryEngine } from '../../../QueryEngine.js';
 import { mkdir } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { SettingsService } from '../settings/settings.service';
 import { setSessionMultimodalConfig, removeSessionMultimodalConfig } from '../../../utils/multimodalConfig.js';
@@ -28,9 +33,12 @@ import { getCommands } from '../../../commands.js';
 import { flushSessionStorage } from '../../../utils/sessionStorage.js';
 import {
   appendNetworkTranscriptEvent,
+  ensureNetworkUserWorkspaceDir,
   ensureNetworkTranscriptDir,
+  getNetworkAutoMemoryDir,
   getNetworkTranscriptDir,
-  getNetworkUserDir,
+  getNetworkUserFilesDir,
+  getNetworkUserWorkspaceDir,
   networkRootDir,
 } from '../../utils/networkTranscriptStorage.js';
 import {
@@ -39,6 +47,12 @@ import {
   normalizeCanonicalMessageBlocks,
   THINKING_BLOCK_TITLE,
 } from '../conversation/canonical-message-blocks.js';
+import { ProfileV2Service } from '../profile/profile-v2.service';
+import { ProfileMemoryService } from '../profile/profile-memory.service';
+import { ProfileProposalService } from '../profile/profile-proposal.service';
+import { createProfileTools } from '../profile/profile.tools';
+import { ProfileRecallService } from '../profile/profile-recall.service';
+import { loadAgentSessionHistory } from './agent-session-recovery.js';
 
 // ---------------------------------------------------------------------------
 // JSONL helpers
@@ -465,8 +479,19 @@ export class AgentService {
   private queryEngines = new Map<string, QueryEngine>();
   /** Per-conversation SessionContext for ALS routing */
   private sessionContexts = new Map<string, SessionContext>();
+  /** Serializes first-use restoration after a process restart. */
+  private queryEngineInitializations = new Map<
+    string,
+    { userId: string; promise: Promise<QueryEngine> }
+  >();
 
-  constructor(@Optional() private readonly settingsService?: SettingsService) {}
+  constructor(
+    @Optional() private readonly settingsService?: SettingsService,
+    @Optional() private readonly profileV2Service?: ProfileV2Service,
+    @Optional() private readonly profileMemoryService?: ProfileMemoryService,
+    @Optional() private readonly profileProposalService?: ProfileProposalService,
+    @Optional() private readonly profileRecallService?: ProfileRecallService,
+  ) {}
 
   async runIsolatedPrompt(input: {
     userId: string;
@@ -561,9 +586,9 @@ export class AgentService {
         ? input.conversationId
         : `skill-tool-${randomUUID()}`;
     const isTemporarySession = !input.conversationId || input.conversationId.trim().length === 0;
-    const userWorkspaceDir = getNetworkUserDir(input.userId);
-    await mkdir(userWorkspaceDir, { recursive: true });
+    const userWorkspaceDir = await ensureNetworkUserWorkspaceDir(input.userId);
     await ensureNetworkTranscriptDir(input.userId);
+    this.assertCachedSessionOwner(sessionId, input.userId);
 
     let ctx = this.sessionContexts.get(sessionId);
     if (!ctx) {
@@ -656,22 +681,16 @@ export class AgentService {
     if (!mergedConfig.apiKey?.trim()) {
       const errorReply = 'API key is required. Please save a model API key in Settings before sending messages.';
       const replyUuid = randomUUID();
-      await appendJsonlEvent(userId, conversationId, {
-        parentUuid: null,
-        isSidechain: false,
-        promptId: clientRequestId ?? randomUUID(),
-        type: 'user',
-        message: {
-          id: userMessageId,
-          role: 'user',
-          content: userVisibleContent,
-        },
-        uuid: userMessageId,
-        timestamp: now.toISOString(),
-        sessionId: conversationId,
+      const assistantParentUuid = await this.appendManualUserMessage({
+        userId,
+        conversationId,
+        userMessageId,
+        content: userVisibleContent,
+        clientRequestId,
+        timestamp: now,
       });
       await appendJsonlEvent(userId, conversationId, {
-        parentUuid: userMessageId,
+        parentUuid: assistantParentUuid,
         isSidechain: false,
         type: 'assistant',
         message: {
@@ -688,6 +707,7 @@ export class AgentService {
         timestamp: new Date(now.getTime() + 100).toISOString(),
         sessionId: conversationId,
       });
+      this.invalidateConversationRuntime(conversationId);
       return {
         accepted: false,
         status: 'failed',
@@ -738,23 +758,17 @@ export class AgentService {
     const thinkingTimestamp = new Date(now.getTime() + 300).toISOString();
     const replyTimestamp = new Date(now.getTime() + 700).toISOString();
 
-    await appendJsonlEvent(userId, conversationId, {
-      parentUuid: null,
-      isSidechain: false,
-      promptId: clientRequestId ?? randomUUID(),
-      type: 'user',
-      message: {
-        id: userMessageId,
-        role: 'user',
-        content: userVisibleContent,
-      },
-      uuid: userMessageId,
-      timestamp: now.toISOString(),
-      sessionId: conversationId,
+    const assistantParentUuid = await this.appendManualUserMessage({
+      userId,
+      conversationId,
+      userMessageId,
+      content: userVisibleContent,
+      clientRequestId,
+      timestamp: now,
     });
 
     await appendJsonlEvent(userId, conversationId, {
-      parentUuid: userMessageId,
+      parentUuid: assistantParentUuid,
       isSidechain: false,
       type: 'assistant',
       message: {
@@ -790,6 +804,7 @@ export class AgentService {
       timestamp: replyTimestamp,
       sessionId: conversationId,
     });
+    this.invalidateConversationRuntime(conversationId);
 
     return {
       accepted: true,
@@ -842,22 +857,16 @@ export class AgentService {
     if (!mergedConfig.apiKey?.trim()) {
       const errorReply = 'API key is required. Please save a model API key in Settings before sending messages.';
       const replyUuid = randomUUID();
-      await appendJsonlEvent(userId, conversationId, {
-        parentUuid: null,
-        isSidechain: false,
-        promptId: clientRequestId ?? randomUUID(),
-        type: 'user',
-        message: {
-          id: userMessageId,
-          role: 'user',
-          content: userVisibleContent,
-        },
-        uuid: userMessageId,
-        timestamp: now.toISOString(),
-        sessionId: conversationId,
+      const assistantParentUuid = await this.appendManualUserMessage({
+        userId,
+        conversationId,
+        userMessageId,
+        content: userVisibleContent,
+        clientRequestId,
+        timestamp: now,
       });
       await appendJsonlEvent(userId, conversationId, {
-        parentUuid: userMessageId,
+        parentUuid: assistantParentUuid,
         isSidechain: false,
         type: 'assistant',
         message: {
@@ -874,6 +883,7 @@ export class AgentService {
         timestamp: new Date(now.getTime() + 100).toISOString(),
         sessionId: conversationId,
       });
+      this.invalidateConversationRuntime(conversationId);
 
       yield {
         type: 'message.created',
@@ -965,23 +975,17 @@ export class AgentService {
       };
     }
 
-    await appendJsonlEvent(userId, conversationId, {
-      parentUuid: null,
-      isSidechain: false,
-      promptId: clientRequestId ?? randomUUID(),
-      type: 'user',
-      message: {
-        id: userMessageId,
-        role: 'user',
-        content: userVisibleContent,
-      },
-      uuid: userMessageId,
-      timestamp: now.toISOString(),
-      sessionId: conversationId,
+    const assistantParentUuid = await this.appendManualUserMessage({
+      userId,
+      conversationId,
+      userMessageId,
+      content: userVisibleContent,
+      clientRequestId,
+      timestamp: now,
     });
 
     await appendJsonlEvent(userId, conversationId, {
-      parentUuid: userMessageId,
+      parentUuid: assistantParentUuid,
       isSidechain: false,
       type: 'assistant',
       message: {
@@ -1017,6 +1021,7 @@ export class AgentService {
       timestamp: new Date(now.getTime() + 700).toISOString(),
       sessionId: conversationId,
     });
+    this.invalidateConversationRuntime(conversationId);
 
     const fallbackBlocks = [
       createStatusAgentBlock('status-0', stubThinking),
@@ -1144,8 +1149,7 @@ export class AgentService {
     };
 
     try {
-      const userWorkspaceDir = getNetworkUserDir(userId);
-      await mkdir(userWorkspaceDir, { recursive: true });
+      const userWorkspaceDir = await ensureNetworkUserWorkspaceDir(userId);
       await ensureNetworkTranscriptDir(userId);
 
       if (this.settingsService) {
@@ -1168,21 +1172,12 @@ export class AgentService {
         }
       }
 
-      this.refreshCachedSessionConfig(conversationId, config);
-      let queryEngine = this.queryEngines.get(conversationId);
-      if (!queryEngine) {
-        const ctx = this.buildSessionContext(
-          conversationId,
-          userId,
-          config,
-          userWorkspaceDir,
-        );
-        this.sessionContexts.set(conversationId, ctx);
-        const commands = await getCommands(userWorkspaceDir);
-        queryEngine = createQueryEngineForSession(ctx, { commands });
-        ctx.queryEngine = queryEngine;
-        this.queryEngines.set(conversationId, queryEngine);
-      }
+      const queryEngine = await this.getOrCreateQueryEngine(
+        conversationId,
+        userId,
+        config,
+        userWorkspaceDir,
+      );
 
       const ctx = this.sessionContexts.get(conversationId)!;
       if (messageInput.abortSignal) {
@@ -1199,6 +1194,7 @@ export class AgentService {
       const prevApiKey = process.env.ANTHROPIC_API_KEY;
       const prevBaseUrl = process.env.ANTHROPIC_BASE_URL;
       const prevModel = process.env.ANTHROPIC_MODEL;
+      const profileTurnPrompt = await this.getProfileTurnPrompt(userId, content);
 
       if (config.apiKey) {
         process.env.ANTHROPIC_API_KEY = config.apiKey;
@@ -1229,7 +1225,10 @@ export class AgentService {
               conversationId,
               messageInput.attachments ?? [],
             );
-            const stream = queryEngine!.submitMessage(inputWithAttachments, { uuid: userMessageId });
+            const stream = queryEngine!.submitMessage(inputWithAttachments, {
+              uuid: userMessageId,
+              appendSystemPrompt: profileTurnPrompt,
+            });
 
             for await (const msg of stream) {
               if (messageInput.abortSignal?.aborted) {
@@ -1423,7 +1422,7 @@ export class AgentService {
       await flushSessionStorage();
 
       const generatedFiles = await this.scanGeneratedFiles(
-        getNetworkUserDir(userId),
+        getNetworkUserWorkspaceDir(userId),
         startTime,
       );
 
@@ -1466,8 +1465,7 @@ export class AgentService {
     let assistantMessageId = fallbackAssistantMessageId;
 
     try {
-      const userWorkspaceDir = getNetworkUserDir(userId);
-      await mkdir(userWorkspaceDir, { recursive: true });
+      const userWorkspaceDir = await ensureNetworkUserWorkspaceDir(userId);
       await ensureNetworkTranscriptDir(userId);
 
       // Inject per-user multimodal config BEFORE engine creation so isEnabled() sees it.
@@ -1493,21 +1491,12 @@ export class AgentService {
       }
 
       // Get or create per-conversation QueryEngine + SessionContext
-      this.refreshCachedSessionConfig(conversationId, config);
-      let queryEngine = this.queryEngines.get(conversationId);
-      if (!queryEngine) {
-        const ctx = this.buildSessionContext(
-          conversationId,
-          userId,
-          config,
-          userWorkspaceDir,  // absolute path — relative paths double up after the first setCwd call
-        );
-        this.sessionContexts.set(conversationId, ctx);
-        const commands = await getCommands(userWorkspaceDir);
-        queryEngine = createQueryEngineForSession(ctx, { commands });
-        ctx.queryEngine = queryEngine;
-        this.queryEngines.set(conversationId, queryEngine);
-      }
+      const queryEngine = await this.getOrCreateQueryEngine(
+        conversationId,
+        userId,
+        config,
+        userWorkspaceDir,
+      );
 
       const ctx = this.sessionContexts.get(conversationId)!;
 
@@ -1515,6 +1504,7 @@ export class AgentService {
       const prevApiKey = process.env.ANTHROPIC_API_KEY
       const prevBaseUrl = process.env.ANTHROPIC_BASE_URL
       const prevModel = process.env.ANTHROPIC_MODEL
+      const profileTurnPrompt = await this.getProfileTurnPrompt(userId, content)
 
       if (config.apiKey) {
         process.env.ANTHROPIC_API_KEY = config.apiKey
@@ -1542,7 +1532,10 @@ export class AgentService {
               conversationId,
               attachments,
             );
-            const stream = queryEngine!.submitMessage(inputWithAttachments, { uuid: userMessageId });
+            const stream = queryEngine!.submitMessage(inputWithAttachments, {
+              uuid: userMessageId,
+              appendSystemPrompt: profileTurnPrompt,
+            });
 
             for await (const msg of stream) {
               const msgMessage = (msg as any).message;
@@ -1624,7 +1617,7 @@ export class AgentService {
       await flushSessionStorage();
 
       const generatedFiles = await this.scanGeneratedFiles(
-        getNetworkUserDir(userId),
+        getNetworkUserWorkspaceDir(userId),
         startTime,
       );
 
@@ -1659,7 +1652,10 @@ export class AgentService {
     config: ConversationConfig = {},
     workspaceDir?: string,
   ): SessionContext {
-    const resolvedWorkspaceDir = workspaceDir ?? getNetworkUserDir(userId);
+    const resolvedWorkspaceDir = resolve(
+      workspaceDir ?? getNetworkUserWorkspaceDir(userId),
+    );
+    const autoMemoryDir = resolve(getNetworkAutoMemoryDir(userId));
     const transcriptDir = getNetworkTranscriptDir(userId);
     return {
       sessionId: conversationId,
@@ -1679,6 +1675,23 @@ export class AgentService {
         provider: config.provider,
         model: config.model,
         userId,
+        workspaceRoot: resolvedWorkspaceDir,
+        autoMemoryDir,
+        userReadOnlyRoots: [
+          {
+            id: `user-${userId}-uploads`,
+            root: resolve(getNetworkUserFilesDir(userId)),
+            allowedTools: NETWORK_READ_ONLY_FILE_TOOLS,
+          },
+        ],
+        sharedReadOnlyRoots: getNetworkSharedReadOnlyRoots(),
+        trustedSkillCatalogRoots: getNetworkTrustedSkillCatalogRoots(),
+        serviceOnlyRoots: [
+          {
+            id: `user-${userId}-transcripts`,
+            root: resolve(transcriptDir),
+          },
+        ],
       },
       anthropicClient: null,
       queryEngine: null,
@@ -1693,7 +1706,155 @@ export class AgentService {
         emit: () => {},
       },
       pendingToolResponses: new Map(),
+      skillReadOnlyRoots: new Set(),
     } as unknown as SessionContext;
+  }
+
+  private async getOrCreateQueryEngine(
+    conversationId: string,
+    userId: string,
+    config: ConversationConfig,
+    userWorkspaceDir: string,
+  ): Promise<QueryEngine> {
+    this.refreshCachedSessionConfig(conversationId, config);
+    this.assertCachedSessionOwner(conversationId, userId);
+
+    const cached = this.queryEngines.get(conversationId);
+    if (cached) {
+      return cached;
+    }
+
+    const pending = this.queryEngineInitializations.get(conversationId);
+    if (pending) {
+      if (pending.userId !== userId) {
+        throw new Error('Session ownership mismatch');
+      }
+      const queryEngine = await pending.promise;
+      this.refreshCachedSessionConfig(conversationId, config);
+      return queryEngine;
+    }
+
+    let createdContext = false;
+    const initialization = (async () => {
+      let ctx = this.sessionContexts.get(conversationId);
+      if (!ctx) {
+        ctx = this.buildSessionContext(
+          conversationId,
+          userId,
+          config,
+          userWorkspaceDir,
+        );
+        this.sessionContexts.set(conversationId, ctx);
+        createdContext = true;
+      }
+
+      try {
+        const [{ messages: initialMessages }, commands] = await Promise.all([
+          loadAgentSessionHistory(userId, conversationId),
+          getCommands(userWorkspaceDir),
+        ]);
+        const queryEngine = createQueryEngineForSession(ctx, {
+          commands,
+          initialMessages,
+          mcpTools: this.getProfileTools(userId, conversationId),
+        });
+        ctx.queryEngine = queryEngine;
+        this.queryEngines.set(conversationId, queryEngine);
+        return queryEngine;
+      } catch (error) {
+        if (createdContext && this.sessionContexts.get(conversationId) === ctx) {
+          this.sessionContexts.delete(conversationId);
+        }
+        throw error;
+      }
+    })();
+
+    this.queryEngineInitializations.set(conversationId, {
+      userId,
+      promise: initialization,
+    });
+
+    try {
+      return await initialization;
+    } finally {
+      const current = this.queryEngineInitializations.get(conversationId);
+      if (current?.promise === initialization) {
+        this.queryEngineInitializations.delete(conversationId);
+      }
+    }
+  }
+
+  private async appendManualUserMessage(input: {
+    userId: string;
+    conversationId: string;
+    userMessageId: string;
+    content: string;
+    clientRequestId?: string;
+    timestamp: Date;
+  }): Promise<string> {
+    const history = await loadAgentSessionHistory(input.userId, input.conversationId);
+    const alreadyPersisted = history.messages.some(
+      (message) => message.uuid === input.userMessageId,
+    );
+    if (alreadyPersisted) {
+      return history.tailUuid ?? input.userMessageId;
+    }
+
+    await appendJsonlEvent(input.userId, input.conversationId, {
+      parentUuid: history.tailUuid,
+      isSidechain: false,
+      promptId: input.clientRequestId ?? randomUUID(),
+      type: 'user',
+      message: {
+        id: input.userMessageId,
+        role: 'user',
+        content: input.content,
+      },
+      uuid: input.userMessageId,
+      timestamp: input.timestamp.toISOString(),
+      sessionId: input.conversationId,
+    });
+    return input.userMessageId;
+  }
+
+  private invalidateConversationRuntime(conversationId: string): void {
+    this.queryEngines.delete(conversationId);
+    this.sessionContexts.delete(conversationId);
+  }
+
+  private getProfileTools(userId: string, conversationId: string) {
+    if (!this.profileV2Service || !this.profileMemoryService || !this.profileProposalService) {
+      return [];
+    }
+    return createProfileTools({
+      userId: Number(userId),
+      conversationId,
+      baseService: this.profileV2Service,
+      memoryService: this.profileMemoryService,
+      proposalService: this.profileProposalService,
+      recallService: this.profileRecallService,
+    });
+  }
+
+  private async getProfileTurnPrompt(userId: string, query: string) {
+    if (!this.profileRecallService) return undefined;
+    try {
+      const context = await this.profileRecallService.buildContext(Number(userId), query);
+      return context?.rendered;
+    } catch (error) {
+      console.warn('[AgentService] Profile recall failed; continuing without Profile context', {
+        userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return undefined;
+    }
+  }
+
+  private assertCachedSessionOwner(sessionId: string, userId: string) {
+    const context = this.sessionContexts.get(sessionId);
+    if (context?.userId && context.userId !== userId) {
+      throw new Error('Session ownership mismatch');
+    }
   }
 
   private refreshCachedSessionConfig(
@@ -1762,7 +1923,7 @@ export class AgentService {
   ): string {
     if (inputPath.startsWith('/api/career-agent/threads/')) {
       const fileName = inputPath.split('/').pop() ?? '';
-      return join(networkRootDir, 'files', String(userId), conversationId, fileName);
+      return join(getNetworkUserFilesDir(userId), conversationId, fileName);
     }
 
     const marker = '/src/Network/files/';

@@ -457,7 +457,8 @@ export function createSubagentContext(
     userModified: parentContext.userModified,
     criticalSystemReminder_EXPERIMENTAL:
       overrides?.criticalSystemReminder_EXPERIMENTAL,
-    requireCanUseTool: overrides?.requireCanUseTool,
+    requireCanUseTool:
+      overrides?.requireCanUseTool ?? parentContext.requireCanUseTool,
   }
 }
 

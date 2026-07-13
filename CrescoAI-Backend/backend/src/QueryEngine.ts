@@ -155,6 +155,8 @@ export type QueryEngineConfig = {
   setSDKStatus?: (status: SDKStatus) => void
   abortController?: AbortController
   orphanedPermission?: OrphanedPermission
+  /** Force every tool call through canUseTool even when a hook returns allow. */
+  requireCanUseTool?: boolean
   /**
    * Snip-boundary handler: receives each yielded system message plus the
    * current mutableMessages store. Returns undefined if the message is not a
@@ -208,7 +210,7 @@ export class QueryEngine {
 
   async *submitMessage(
     prompt: string | ContentBlockParam[],
-    options?: { uuid?: string; isMeta?: boolean },
+    options?: { uuid?: string; isMeta?: boolean; appendSystemPrompt?: string },
   ): AsyncGenerator<SDKMessage, void, unknown> {
     const {
       cwd,
@@ -222,7 +224,7 @@ export class QueryEngine {
       taskBudget,
       canUseTool,
       customSystemPrompt,
-      appendSystemPrompt,
+      appendSystemPrompt: configuredAppendSystemPrompt,
       userSpecifiedModel,
       fallbackModel,
       jsonSchema,
@@ -233,7 +235,13 @@ export class QueryEngine {
       agents = [],
       setSDKStatus,
       orphanedPermission,
+      requireCanUseTool = false,
     } = this.config
+
+    const appendSystemPrompt = [
+      configuredAppendSystemPrompt,
+      options?.appendSystemPrompt,
+    ].filter((value): value is string => Boolean(value?.trim())).join('\n\n') || undefined
 
     this.discoveredSkillNames.clear()
     setCwd(cwd)
@@ -392,6 +400,7 @@ export class QueryEngine {
         })
       },
       setSDKStatus,
+      requireCanUseTool,
     }
 
     // Handle orphaned permission (only once per engine lifetime)
@@ -524,6 +533,7 @@ export class QueryEngine {
       updateFileHistoryState: processUserInputContext.updateFileHistoryState,
       updateAttributionState: processUserInputContext.updateAttributionState,
       setSDKStatus,
+      requireCanUseTool,
     }
 
     headlessProfilerCheckpoint('before_skills_plugins')

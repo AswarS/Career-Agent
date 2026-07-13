@@ -13,6 +13,8 @@ import {
 } from '../utils/envUtils.js'
 import { findCanonicalGitRoot } from '../utils/git.js'
 import { sanitizePath } from '../utils/path.js'
+import { getSessionContext } from '../server/SessionContext.js'
+import { isPathWithinRoot } from '../server/workspaceSecurity.js'
 import {
   getInitialSettings,
   getSettingsForSource,
@@ -166,6 +168,18 @@ function getAutoMemPathOverride(): string | undefined {
 }
 
 /**
+ * Network server sessions own their memory directory. This override is read
+ * from AsyncLocalStorage rather than process.env so concurrent users cannot
+ * replace one another's memory location.
+ */
+function getSessionAutoMemPath(): string | undefined {
+  return validateMemoryPath(
+    getSessionContext()?.config.autoMemoryDir,
+    false,
+  )
+}
+
+/**
  * Settings.json override for the full auto-memory directory path.
  * Supports ~/ expansion for user convenience.
  *
@@ -208,9 +222,10 @@ function getAutoMemBase(): string {
  * Returns the auto-memory directory path.
  *
  * Resolution order:
- *   1. CLAUDE_COWORK_MEMORY_PATH_OVERRIDE env var (full-path override, used by Cowork)
- *   2. autoMemoryDirectory in settings.json (trusted sources only: policy/local/user)
- *   3. <memoryBase>/projects/<sanitized-git-root>/memory/
+ *   1. SessionContext.autoMemoryDir (Network multi-user sessions, not cached)
+ *   2. CLAUDE_COWORK_MEMORY_PATH_OVERRIDE env var (full-path override, used by Cowork)
+ *   3. autoMemoryDirectory in settings.json (trusted sources only: policy/local/user)
+ *   4. <memoryBase>/projects/<sanitized-git-root>/memory/
  *      where memoryBase is resolved by getMemoryBaseDir()
  *
  * Memoized: render-path callers (collapseReadSearchGroups → isAutoManagedMemoryFile)
@@ -220,7 +235,9 @@ function getAutoMemBase(): string {
  * env vars / settings.json / CLAUDE_CONFIG_DIR are session-stable in
  * production and covered by per-test cache.clear.
  */
-export const getAutoMemPath = memoize(
+// Only the non-Network fallback is memoized. Network paths bypass the
+// process-global cache and therefore cannot accumulate per-user cache keys.
+const getLegacyAutoMemPath = memoize(
   (): string => {
     const override = getAutoMemPathOverride() ?? getAutoMemPathSetting()
     if (override) {
@@ -233,6 +250,12 @@ export const getAutoMemPath = memoize(
   },
   () => getProjectRoot(),
 )
+
+export function getAutoMemPath(): string {
+  // Server paths are cheap ALS lookups and must not accumulate in a
+  // process-global memoize cache as the number of users grows.
+  return getSessionAutoMemPath() ?? getLegacyAutoMemPath()
+}
 
 /**
  * Returns the daily log file path for the given date (defaults to today).
@@ -272,7 +295,5 @@ export function getAutoMemEntrypoint(): string {
  * false for it.
  */
 export function isAutoMemPath(absolutePath: string): boolean {
-  // SECURITY: Normalize to prevent path traversal bypasses via .. segments
-  const normalizedPath = normalize(absolutePath)
-  return normalizedPath.startsWith(getAutoMemPath())
+  return isPathWithinRoot(absolutePath, getAutoMemPath())
 }

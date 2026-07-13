@@ -25,6 +25,16 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ProfileModule } from './modules/profile/profile.module';
 import { ProfileSuggestionEntity } from './modules/profile/entities/profile-suggestion.entity';
+import { BaseProfileEntity } from './modules/profile/entities/base-profile.entity';
+import { ProfileStateEntity } from './modules/profile/entities/profile-state.entity';
+import { ProfileRevisionEntity } from './modules/profile/entities/profile-revision.entity';
+import { ProfileMemoryItemEntity } from './modules/profile/entities/profile-memory-item.entity';
+import { ProfileProjectionJobEntity } from './modules/profile/entities/profile-projection-job.entity';
+import { ProfileChangeProposalEntity } from './modules/profile/entities/profile-change-proposal.entity';
+import { ProfileV2Foundation1760000000000 } from './migrations/1760000000000-ProfileV2Foundation';
+import { ProfileMemory1760000001000 } from './migrations/1760000001000-ProfileMemory';
+import { ProfileProposals1760000002000 } from './migrations/1760000002000-ProfileProposals';
+import { ProfileLevelClassification1760000003000 } from './migrations/1760000003000-ProfileLevelClassification';
 
 const networkDir = dirname(fileURLToPath(import.meta.url));
 
@@ -45,8 +55,25 @@ const networkDir = dirname(fileURLToPath(import.meta.url));
         ResourceEntity,
         GeneratedAppEntity,
         ProfileSuggestionEntity,
+        BaseProfileEntity,
+        ProfileStateEntity,
+        ProfileRevisionEntity,
+        ProfileMemoryItemEntity,
+        ProfileProjectionJobEntity,
+        ProfileChangeProposalEntity,
       ],
-      synchronize: true,
+      synchronize:
+        process.env.NODE_ENV !== 'production'
+        && process.env.CAREER_AGENT_DB_SYNCHRONIZE !== 'false',
+      migrations: [
+        ProfileV2Foundation1760000000000,
+        ProfileMemory1760000001000,
+        ProfileProposals1760000002000,
+        ProfileLevelClassification1760000003000,
+      ],
+      migrationsRun:
+        process.env.NODE_ENV === 'production'
+        || process.env.CAREER_AGENT_DB_MIGRATIONS_RUN === 'true',
     }),
     AgentModule,
     ConversationModule,

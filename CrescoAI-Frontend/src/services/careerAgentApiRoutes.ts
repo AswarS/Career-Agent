@@ -10,6 +10,13 @@ export const CAREER_AGENT_API_ROUTE_PATTERNS = {
   threadFile: `${CAREER_AGENT_API_BASE_PATH}/threads/:threadId/files/:fileName`,
   profile: `${CAREER_AGENT_API_BASE_PATH}/profile`,
   profileSuggestions: `${CAREER_AGENT_API_BASE_PATH}/profile/suggestions`,
+  profileBase: `${CAREER_AGENT_API_BASE_PATH}/profile/base`,
+  profileState: `${CAREER_AGENT_API_BASE_PATH}/profile/state`,
+  profileMemories: `${CAREER_AGENT_API_BASE_PATH}/profile/memories`,
+  profileMemory: `${CAREER_AGENT_API_BASE_PATH}/profile/memories/:memoryId`,
+  profileProposals: `${CAREER_AGENT_API_BASE_PATH}/profile/proposals`,
+  profileProposalAction: `${CAREER_AGENT_API_BASE_PATH}/profile/proposals/:proposalId/:action`,
+  profileHistory: `${CAREER_AGENT_API_BASE_PATH}/profile/history`,
   listArtifacts: `${CAREER_AGENT_API_BASE_PATH}/artifacts`,
   artifact: `${CAREER_AGENT_API_BASE_PATH}/artifacts/:artifactId`,
   refreshArtifact: `${CAREER_AGENT_API_BASE_PATH}/artifacts/:artifactId/refresh`,
@@ -74,6 +81,21 @@ export const CAREER_AGENT_API_ROUTE_DESCRIPTORS = [
     method: 'GET',
     path: CAREER_AGENT_API_ROUTE_PATTERNS.profileSuggestions,
     purpose: '加载与对话上下文关联的非破坏式画像建议。',
+  },
+  {
+    method: 'GET/PATCH',
+    path: CAREER_AGENT_API_ROUTE_PATTERNS.profileBase,
+    purpose: '读取或按版本更新当前认证用户的基础 Profile V2。',
+  },
+  {
+    method: 'GET/POST',
+    path: CAREER_AGENT_API_ROUTE_PATTERNS.profileMemories,
+    purpose: '查询或新增当前认证用户的长期/短期 Profile Memory。',
+  },
+  {
+    method: 'GET',
+    path: CAREER_AGENT_API_ROUTE_PATTERNS.profileProposals,
+    purpose: '加载需要用户确认的 Profile 变更提案。',
   },
   {
     method: 'GET',
@@ -144,6 +166,29 @@ export const CAREER_AGENT_API_ROUTES = {
   },
   profileSuggestions() {
     return CAREER_AGENT_API_ROUTE_PATTERNS.profileSuggestions;
+  },
+  profileBase() {
+    return CAREER_AGENT_API_ROUTE_PATTERNS.profileBase;
+  },
+  profileState() {
+    return CAREER_AGENT_API_ROUTE_PATTERNS.profileState;
+  },
+  profileMemories() {
+    return CAREER_AGENT_API_ROUTE_PATTERNS.profileMemories;
+  },
+  profileMemory(memoryId: string) {
+    return CAREER_AGENT_API_ROUTE_PATTERNS.profileMemory.replace(':memoryId', encodeURIComponent(memoryId));
+  },
+  profileProposals() {
+    return CAREER_AGENT_API_ROUTE_PATTERNS.profileProposals;
+  },
+  profileProposalAction(proposalId: string, action: 'accept' | 'reject') {
+    return CAREER_AGENT_API_ROUTE_PATTERNS.profileProposalAction
+      .replace(':proposalId', encodeURIComponent(proposalId))
+      .replace(':action', action);
+  },
+  profileHistory() {
+    return CAREER_AGENT_API_ROUTE_PATTERNS.profileHistory;
   },
   listArtifacts() {
     return CAREER_AGENT_API_ROUTE_PATTERNS.listArtifacts;

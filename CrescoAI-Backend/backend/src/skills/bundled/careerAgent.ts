@@ -1,15 +1,16 @@
 import { readdirSync, readFileSync, type Dirent } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import type { FrontmatterData } from '../../utils/frontmatterParser.js'
 import { parseFrontmatter } from '../../utils/frontmatterParser.js'
 import { substituteArguments } from '../../utils/argumentSubstitution.js'
 import { registerBundledSkill } from '../bundledSkills.js'
+import {
+  getGlobalSkillRoot,
+  getGlobalSkillsRoot,
+} from '../globalSkillPaths.js'
 
-const GLOBAL_SKILLS_DIR = fileURLToPath(
-  new URL('../../../../../skills/', import.meta.url),
-)
+const GLOBAL_SKILLS_DIR = getGlobalSkillsRoot()
 
 export type GlobalDiskSkillCatalogEntry = {
   name: string
@@ -18,6 +19,7 @@ export type GlobalDiskSkillCatalogEntry = {
   argumentHint?: string
   argumentNames: string[]
   category: 'analysis'
+  resourceRoot: string
 }
 
 let globalDiskSkillCatalogCache: GlobalDiskSkillCatalogEntry[] | undefined
@@ -107,6 +109,7 @@ export function getGlobalDiskSkillCatalog(): GlobalDiskSkillCatalogEntry[] {
           argumentHint,
           argumentNames,
           category: 'analysis' as const,
+          resourceRoot: skillDir,
         },
       ]
     })
@@ -146,6 +149,7 @@ export function registerCareerAgentSkills(): void {
       'Use for study plans, learning paths, interview or exam preparation, course planning, skill improvement, and structured knowledge learning.',
     argumentHint: '[learning goal]',
     userInvocable: true,
+    resourceRoot: getGlobalSkillRoot('learning-plan'),
     async getPromptForCommand(args) {
       return [
         {
@@ -164,6 +168,7 @@ export function registerCareerAgentSkills(): void {
       'Use when interaction or visualization teaches better than plain text, especially for spatial, temporal, structural, quantitative, scientific, or process-oriented topics.',
     argumentHint: '[application description]',
     userInvocable: true,
+    resourceRoot: getGlobalSkillRoot('develop-web-game'),
     async getPromptForCommand(args) {
       return [
         {
@@ -240,6 +245,7 @@ export function registerCareerAgentSkills(): void {
       whenToUse: skill.whenToUse,
       argumentHint: skill.argumentHint,
       userInvocable: true,
+      resourceRoot: skill.resourceRoot,
       async getPromptForCommand(args) {
         return [
           {

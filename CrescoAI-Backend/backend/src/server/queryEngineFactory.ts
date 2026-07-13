@@ -18,10 +18,13 @@ import type { DeepImmutable } from '../types/utils.js'
 import { getTools, assembleToolPool } from '../tools.js'
 import type { Command } from '../commands.js'
 import type { CanUseToolFn } from '../hooks/useCanUseTool.js'
-import type { PermissionDecision } from '../utils/permissions/permissions.js'
-import type { ToolType } from '../Tool.js'
+import type { PermissionDecision } from '../utils/permissions/PermissionResult.js'
+import type { Tool } from '../Tool.js'
 import type { FileStateCache } from '../utils/fileStateCache.js'
 import { CAREER_AGENT_LEARNING_SYSTEM_PROMPT } from '../Network/prompts/careerAgentLearningPrompt.js'
+import { getProfileAgentSystemPrompt } from '../Network/modules/profile/profile-agent.prompt.js'
+import { checkSessionWorkspacePath } from './workspaceSecurity.js'
+import { checkShellCommandWorkspace } from './shellWorkspaceGuard.js'
 
 // ---------------------------------------------------------------------------
 // Per-session AppState
@@ -134,18 +137,217 @@ function buildToolPermissionContext(
 // ---------------------------------------------------------------------------
 
 const TOOL_RESPONSE_TIMEOUT_MS = 30_000
+const SESSION_CWD_MUTATION_TOOLS = new Set(['EnterWorktree', 'ExitWorktree'])
+
+const READ_PATH_TOOLS = new Set(['Read', 'Glob', 'Grep', 'LS'])
+const WRITE_PATH_TOOLS = new Set([
+  'Write',
+  'Edit',
+  'FileEdit',
+  'MultiEdit',
+  'NotebookEdit',
+])
+
+async function checkServerFileBoundary(
+  tool: Tool,
+  input: Record<string, unknown>,
+  context: SessionContext | undefined,
+): Promise<{ applies: boolean; decision: PermissionDecision | null }> {
+  if (!context?.config.workspaceRoot) {
+    return { applies: false, decision: null }
+  }
+
+  const access = READ_PATH_TOOLS.has(tool.name)
+    ? 'read'
+    : WRITE_PATH_TOOLS.has(tool.name)
+      ? 'write'
+      : null
+  if (!access) {
+    return { applies: false, decision: null }
+  }
+
+  let path: string
+  try {
+    const candidate = tool.getPath?.(input as never)
+    if (typeof candidate !== 'string' || !candidate) {
+      return {
+        applies: true,
+        decision: {
+          behavior: 'deny',
+          message: `Tool "${tool.name}" did not provide a valid path for workspace validation`,
+          decisionReason: {
+            type: 'workingDir',
+            reason: 'Missing tool path',
+          },
+        },
+      }
+    }
+    path = candidate
+  } catch {
+    return {
+      applies: true,
+      decision: {
+        behavior: 'deny',
+        message: `Tool "${tool.name}" path validation failed`,
+        decisionReason: {
+          type: 'workingDir',
+          reason: 'Tool path extraction failed',
+        },
+      },
+    }
+  }
+
+  const boundary = await checkSessionWorkspacePath(path, access, {
+    cwd: context.config.cwd,
+    workspaceRoot: context.config.workspaceRoot,
+    autoMemoryDir: context.config.autoMemoryDir,
+    toolName: tool.name,
+    userReadOnlyRoots: context.config.userReadOnlyRoots,
+    sharedReadOnlyRoots: context.config.sharedReadOnlyRoots,
+    skillReadOnlyRoots: context.skillReadOnlyRoots,
+    serviceOnlyRoots: context.config.serviceOnlyRoots,
+  })
+  if (boundary.allowed === true) {
+    return { applies: true, decision: null }
+  }
+
+  return {
+    applies: true,
+    decision: {
+      behavior: 'deny',
+      message: boundary.reason,
+      decisionReason: {
+        type: 'workingDir',
+        reason: boundary.rootId
+          ? `${boundary.reason} [root=${boundary.rootId}]`
+          : boundary.reason,
+      },
+    },
+  }
+}
+
+async function checkServerShellBoundary(
+  tool: Tool,
+  input: Record<string, unknown>,
+  context: SessionContext | undefined,
+): Promise<PermissionDecision | null> {
+  if (
+    !context?.config.workspaceRoot ||
+    (tool.name !== 'Bash' && tool.name !== 'PowerShell')
+  ) {
+    return null
+  }
+  if (input.dangerouslyDisableSandbox === true) {
+    return {
+      behavior: 'deny',
+      message: 'Sandbox overrides are not allowed in Network sessions',
+      decisionReason: {
+        type: 'workingDir',
+        reason: 'Shell sandbox override requested',
+      },
+    }
+  }
+  if (typeof input.command !== 'string') {
+    return {
+      behavior: 'deny',
+      message: 'Shell command is missing',
+      decisionReason: {
+        type: 'workingDir',
+        reason: 'Missing shell command',
+      },
+    }
+  }
+
+  const boundary = await checkShellCommandWorkspace(
+    input.command,
+    tool.name === 'Bash' ? 'bash' : 'powershell',
+    {
+      cwd: context.config.cwd,
+      workspaceRoot: context.config.workspaceRoot,
+      autoMemoryDir: context.config.autoMemoryDir,
+    },
+  )
+  if (boundary.allowed === true) {
+    return null
+  }
+  return {
+    behavior: 'deny',
+    message: boundary.reason,
+    decisionReason: {
+      type: 'workingDir',
+      reason: boundary.reason,
+    },
+  }
+}
 
 function createServerCanUseTool(
   permissionConfig?: PermissionConfig,
   context?: SessionContext,
 ): CanUseToolFn {
-  return async (tool: ToolType, input: any, _ctx: any, _msg: any, toolUseId: string): Promise<PermissionDecision<any>> => {
+  return async (
+    tool: Tool,
+    input: any,
+    _ctx: any,
+    _msg: any,
+    toolUseId: string,
+    forceDecision?: PermissionDecision<any>,
+  ): Promise<PermissionDecision<any>> => {
+    if (forceDecision?.behavior === 'deny') {
+      return forceDecision
+    }
+
+    if (SESSION_CWD_MUTATION_TOOLS.has(tool.name)) {
+      return {
+        behavior: 'deny',
+        message: `Tool "${tool.name}" cannot change the working directory of a Network session`,
+        decisionReason: {
+          type: 'workingDir',
+          reason: 'Network sessions are pinned to their user workspace',
+        },
+      }
+    }
+
+    const shellBoundaryDecision = await checkServerShellBoundary(
+      tool,
+      input,
+      context,
+    )
+    if (shellBoundaryDecision) {
+      return shellBoundaryDecision
+    }
+
+    const fileBoundary = await checkServerFileBoundary(
+      tool,
+      input,
+      context,
+    )
+    if (fileBoundary.decision) {
+      return fileBoundary.decision
+    }
+
+    if (
+      forceDecision?.behavior === 'ask' &&
+      forceDecision.decisionReason?.type === 'workingDir' &&
+      !fileBoundary.applies
+    ) {
+      return {
+        behavior: 'deny',
+        message:
+          forceDecision.message ||
+          'Path is outside the current user workspace',
+        decisionReason: forceDecision.decisionReason,
+      }
+    }
+
     const result = checkToolPermission(tool.name, permissionConfig ?? { mode: 'allow_all' })
-    if (!result.allowed) {
+    if (result.allowed === false) {
       return {
         behavior: 'deny',
         message: result.reason,
-        decisionReason: { type: 'config' },
+        decisionReason: {
+          type: 'other',
+          reason: 'Denied by server permission configuration',
+        },
       }
     }
 
@@ -159,20 +361,32 @@ function createServerCanUseTool(
         return {
           behavior: 'deny',
           message: 'User declined to answer questions',
-          decisionReason: { type: 'user' },
+          decisionReason: {
+            type: 'other',
+            reason: 'User declined the interactive tool request',
+          },
         }
       }
       return {
         behavior: 'allow',
         updatedInput: { ...input, answers: response.answers ?? {}, annotations: response.annotations },
-        decisionReason: { type: 'user' },
+        decisionReason: {
+          type: 'other',
+          reason: 'User approved the interactive tool request',
+        },
       }
     }
 
     return {
       behavior: 'allow',
-      updatedInput: input,
-      decisionReason: { type: 'config' },
+      updatedInput:
+        forceDecision?.behavior === 'ask'
+          ? forceDecision.updatedInput ?? input
+          : input,
+      decisionReason: {
+        type: 'other',
+        reason: 'Allowed by server permission configuration',
+      },
     }
   }
 }
@@ -230,6 +444,7 @@ export function createQueryEngineForSession(
     : builtInTools
   const appendSystemPrompt = [
     CAREER_AGENT_LEARNING_SYSTEM_PROMPT,
+    getProfileAgentSystemPrompt(),
     context.config.appendSystemPrompt,
   ].filter(Boolean).join('\n\n')
 
@@ -240,6 +455,7 @@ export function createQueryEngineForSession(
     mcpClients: context.mcpClients ?? [],
     agents: [],
     canUseTool,
+    requireCanUseTool: true,
     getAppState,
     setAppState,
     initialMessages: options.initialMessages ?? [],
