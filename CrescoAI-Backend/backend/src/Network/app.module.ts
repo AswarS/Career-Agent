@@ -35,6 +35,7 @@ import { ProfileV2Foundation1760000000000 } from './migrations/1760000000000-Pro
 import { ProfileMemory1760000001000 } from './migrations/1760000001000-ProfileMemory';
 import { ProfileProposals1760000002000 } from './migrations/1760000002000-ProfileProposals';
 import { ProfileLevelClassification1760000003000 } from './migrations/1760000003000-ProfileLevelClassification';
+import { ProfileIndexedMemory1760000004000 } from './migrations/1760000004000-ProfileIndexedMemory';
 
 const networkDir = dirname(fileURLToPath(import.meta.url));
 
@@ -70,6 +71,7 @@ const networkDir = dirname(fileURLToPath(import.meta.url));
         ProfileMemory1760000001000,
         ProfileProposals1760000002000,
         ProfileLevelClassification1760000003000,
+        ProfileIndexedMemory1760000004000,
       ],
       migrationsRun:
         process.env.NODE_ENV === 'production'

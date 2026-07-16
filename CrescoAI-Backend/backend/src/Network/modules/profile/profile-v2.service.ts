@@ -79,6 +79,7 @@ export class ProfileV2Service {
           aggregateVersion: 1,
           projectionVersion: 0,
           projectionStatus: 'pending',
+          nextProfileIndex: 1,
         });
       }
       state.aggregateVersion += 1;
@@ -198,6 +199,7 @@ export class ProfileV2Service {
         aggregateVersion: 1,
         projectionVersion: 0,
         projectionStatus: 'pending',
+        nextProfileIndex: 1,
       }),
     );
   }

@@ -23,6 +23,8 @@ export type ProfileProposalOperation =
   | 'delete'
   | 'expire';
 export type ProfileUpdateLevel = 'L0' | 'L1' | 'L2' | 'L3';
+export type ProfilePersistentLevel = Exclude<ProfileUpdateLevel, 'L0'>;
+export type ProfileMemoryMutationOperation = 'add' | 'replace';
 export type ProfilePolicyAction = 'ignore' | 'apply' | 'propose';
 export type ProfileTargetType = 'base_profile' | 'memory';
 export type ProfileSourceType =
@@ -79,6 +81,9 @@ export interface BaseProfilePatch {
 
 export interface ProfileMemoryRecord {
   id: string;
+  profileIndex: string;
+  profileLevel: ProfilePersistentLevel;
+  itemVersion: number;
   content: string;
   category: string;
   slotKey: string;
@@ -96,6 +101,10 @@ export interface ProfileMemoryRecord {
 }
 
 export interface ProfileMemoryCandidate {
+  operation?: ProfileMemoryMutationOperation;
+  profileIndex?: string;
+  expectedTargetId?: string;
+  expectedTargetVersion?: number;
   content: string;
   category: string;
   level: ProfileUpdateLevel;

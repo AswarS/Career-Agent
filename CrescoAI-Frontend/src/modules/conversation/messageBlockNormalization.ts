@@ -8,7 +8,7 @@ export function extractSkillName(value: string | null | undefined): string | nul
   const directMatch = text.match(
     /(?:Skill command selected:\s*\/|Launching skill:\s*)([A-Za-z0-9_.-]+)/i,
   ) ?? text.match(/\bSkill\s+([A-Za-z0-9_.-]+)\s+loaded\b/i);
-  if (directMatch?.[1]) return directMatch[1];
+  if (directMatch?.[1]) return directMatch[1].replace(/\.+$/, '');
 
   const baseDirectoryMatch = text.match(/Base directory for this skill:\s*([^\r\n]+)/i);
   if (!baseDirectoryMatch?.[1]) return null;
@@ -65,29 +65,53 @@ export function normalizeMessageBlocks(
   blocks: MessageBlock[] | null | undefined,
   options: { authoritativeText?: string | null } = {},
 ): MessageBlock[] | undefined {
-  const orderedIds: string[] = [];
-  const normalizedById = new Map<string, MessageBlock>();
-  const textParts: string[] = [];
+  const orderedBlocks: MessageBlock[] = [];
+  const orderedBlockIndexes = new Map<string, number>();
+  const artifactBlocks: MessageBlock[] = [];
+  const artifactIndexes = new Map<string, number>();
+  const textBlockIndexes: number[] = [];
+  let textIndex = 0;
   let statusIndex = 0;
-  const upsert = (block: MessageBlock) => {
-    if (!normalizedById.has(block.id)) orderedIds.push(block.id);
-    normalizedById.set(block.id, block);
+  const upsert = (
+    target: MessageBlock[],
+    indexes: Map<string, number>,
+    block: MessageBlock,
+  ) => {
+    const existingIndex = indexes.get(block.id);
+    if (existingIndex === undefined) {
+      indexes.set(block.id, target.length);
+      target.push(block);
+      return;
+    }
+    target[existingIndex] = block;
   };
 
   for (const sourceBlock of blocks ?? []) {
     if (sourceBlock.type === 'text') {
-      if (sourceBlock.text) textParts.push(sourceBlock.text);
+      const text = sourceBlock.text?.trim();
+      if (!text) continue;
+      textBlockIndexes.push(orderedBlocks.length);
+      orderedBlocks.push({
+        ...sourceBlock,
+        id: `text-${textIndex++}`,
+        text,
+      });
       continue;
     }
 
     if (isInternalSkillBlock(sourceBlock) || isSkillLoadedNotice(sourceBlock)) {
       const skillName = extractSkillNameFromBlock(sourceBlock)
         ?? extractSkillName(sourceBlock.text);
-      if (skillName) upsert(createSkillLoadedBlock(skillName));
+      if (skillName) upsert(orderedBlocks, orderedBlockIndexes, createSkillLoadedBlock(skillName));
       continue;
     }
 
-    upsert(sourceBlock.type === 'status'
+    if (sourceBlock.type === 'artifact') {
+      upsert(artifactBlocks, artifactIndexes, sourceBlock);
+      continue;
+    }
+
+    upsert(orderedBlocks, orderedBlockIndexes, sourceBlock.type === 'status'
       ? {
           ...sourceBlock,
           id: `status-${statusIndex++}`,
@@ -98,23 +122,19 @@ export function normalizeMessageBlocks(
 
   const authoritativeText = options.authoritativeText !== undefined
     ? options.authoritativeText?.trim() ?? ''
-    : textParts.join('\n').trim();
+    : '';
   if (authoritativeText) {
-    upsert({ id: 'text-0', type: 'text', text: authoritativeText });
+    const finalTextBlockIndex = textBlockIndexes[textBlockIndexes.length - 1];
+    if (finalTextBlockIndex === undefined) {
+      orderedBlocks.push({ id: 'text-0', type: 'text', text: authoritativeText });
+    } else if (orderedBlocks[finalTextBlockIndex]?.text?.trim() !== authoritativeText) {
+      orderedBlocks[finalTextBlockIndex] = {
+        ...orderedBlocks[finalTextBlockIndex],
+        text: authoritativeText,
+      };
+    }
   }
 
-  const normalized = orderedIds
-    .map((id) => normalizedById.get(id))
-    .filter((block): block is MessageBlock => Boolean(block));
-  const textBlock = normalized.find((block) => block.type === 'text');
-  const executionBlocks = normalized.filter(
-    (block) => block.type !== 'text' && block.type !== 'artifact',
-  );
-  const artifactBlocks = normalized.filter((block) => block.type === 'artifact');
-  const output = [
-    ...executionBlocks,
-    ...(textBlock ? [textBlock] : []),
-    ...artifactBlocks,
-  ];
+  const output = [...orderedBlocks, ...artifactBlocks];
   return output.length ? output : undefined;
 }

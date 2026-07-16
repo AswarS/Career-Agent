@@ -16,7 +16,7 @@ export function extractLoadedSkillNameFromText(value: string | null | undefined)
   const directMatch = text.match(
     /(?:Skill command selected:\s*\/|Launching skill:\s*)([A-Za-z0-9_.-]+)/i,
   ) ?? text.match(/\bSkill\s+([A-Za-z0-9_.-]+)\s+loaded\b/i)
-  if (directMatch?.[1]) return directMatch[1]
+  if (directMatch?.[1]) return directMatch[1].replace(/\.+$/, '')
 
   const baseDirectoryMatch = text.match(/Base directory for this skill:\s*([^\r\n]+)/i)
   if (!baseDirectoryMatch?.[1]) return null
@@ -63,19 +63,34 @@ export function normalizeCanonicalMessageBlocks<T extends CanonicalMessageBlock>
   blocks: readonly T[] | null | undefined,
   options: { authoritativeText?: string | null } = {},
 ): T[] | undefined {
-  const orderedIds: string[] = []
-  const normalizedById = new Map<string, T>()
-  const textParts: string[] = []
+  const orderedBlocks: T[] = []
+  const orderedBlockIndexes = new Map<string, number>()
+  const artifactBlocks: T[] = []
+  const artifactIndexes = new Map<string, number>()
+  const textBlockIndexes: number[] = []
+  let textIndex = 0
   let statusIndex = 0
 
-  const upsert = (block: T) => {
-    if (!normalizedById.has(block.id)) orderedIds.push(block.id)
-    normalizedById.set(block.id, block)
+  const upsert = (target: T[], indexes: Map<string, number>, block: T) => {
+    const existingIndex = indexes.get(block.id)
+    if (existingIndex === undefined) {
+      indexes.set(block.id, target.length)
+      target.push(block)
+      return
+    }
+    target[existingIndex] = block
   }
 
   for (const sourceBlock of blocks ?? []) {
     if (sourceBlock.type === 'text') {
-      if (sourceBlock.text) textParts.push(sourceBlock.text)
+      const text = sourceBlock.text?.trim()
+      if (!text) continue
+      textBlockIndexes.push(orderedBlocks.length)
+      orderedBlocks.push({
+        ...sourceBlock,
+        id: `text-${textIndex++}`,
+        text,
+      } as T)
       continue
     }
 
@@ -86,8 +101,13 @@ export function normalizeCanonicalMessageBlocks<T extends CanonicalMessageBlock>
             [sourceBlock.title, sourceBlock.text].filter(Boolean).join('\n'),
           )
       if (skillName && skillName.toLowerCase() !== 'skill') {
-        upsert(createSkillLoadedBlock<T>(skillName))
+        upsert(orderedBlocks, orderedBlockIndexes, createSkillLoadedBlock<T>(skillName))
       }
+      continue
+    }
+
+    if (sourceBlock.type === 'artifact') {
+      upsert(artifactBlocks, artifactIndexes, sourceBlock)
       continue
     }
 
@@ -98,28 +118,24 @@ export function normalizeCanonicalMessageBlocks<T extends CanonicalMessageBlock>
           title: normalizeStatusTitle(sourceBlock.title),
         } as T
       : sourceBlock
-    upsert(normalizedBlock)
+    upsert(orderedBlocks, orderedBlockIndexes, normalizedBlock)
   }
 
   const authoritativeText = options.authoritativeText !== undefined
     ? options.authoritativeText?.trim() ?? ''
-    : textParts.join('\n').trim()
+    : ''
   if (authoritativeText) {
-    upsert({ id: 'text-0', type: 'text', text: authoritativeText } as T)
+    const finalTextBlockIndex = textBlockIndexes[textBlockIndexes.length - 1]
+    if (finalTextBlockIndex === undefined) {
+      orderedBlocks.push({ id: 'text-0', type: 'text', text: authoritativeText } as T)
+    } else if (orderedBlocks[finalTextBlockIndex]?.text?.trim() !== authoritativeText) {
+      orderedBlocks[finalTextBlockIndex] = {
+        ...orderedBlocks[finalTextBlockIndex],
+        text: authoritativeText,
+      }
+    }
   }
 
-  const normalized = orderedIds
-    .map((id) => normalizedById.get(id))
-    .filter((block): block is T => Boolean(block))
-  const textBlock = normalized.find((block) => block.type === 'text')
-  const executionBlocks = normalized.filter(
-    (block) => block.type !== 'text' && block.type !== 'artifact',
-  )
-  const artifactBlocks = normalized.filter((block) => block.type === 'artifact')
-  const output = [
-    ...executionBlocks,
-    ...(textBlock ? [textBlock] : []),
-    ...artifactBlocks,
-  ]
+  const output = [...orderedBlocks, ...artifactBlocks]
   return output.length ? output : undefined
 }

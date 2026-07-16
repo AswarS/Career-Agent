@@ -7,6 +7,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import type {
+  ProfilePersistentLevel,
   ProfileMemoryStatus,
   ProfilePriority,
   ProfileSourceType,
@@ -17,12 +18,22 @@ import type {
 @Index(['userId', 'status', 'timeScope'])
 @Index(['userId', 'normalizedKey', 'status'])
 @Index(['userId', 'slotKey', 'status'])
+@Index(['userId', 'profileIndex'], {
+  unique: true,
+  where: '"status" = \'active\' AND "profileIndex" IS NOT NULL',
+})
 export class ProfileMemoryItemEntity {
   @PrimaryColumn({ type: 'varchar' })
   id!: string;
 
   @Column({ type: 'integer' })
   userId!: number;
+
+  @Column({ type: 'varchar', nullable: true })
+  profileIndex!: string | null;
+
+  @Column({ type: 'varchar', default: 'L2' })
+  profileLevel!: ProfilePersistentLevel;
 
   @Column({ type: 'text' })
   content!: string;
@@ -65,6 +76,9 @@ export class ProfileMemoryItemEntity {
 
   @Column({ type: 'integer', default: 1 })
   version!: number;
+
+  @Column({ type: 'integer', default: 1 })
+  itemVersion!: number;
 
   @CreateDateColumn()
   createdAt!: Date;

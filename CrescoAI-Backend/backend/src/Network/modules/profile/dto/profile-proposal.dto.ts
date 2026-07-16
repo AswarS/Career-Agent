@@ -7,16 +7,27 @@ import {
   IsOptional,
   IsString,
   MaxLength,
+  Matches,
 } from 'class-validator';
 
 export class ProposeProfileMemoryDto {
+  @IsOptional()
+  @IsIn(['add', 'replace'])
+  operation?: 'add' | 'replace';
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^P\d{6,}$/)
+  profileIndex?: string;
+
   @IsString()
   @MaxLength(2_000)
   content!: string;
 
+  @IsOptional()
   @IsString()
   @MaxLength(100)
-  category!: string;
+  category?: string;
 
   @IsOptional()
   @IsString()
@@ -29,11 +40,13 @@ export class ProposeProfileMemoryDto {
   @IsString({ each: true })
   appliesTo?: string[];
 
+  @IsOptional()
   @IsIn(['long_term', 'short_term', 'temporary'])
-  timeScope!: 'long_term' | 'short_term' | 'temporary';
+  timeScope?: 'long_term' | 'short_term' | 'temporary';
 
+  @IsOptional()
   @IsIn(['hard_constraint', 'high', 'normal', 'background'])
-  priority!: 'hard_constraint' | 'high' | 'normal' | 'background';
+  priority?: 'hard_constraint' | 'high' | 'normal' | 'background';
 
   @IsIn(['L0', 'L1', 'L2', 'L3'])
   level!: 'L0' | 'L1' | 'L2' | 'L3';

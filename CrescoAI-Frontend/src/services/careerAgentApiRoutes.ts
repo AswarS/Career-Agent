@@ -14,6 +14,7 @@ export const CAREER_AGENT_API_ROUTE_PATTERNS = {
   profileState: `${CAREER_AGENT_API_BASE_PATH}/profile/state`,
   profileMemories: `${CAREER_AGENT_API_BASE_PATH}/profile/memories`,
   profileMemory: `${CAREER_AGENT_API_BASE_PATH}/profile/memories/:memoryId`,
+  profileMemoryByIndex: `${CAREER_AGENT_API_BASE_PATH}/profile/memories/by-index/:profileIndex`,
   profileProposals: `${CAREER_AGENT_API_BASE_PATH}/profile/proposals`,
   profileProposalAction: `${CAREER_AGENT_API_BASE_PATH}/profile/proposals/:proposalId/:action`,
   profileHistory: `${CAREER_AGENT_API_BASE_PATH}/profile/history`,
@@ -90,7 +91,12 @@ export const CAREER_AGENT_API_ROUTE_DESCRIPTORS = [
   {
     method: 'GET/POST',
     path: CAREER_AGENT_API_ROUTE_PATTERNS.profileMemories,
-    purpose: '查询或新增当前认证用户的长期/短期 Profile Memory。',
+    purpose: '查询或按 L1-L3 新增当前认证用户的 Profile Memory。',
+  },
+  {
+    method: 'PUT',
+    path: CAREER_AGENT_API_ROUTE_PATTERNS.profileMemoryByIndex,
+    purpose: '按公开 profileIndex 替换当前认证用户的一条活动 Profile Memory。',
   },
   {
     method: 'GET',
@@ -178,6 +184,9 @@ export const CAREER_AGENT_API_ROUTES = {
   },
   profileMemory(memoryId: string) {
     return CAREER_AGENT_API_ROUTE_PATTERNS.profileMemory.replace(':memoryId', encodeURIComponent(memoryId));
+  },
+  profileMemoryByIndex(profileIndex: string) {
+    return CAREER_AGENT_API_ROUTE_PATTERNS.profileMemoryByIndex.replace(':profileIndex', encodeURIComponent(profileIndex));
   },
   profileProposals() {
     return CAREER_AGENT_API_ROUTE_PATTERNS.profileProposals;

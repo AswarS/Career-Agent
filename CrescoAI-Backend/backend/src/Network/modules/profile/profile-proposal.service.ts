@@ -4,7 +4,12 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ProposeBaseProfileDto, ProposeProfileMemoryDto } from './dto/profile-proposal.dto';
 import { ProfileChangeProposalEntity } from './entities/profile-change-proposal.entity';
-import { profileAccessDenied, profileConfirmationRequired, profileResourceNotFound } from './profile.errors';
+import {
+  profileAccessDenied,
+  profileConfirmationRequired,
+  profileResourceNotFound,
+  profileValidationError,
+} from './profile.errors';
 import { profileFeatureFlags } from './profile-feature-flags';
 import { ProfileMemoryService } from './profile-memory.service';
 import { ProfilePolicyService } from './profile-policy.service';
@@ -35,30 +40,74 @@ export class ProfileProposalService {
 
   async proposeMemory(userId: number, input: ProposeProfileMemoryDto) {
     if (!profileFeatureFlags.v2Write()) throw profileAccessDenied('Profile V2 writes are disabled');
+    const operation = input.operation
+      ?? (profileFeatureFlags.indexedMutations() ? 'add' : 'legacy');
+    const active = await this.memoryService.findActiveEntities(userId);
+    const normalizedIndex = input.profileIndex?.trim().toUpperCase();
+    const target = operation === 'replace'
+      ? active.find((item) => item.profileIndex === normalizedIndex)
+      : undefined;
+    if (operation === 'add' && normalizedIndex) {
+      throw profileValidationError('add must not provide profileIndex');
+    }
+    if (operation === 'replace' && !normalizedIndex) {
+      throw profileValidationError('replace requires profileIndex');
+    }
+    if (operation === 'replace' && !target) {
+      return {
+        mutationOutcome: 'not_found' as const,
+        profileLevel: input.level,
+        decision: {
+          level: 'L3' as const,
+          action: 'ignore' as const,
+          reasons: [`active Profile item ${normalizedIndex} was not found`],
+          conflictIds: [],
+          confirmationRequired: false,
+        },
+        proposal: null,
+        appliedMemory: null,
+      };
+    }
+    if (operation === 'add' && (!input.category || !input.timeScope || !input.priority)) {
+      throw profileValidationError('add requires category, timeScope, and priority');
+    }
+    const targetRecord = target ? this.memoryService.toRecord(target) : null;
+    const effectiveTimeScope = input.timeScope ?? target?.timeScope;
     const candidate: ProfileMemoryCandidate = {
+      operation: operation === 'legacy' ? undefined : operation,
+      profileIndex: normalizedIndex,
+      expectedTargetId: target?.id,
+      expectedTargetVersion: target?.version,
       content: input.content,
-      category: input.category.trim().toLowerCase(),
+      category: (input.category ?? target?.category ?? '').trim().toLowerCase(),
       level: input.level,
-      slotKey: input.slotKey?.trim().toLowerCase(),
-      appliesTo: input.appliesTo?.map((item) => item.trim().toLowerCase()).filter(Boolean),
-      timeScope: input.timeScope,
-      priority: input.priority,
+      slotKey: input.slotKey?.trim().toLowerCase() ?? target?.slotKey,
+      appliesTo: input.appliesTo?.map((item) => item.trim().toLowerCase()).filter(Boolean)
+        ?? targetRecord?.appliesTo,
+      timeScope: effectiveTimeScope,
+      priority: input.priority ?? target?.priority,
       sourceType: input.sourceType,
       sourceConversationId: input.sourceConversationId ?? null,
       sourceMessageId: input.sourceMessageId ?? null,
-      expiresAt: input.expiresAt ?? null,
+      expiresAt: input.expiresAt !== undefined
+        ? input.expiresAt
+        : effectiveTimeScope === 'long_term'
+          ? null
+          : targetRecord?.expiresAt ?? null,
     };
     if (candidate.timeScope === 'short_term' && !candidate.expiresAt) {
       const reviewAt = new Date();
       reviewAt.setUTCDate(reviewAt.getUTCDate() + 60);
       candidate.expiresAt = reviewAt.toISOString();
     }
-    const active = await this.memoryService.findActiveEntities(userId);
     const duplicate = active.find((item) =>
-      item.category === candidate.category
+      item.id !== target?.id
+      && item.category === candidate.category
       && item.content.trim().toLowerCase() === candidate.content.trim().toLowerCase());
     if (duplicate) {
       return {
+        mutationOutcome: operation === 'replace' ? 'conflict' as const : 'ignored' as const,
+        profileLevel: duplicate.profileLevel,
         decision: {
           level: 'L0' as const,
           action: 'ignore' as const,
@@ -70,7 +119,37 @@ export class ProfileProposalService {
         appliedMemory: this.memoryService.toRecord(duplicate),
       };
     }
-    let decision = this.policy.evaluateMemory(candidate, active);
+    const slotConflict = candidate.slotKey
+      ? active.find((item) => item.id !== target?.id && item.slotKey === candidate.slotKey)
+      : undefined;
+    if (slotConflict && operation !== 'legacy') {
+      return {
+        mutationOutcome: 'conflict' as const,
+        profileLevel: input.level,
+        decision: {
+          level: 'L3' as const,
+          action: 'ignore' as const,
+          reasons: [`slot conflicts with active Profile item ${slotConflict.profileIndex ?? slotConflict.id}; use replace with that index`],
+          conflictIds: [slotConflict.id],
+          confirmationRequired: false,
+        },
+        proposal: null,
+        appliedMemory: this.memoryService.toRecord(slotConflict),
+      };
+    }
+    const profileDecision = this.policy.evaluateMemory(
+      candidate,
+      target ? active.filter((item) => item.id !== target.id) : active,
+    );
+    if (profileDecision.action !== 'ignore') candidate.level = profileDecision.level;
+    let decision = operation === 'replace' && profileDecision.action !== 'ignore'
+      ? {
+          ...profileDecision,
+          level: 'L3' as const,
+          conflictIds: [target!.id],
+          reasons: [...profileDecision.reasons, 'explicit replacement is audited as L3'],
+        }
+      : profileDecision;
     if (decision.action === 'apply') {
       const enabled = this.autoApplyEnabled(decision.level);
       if (!enabled) {
@@ -82,17 +161,26 @@ export class ProfileProposalService {
         };
       }
     }
-    if (decision.action === 'ignore') return { decision, proposal: null, appliedMemory: null };
+    if (decision.action === 'ignore') {
+      return {
+        mutationOutcome: 'ignored' as const,
+        profileLevel: profileDecision.level,
+        decision,
+        proposal: null,
+        appliedMemory: null,
+      };
+    }
 
     const proposal = await this.saveProposal(userId, {
       targetType: 'memory',
-      operation: decision.conflictIds.length ? 'supersede' : 'create',
+      operation: operation === 'replace' || decision.conflictIds.length ? 'supersede' : 'create',
       candidate: candidate as unknown as Record<string, unknown>,
-      currentValue: decision.conflictIds.length
-        ? this.memoryService.toRecord(
-            active.find((item) => item.id === decision.conflictIds[0])!,
-          ) as unknown as Record<string, unknown>
-        : null,
+      currentValue: (targetRecord
+        ?? (decision.conflictIds.length
+          ? this.memoryService.toRecord(
+              active.find((item) => item.id === decision.conflictIds[0])!,
+            )
+          : null)) as unknown as Record<string, unknown> | null,
       conflictIds: decision.conflictIds,
       rationale: input.rationale,
       updateLevel: decision.level,
@@ -102,7 +190,7 @@ export class ProfileProposalService {
     });
     if (decision.action === 'apply') {
       if (proposal.status === 'applied') {
-        return { decision, proposal, appliedMemory: null };
+        return { mutationOutcome: 'applied' as const, profileLevel: candidate.level, decision, proposal, appliedMemory: null };
       }
       if (proposal.confirmationRequired) {
         return {
@@ -112,14 +200,28 @@ export class ProfileProposalService {
             confirmationRequired: true,
             reasons: [...decision.reasons, 'existing proposal retains its original confirmation requirement'],
           },
+          mutationOutcome: 'proposed' as const,
+          profileLevel: candidate.level,
           proposal,
           appliedMemory: null,
         };
       }
       const resolved = await this.apply(userId, proposal.id, false, 'agent');
-      return { decision, proposal: resolved.proposal, appliedMemory: resolved.appliedMemory };
+      return {
+        mutationOutcome: 'applied' as const,
+        profileLevel: candidate.level,
+        decision,
+        proposal: resolved.proposal,
+        appliedMemory: resolved.appliedMemory,
+      };
     }
-    return { decision, proposal, appliedMemory: null };
+    return {
+      mutationOutcome: 'proposed' as const,
+      profileLevel: candidate.level,
+      decision,
+      proposal,
+      appliedMemory: null,
+    };
   }
 
   async proposeBase(userId: number, input: ProposeBaseProfileDto) {

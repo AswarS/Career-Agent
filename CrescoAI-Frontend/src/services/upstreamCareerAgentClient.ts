@@ -13,6 +13,7 @@ import type {
   ProfileRevisionRecord,
   ProfileStateRecord,
   CreateProfileMemoryInput,
+  ReplaceProfileMemoryInput,
 } from '../modules/profile/profileV2Types';
 import { rememberUploadedAssetPresentation } from './uploadedAssetPresentationCache';
 import type {
@@ -465,6 +466,12 @@ export function createUpstreamCareerAgentClient(
     async createProfileMemory(input: CreateProfileMemoryInput, expectedVersion: number) {
       return requestJson<ProfileMemoryRecord>(CAREER_AGENT_API_ROUTES.profileMemories(), {
         method: 'POST',
+        data: { ...input, expectedVersion },
+      });
+    },
+    async replaceProfileMemory(profileIndex: string, input: ReplaceProfileMemoryInput, expectedVersion: number) {
+      return requestJson<ProfileMemoryRecord>(CAREER_AGENT_API_ROUTES.profileMemoryByIndex(profileIndex), {
+        method: 'PUT',
         data: { ...input, expectedVersion },
       });
     },

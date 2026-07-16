@@ -10,6 +10,16 @@ function candidateText(proposal: ProfileChangeProposalRecord) {
     ? content
     : JSON.stringify(proposal.candidate, null, 2);
 }
+
+function profileIndex(proposal: ProfileChangeProposalRecord) {
+  const value = proposal.candidate.profileIndex ?? proposal.currentValue?.profileIndex;
+  return typeof value === 'string' ? value : '';
+}
+
+function profileLevel(proposal: ProfileChangeProposalRecord) {
+  const value = proposal.candidate.level ?? proposal.candidate.profileLevel;
+  return typeof value === 'string' ? value : '';
+}
 </script>
 
 <template>
@@ -19,7 +29,7 @@ function candidateText(proposal: ProfileChangeProposalRecord) {
     <article v-for="proposal in proposals" :key="proposal.id">
       <div class="proposal-title">
         <strong>{{ proposal.targetType === 'base_profile' ? '基础资料变更' : 'Profile Memory' }}</strong>
-        <span>{{ proposal.updateLevel }} · {{ proposal.operation }}</span>
+        <span><template v-if="profileIndex(proposal)">[{{ profileIndex(proposal) }}] · </template><template v-if="profileLevel(proposal)">{{ profileLevel(proposal) }} 内容 · </template>{{ proposal.updateLevel }} 更新 · {{ proposal.operation }}</span>
       </div>
       <p>{{ candidateText(proposal) }}</p>
       <details v-if="proposal.currentValue"><summary>查看当前信息</summary><pre>{{ JSON.stringify(proposal.currentValue, null, 2) }}</pre></details>

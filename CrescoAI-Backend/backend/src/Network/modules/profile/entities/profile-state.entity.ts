@@ -20,6 +20,9 @@ export class ProfileStateEntity {
   @Column({ type: 'varchar', default: 'pending' })
   projectionStatus!: ProfileProjectionStatus;
 
+  @Column({ type: 'integer', default: 1 })
+  nextProfileIndex!: number;
+
   @UpdateDateColumn()
   updatedAt!: Date;
 }

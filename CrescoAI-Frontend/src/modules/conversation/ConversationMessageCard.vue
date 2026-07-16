@@ -7,6 +7,7 @@ import {
   createMessageViewModel,
   type MessageBlockView,
   type MessageFileAttachmentView,
+  type MessageReplyUnitView,
 } from './messageViewModel';
 
 const props = defineProps<{
@@ -21,32 +22,50 @@ const emit = defineEmits<{
 const viewModel = computed(() => createMessageViewModel(props.message, {
   multiAgentMode: Boolean(props.multiAgentMode),
 }));
-const executionExpanded = ref(false);
+const expandedReplyUnitIds = ref(new Set<string>());
 const expandedToolResultIds = ref(new Set<string>());
-const executionToggleLabel = computed(() => (
-  executionExpanded.value
-    ? 'Hide execution steps'
-    : `Show execution steps (${viewModel.value.hiddenExecutionBlockCount})`
-));
 
 function handleAction(action: MessageAction) {
   emit('action', action);
 }
 
-function toggleExecutionBlocks() {
-  executionExpanded.value = !executionExpanded.value;
+function getReplyUnitKey(unit: MessageReplyUnitView) {
+  return `${viewModel.value.id}:${unit.id}`;
 }
 
-function isToolResultExpanded(block: MessageBlockView) {
-  return expandedToolResultIds.value.has(`${viewModel.value.id}:${block.id}`);
+function isReplyUnitExpanded(unit: MessageReplyUnitView) {
+  return expandedReplyUnitIds.value.has(getReplyUnitKey(unit));
 }
 
-function toggleToolResult(block: MessageBlockView) {
+function toggleReplyUnit(unit: MessageReplyUnitView) {
+  if (!unit.hasHiddenExecutionBlocks) {
+    return;
+  }
+
+  const key = getReplyUnitKey(unit);
+  const nextIds = new Set(expandedReplyUnitIds.value);
+  if (nextIds.has(key)) {
+    nextIds.delete(key);
+  } else {
+    nextIds.add(key);
+  }
+  expandedReplyUnitIds.value = nextIds;
+}
+
+function getToolResultKey(unit: MessageReplyUnitView, block: MessageBlockView) {
+  return `${getReplyUnitKey(unit)}:${block.id}`;
+}
+
+function isToolResultExpanded(unit: MessageReplyUnitView, block: MessageBlockView) {
+  return expandedToolResultIds.value.has(getToolResultKey(unit, block));
+}
+
+function toggleToolResult(unit: MessageReplyUnitView, block: MessageBlockView) {
   if (!block.hasResultBlocks) {
     return;
   }
 
-  const key = `${viewModel.value.id}:${block.id}`;
+  const key = getToolResultKey(unit, block);
   const nextIds = new Set(expandedToolResultIds.value);
   if (nextIds.has(key)) {
     nextIds.delete(key);
@@ -94,95 +113,113 @@ async function handleFileDownload(file: MessageFileAttachmentView) {
     </div>
 
     <div class="message-block-list">
-      <div v-if="viewModel.hasHiddenExecutionBlocks" class="execution-fold">
-        <button
-          type="button"
-          class="execution-toggle"
-          :aria-expanded="executionExpanded"
-          @click="toggleExecutionBlocks"
-        >
-          <span>{{ executionToggleLabel }}</span>
-        </button>
+      <p
+        v-if="viewModel.streaming && !viewModel.replyUnits.length"
+        class="status-copy streaming-placeholder"
+      >
+        正在处理…
+      </p>
 
-        <div v-if="executionExpanded" class="execution-block-list">
-          <section
-            v-for="block in viewModel.executionBlocks"
-            :key="`execution-${block.id}`"
-            class="message-timeline-block"
-            :class="[block.type, { error: block.isError }]"
+      <section
+        v-for="unit in viewModel.replyUnits"
+        :key="unit.id"
+        class="message-reply-unit"
+        :class="{ pending: unit.pending, 'has-text': Boolean(unit.textBlock) }"
+      >
+        <div v-if="unit.hasHiddenExecutionBlocks" class="execution-fold">
+          <button
+            type="button"
+            class="execution-toggle"
+            :class="{ expanded: isReplyUnitExpanded(unit) }"
+            :aria-expanded="isReplyUnitExpanded(unit)"
+            :aria-label="isReplyUnitExpanded(unit)
+              ? '收起此回复的思考过程和工具调用'
+              : `展开此回复的思考过程和工具调用，共 ${unit.hiddenExecutionBlockCount} 项`"
+            :title="isReplyUnitExpanded(unit) ? '收起过程' : '展开过程'"
+            @click="toggleReplyUnit(unit)"
           >
-            <div
-              v-if="block.type === 'tool_call'"
-              class="tool-call-header"
-            >
-              <button
-                v-if="block.hasResultBlocks"
-                type="button"
-                class="tool-result-toggle"
-                :aria-expanded="isToolResultExpanded(block)"
-                @click="toggleToolResult(block)"
-              >
-                {{ isToolResultExpanded(block) ? 'Hide result' : 'Show result' }}
-              </button>
-              <span class="tool-call-title">{{ block.title }}</span>
-              <small v-if="block.status">{{ block.status }}</small>
-            </div>
-            <div v-else class="timeline-block-label">
-              <span>{{ block.title }}</span>
-              <small v-if="block.status">{{ block.status }}</small>
-            </div>
+            <span class="execution-chevron" aria-hidden="true">⌄</span>
+          </button>
 
-            <MarkdownContent v-if="block.text" :source="block.text" />
-
-            <div
-              v-if="block.type === 'tool_call' && block.hasResultBlocks && isToolResultExpanded(block)"
-              class="tool-result-nested"
-            >
-              <section
-                v-for="resultBlock in block.resultBlocks ?? []"
-                :key="`result-${resultBlock.id}`"
-                class="message-timeline-block tool_result"
-                :class="{ error: resultBlock.isError }"
-              >
-                <div class="timeline-block-label">
-                  <span>{{ resultBlock.title }}</span>
-                  <small v-if="resultBlock.status">{{ resultBlock.status }}</small>
-                </div>
-                <MarkdownContent v-if="resultBlock.text" :source="resultBlock.text" />
-              </section>
-            </div>
-          </section>
-
-          <details
-            v-if="viewModel.standaloneToolResultBlocks.length"
-            class="standalone-tool-results"
-          >
-            <summary>Unmatched tool results ({{ viewModel.standaloneToolResultBlocks.length }})</summary>
+          <div v-if="isReplyUnitExpanded(unit)" class="execution-block-list">
             <section
-              v-for="block in viewModel.standaloneToolResultBlocks"
-              :key="`standalone-result-${block.id}`"
-              class="message-timeline-block tool_result"
-              :class="{ error: block.isError }"
+              v-for="block in unit.executionBlocks"
+              :key="`execution-${unit.id}-${block.id}`"
+              class="message-timeline-block"
+              :class="[block.type, { error: block.isError }]"
             >
-              <div class="timeline-block-label">
+              <div
+                v-if="block.type === 'tool_call'"
+                class="tool-call-header"
+              >
+                <button
+                  v-if="block.hasResultBlocks"
+                  type="button"
+                  class="tool-result-toggle"
+                  :aria-expanded="isToolResultExpanded(unit, block)"
+                  @click="toggleToolResult(unit, block)"
+                >
+                  {{ isToolResultExpanded(unit, block) ? 'Hide result' : 'Show result' }}
+                </button>
+                <span class="tool-call-title">{{ block.title }}</span>
+                <small v-if="block.status">{{ block.status }}</small>
+              </div>
+              <div v-else class="timeline-block-label">
                 <span>{{ block.title }}</span>
                 <small v-if="block.status">{{ block.status }}</small>
               </div>
+
               <MarkdownContent v-if="block.text" :source="block.text" />
+
+              <div
+                v-if="block.type === 'tool_call' && block.hasResultBlocks && isToolResultExpanded(unit, block)"
+                class="tool-result-nested"
+              >
+                <section
+                  v-for="resultBlock in block.resultBlocks ?? []"
+                  :key="`result-${unit.id}-${resultBlock.id}`"
+                  class="message-timeline-block tool_result"
+                  :class="{ error: resultBlock.isError }"
+                >
+                  <div class="timeline-block-label">
+                    <span>{{ resultBlock.title }}</span>
+                    <small v-if="resultBlock.status">{{ resultBlock.status }}</small>
+                  </div>
+                  <MarkdownContent v-if="resultBlock.text" :source="resultBlock.text" />
+                </section>
+              </div>
             </section>
-          </details>
+
+            <details
+              v-if="unit.standaloneToolResultBlocks.length"
+              class="standalone-tool-results"
+            >
+              <summary>Unmatched tool results ({{ unit.standaloneToolResultBlocks.length }})</summary>
+              <section
+                v-for="block in unit.standaloneToolResultBlocks"
+                :key="`standalone-result-${unit.id}-${block.id}`"
+                class="message-timeline-block tool_result"
+                :class="{ error: block.isError }"
+              >
+                <div class="timeline-block-label">
+                  <span>{{ block.title }}</span>
+                  <small v-if="block.status">{{ block.status }}</small>
+                </div>
+                <MarkdownContent v-if="block.text" :source="block.text" />
+              </section>
+            </details>
+          </div>
         </div>
-      </div>
 
-      <template v-for="block in viewModel.finalBlocks" :key="block.id">
         <MarkdownContent
-          v-if="block.type === 'text' && viewModel.kind === 'markdown'"
-          :source="block.text"
+          v-if="unit.textBlock && viewModel.kind === 'markdown'"
+          :source="unit.textBlock.text"
         />
-        <p v-else-if="block.type === 'text'" class="status-copy">{{ block.text }}</p>
+        <p v-else-if="unit.textBlock" class="status-copy">{{ unit.textBlock.text }}</p>
+        <p v-else-if="unit.pending" class="status-copy streaming-placeholder">正在处理…</p>
 
+      <template v-for="block in unit.artifactBlocks" :key="block.id">
         <section
-          v-else
           class="message-timeline-block"
           :class="[block.type, { error: block.isError }]"
         >
@@ -308,10 +345,11 @@ async function handleFileDownload(file: MessageFileAttachmentView) {
           </div>
         </section>
       </template>
+      </section>
     </div>
 
     <p
-      v-if="!viewModel.finalBlocks.length && !viewModel.hasHiddenExecutionBlocks"
+      v-if="!viewModel.textBlocks.length && !viewModel.artifactBlocks.length && !viewModel.hasHiddenExecutionBlocks"
       class="status-copy"
     >
       {{ viewModel.content }}
@@ -417,6 +455,23 @@ async function handleFileDownload(file: MessageFileAttachmentView) {
   gap: 10px;
 }
 
+.message-reply-unit {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.message-card.assistant .message-reply-unit {
+  padding: 10px 11px;
+  border: 1px solid color-mix(in srgb, var(--color-border) 82%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--color-surface-strong) 94%, var(--color-bg-subtle));
+}
+
+.message-card.assistant .message-reply-unit.pending {
+  border-style: dashed;
+}
+
 .execution-fold {
   display: grid;
   gap: 8px;
@@ -425,20 +480,39 @@ async function handleFileDownload(file: MessageFileAttachmentView) {
 .execution-toggle {
   appearance: none;
   justify-self: start;
-  padding: 0.34rem 0.62rem;
-  border: 1px solid color-mix(in srgb, var(--color-border) 88%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--color-bg-subtle) 78%, var(--color-surface-strong));
+  display: inline-grid;
+  width: 28px;
+  height: 22px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
   color: var(--color-text-muted);
   cursor: pointer;
   font: inherit;
-  font-size: 0.76rem;
-  font-weight: 800;
+  font-size: 1rem;
+  line-height: 1;
 }
 
 .execution-toggle:hover {
-  border-color: color-mix(in srgb, var(--color-primary) 28%, var(--color-border));
+  background: color-mix(in srgb, var(--color-bg-subtle) 82%, transparent);
   color: var(--color-text);
+}
+
+.execution-toggle:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-primary) 55%, transparent);
+  outline-offset: 2px;
+}
+
+.execution-chevron {
+  display: block;
+  transform: translateY(-2px);
+  transition: transform 160ms ease;
+}
+
+.execution-toggle.expanded .execution-chevron {
+  transform: translateY(2px) rotate(180deg);
 }
 
 .execution-block-list {
@@ -568,6 +642,10 @@ async function handleFileDownload(file: MessageFileAttachmentView) {
 .status-copy {
   margin: 0;
   line-height: 1.55;
+}
+
+.streaming-placeholder {
+  color: var(--color-text-muted);
 }
 
 .message-attachment-list {

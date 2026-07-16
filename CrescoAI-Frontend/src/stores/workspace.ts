@@ -195,19 +195,28 @@ function appendText(existing: string | null | undefined, delta: string) {
 }
 
 function deriveMessageContentFromBlocks(blocks: MessageBlock[] | undefined, fallback = '') {
-  const text = (blocks ?? [])
-    .filter((block) => block.type === 'text')
-    .map((block) => block.text ?? '')
-    .join('')
-    .trim();
+  const textBlocks = (blocks ?? []).filter((block) => block.type === 'text');
+  const text = textBlocks[textBlocks.length - 1]?.text?.trim();
   return text || fallback;
 }
 
 function reconcileCompletedReplyBlock(
-  blocks: MessageBlock[] | undefined,
+  existingBlocks: MessageBlock[] | undefined,
+  completedBlocks: MessageBlock[] | undefined,
   reply: string,
 ) {
-  return normalizeMessageBlocks(blocks, { authoritativeText: reply });
+  const mergedBlocks = [...(existingBlocks ?? [])];
+  for (const block of completedBlocks ?? []) {
+    const existingIndex = mergedBlocks.findIndex((candidate) => candidate.id === block.id);
+    if (existingIndex < 0) {
+      mergedBlocks.push(block);
+    } else {
+      mergedBlocks[existingIndex] = block.type === 'artifact'
+        ? mergeMessageBlock(mergedBlocks[existingIndex], block)
+        : { ...mergedBlocks[existingIndex], ...block };
+    }
+  }
+  return normalizeMessageBlocks(mergedBlocks, { authoritativeText: reply });
 }
 
 function mergeMessageBlock(existing: MessageBlock | undefined, incoming: MessageBlock): MessageBlock {
@@ -1191,7 +1200,8 @@ export const useWorkspaceStore = defineStore('workspace', {
             usage: event.usage,
             stopReason: event.stopReason,
             blocks: reconcileCompletedReplyBlock(
-              event.blocks ?? existingBlocks,
+              existingBlocks,
+              event.blocks,
               event.reply,
             ),
             raw: event.raw,

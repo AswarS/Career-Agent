@@ -51,6 +51,17 @@ async function readMemory(
     };
   }
   const items = await runtime.memoryService.list(runtime.userId, { status: 'active' });
+  if (profileFeatureFlags.indexedMutations()) {
+    return {
+      data: {
+        L1: items.filter((item) => item.profileLevel === 'L1'),
+        L2: items.filter((item) => item.profileLevel === 'L2'),
+        L3: items.filter((item) => item.profileLevel === 'L3'),
+        total: items.length,
+      },
+      degraded: mode === 'relevant',
+    };
+  }
   return {
     data: {
       hardConstraints: items.filter((item) => item.priority === 'hard_constraint'),
@@ -75,27 +86,66 @@ export function createCompactProfileTools(runtime: ProfileToolRuntime): Tool[] {
       query: z.string().min(1).max(2_000),
     }),
   ]));
-  const updateInput = lazySchema(() => z.discriminatedUnion('target', [
-    z.strictObject({
-      target: z.literal('memory'),
-      content: z.string().min(1).max(2_000),
-      category: z.string().min(1).max(100),
-      slotKey: z.string().max(150).optional(),
-      appliesTo: z.array(z.string()).max(20).optional(),
-      timeScope: z.enum(['long_term', 'short_term', 'temporary']),
-      priority: z.enum(['hard_constraint', 'high', 'normal', 'background']),
-      level: z.enum(['L0', 'L1', 'L2', 'L3']),
-      sourceType: z.enum(['user_explicit', 'user_confirmed', 'agent_summary', 'multi_conversation_summary']),
-      expiresAt: z.string().nullable().optional(),
-      rationale: z.string().min(1).max(2_000),
-    }),
-    z.strictObject({
+  const updateInput = lazySchema(() => {
+    const basic = z.strictObject({
       target: z.literal('basic'),
       patch: z.record(z.string(), z.unknown()),
       sourceType: z.enum(['user_explicit', 'user_confirmed', 'system_correction']),
       rationale: z.string().min(1).max(2_000),
-    }),
-  ]));
+    });
+    const sourceType = z.enum(['user_explicit', 'user_confirmed', 'agent_summary', 'multi_conversation_summary']);
+    const priority = z.enum(['hard_constraint', 'high', 'normal', 'background']);
+    if (profileFeatureFlags.indexedMutations()) {
+      return z.union([
+        z.strictObject({
+          target: z.literal('memory'),
+          operation: z.literal('add'),
+          content: z.string().min(1).max(2_000),
+          category: z.string().min(1).max(100),
+          slotKey: z.string().max(150).optional(),
+          appliesTo: z.array(z.string()).max(20).optional(),
+          timeScope: z.enum(['long_term', 'short_term']),
+          priority,
+          level: z.enum(['L1', 'L2', 'L3']),
+          sourceType,
+          expiresAt: z.string().nullable().optional(),
+          rationale: z.string().min(1).max(2_000),
+        }),
+        z.strictObject({
+          target: z.literal('memory'),
+          operation: z.literal('replace'),
+          profileIndex: z.string().regex(/^P\d{6,}$/),
+          content: z.string().min(1).max(2_000),
+          category: z.string().min(1).max(100).optional(),
+          slotKey: z.string().max(150).optional(),
+          appliesTo: z.array(z.string()).max(20).optional(),
+          timeScope: z.enum(['long_term', 'short_term']).optional(),
+          priority: priority.optional(),
+          level: z.enum(['L1', 'L2', 'L3']),
+          sourceType,
+          expiresAt: z.string().nullable().optional(),
+          rationale: z.string().min(1).max(2_000),
+        }),
+        basic,
+      ]);
+    }
+    return z.union([
+      z.strictObject({
+        target: z.literal('memory'),
+        content: z.string().min(1).max(2_000),
+        category: z.string().min(1).max(100),
+        slotKey: z.string().max(150).optional(),
+        appliesTo: z.array(z.string()).max(20).optional(),
+        timeScope: z.enum(['long_term', 'short_term', 'temporary']),
+        priority,
+        level: z.enum(['L0', 'L1', 'L2', 'L3']),
+        sourceType,
+        expiresAt: z.string().nullable().optional(),
+        rationale: z.string().min(1).max(2_000),
+      }),
+      basic,
+    ]);
+  });
 
   return [
     buildTool({
@@ -104,7 +154,7 @@ export function createCompactProfileTools(runtime: ProfileToolRuntime): Tool[] {
       isReadOnly: () => true,
       searchHint: 'read authenticated user basic profile or relevant profile memory',
       async description() { return 'Read the authenticated user Profile. Set source=basic for stable facts, or source=memory with summary/relevant mode for goals, preferences, and constraints.'; },
-      async prompt() { return 'Use source=basic only when stable facts are needed. Use source=memory, mode=relevant with the current query for normal tasks; reserve summary for Profile management.'; },
+      async prompt() { return 'Use source=basic only when stable facts are needed. Use source=memory, mode=relevant with the current query for normal tasks; reserve summary for Profile management and before choosing a profileIndex to replace.'; },
       get inputSchema() { return readInput(); },
       get outputSchema() { return resultSchema(); },
       async call(input) {
@@ -126,9 +176,16 @@ export function createCompactProfileTools(runtime: ProfileToolRuntime): Tool[] {
       ...common,
       name: 'profile_update',
       searchHint: 'classify and update authenticated user basic profile or profile memory',
-      async description() { return 'Update the authenticated user Profile through one strict target branch. target=memory submits an L0-L3 candidate; target=basic submits an L3 base-fact change. The result is ignored, applied, or proposed.'; },
+      async description() {
+        return profileFeatureFlags.indexedMutations()
+          ? 'Update the authenticated user Profile. For target=memory choose operation=add to allocate a new public index, or operation=replace with an existing profileIndex. target=basic updates stable facts.'
+          : 'Update the authenticated user Profile through one strict target branch. target=memory submits an L0-L3 candidate; target=basic submits an L3 base-fact change.';
+      },
       async prompt() {
-        return `${PROFILE_LEVEL_CLASSIFICATION_PROMPT}\n\nChoose exactly one target. Use target=memory for goals, preferences, and constraints. Use target=basic only for explicitly stated stable facts. L1-L3 are configured to auto-apply by default, but the server may ignore prohibited content, raise the risk level, or create a proposal when an auto-apply flag is disabled.`;
+        const workflow = profileFeatureFlags.indexedMutations()
+          ? 'For memory add, never provide profileIndex. For memory replace, first read the item and provide its exact profileIndex; never guess an index. The submitted level classifies the resulting content, while replace is audited as updateLevel L3.'
+          : 'Use target=memory for goals, preferences, and constraints.';
+        return `${PROFILE_LEVEL_CLASSIFICATION_PROMPT}\n\n${workflow} Use target=basic only for explicitly stated stable facts. L1-L3 auto-apply by default, but the server may ignore prohibited content, correct the content level, report a conflict, or create a proposal when an auto-apply flag is disabled.`;
       },
       get inputSchema() { return updateInput(); },
       get outputSchema() { return resultSchema(); },
@@ -157,6 +214,8 @@ export function createCompactProfileTools(runtime: ProfileToolRuntime): Tool[] {
 
         const submittedLevel = input.level;
         const update = await runtime.proposalService.proposeMemory(runtime.userId, {
+          operation: profileFeatureFlags.indexedMutations() ? input.operation : undefined,
+          profileIndex: profileFeatureFlags.indexedMutations() ? input.profileIndex : undefined,
           content: input.content,
           category: input.category,
           slotKey: input.slotKey,
@@ -169,20 +228,27 @@ export function createCompactProfileTools(runtime: ProfileToolRuntime): Tool[] {
           rationale: input.rationale,
           sourceConversationId: runtime.conversationId,
         });
-        const outcome = update.decision.action === 'ignore'
-          ? 'ignored'
-          : update.appliedMemory || update.proposal?.status === 'applied'
-            ? 'applied'
-            : 'proposed';
+        const outcome = update.mutationOutcome
+          ?? (update.decision.action === 'ignore'
+            ? 'ignored'
+            : update.appliedMemory || update.proposal?.status === 'applied'
+              ? 'applied'
+              : 'proposed');
+        const data = update.appliedMemory ?? update.proposal;
         return { data: { result: {
           target: 'memory',
+          operation: input.operation ?? 'add',
           outcome,
+          profileIndex: update.appliedMemory?.profileIndex ?? input.profileIndex ?? null,
+          submittedProfileLevel: submittedLevel,
+          finalProfileLevel: update.profileLevel ?? update.decision.level,
+          updateLevel: update.decision.level,
           submittedLevel,
           finalLevel: update.decision.level,
           confirmationRequired: update.decision.confirmationRequired,
           reasons: update.decision.reasons,
           proposalId: update.proposal?.id,
-          data: update.appliedMemory ?? update.proposal,
+          data,
         } } };
       },
     } satisfies ToolDef<any, any>),

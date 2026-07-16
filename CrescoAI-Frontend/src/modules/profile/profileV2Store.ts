@@ -8,6 +8,7 @@ import type {
   ProfileRevisionRecord,
   ProfileStateRecord,
   CreateProfileMemoryInput,
+  ReplaceProfileMemoryInput,
 } from './profileV2Types';
 
 const client = createCareerAgentClient();
@@ -93,6 +94,16 @@ export const useProfileV2Store = defineStore('profile-v2', {
         await this.loadMemoryWorkspace();
       } catch (error) {
         this.error = error instanceof Error ? error.message : 'Profile Memory 更新失败';
+      }
+    },
+    async replaceMemory(profileIndex: string, input: ReplaceProfileMemoryInput) {
+      if (!client.replaceProfileMemory || !this.profileState) return;
+      try {
+        await client.replaceProfileMemory(profileIndex, input, this.profileState.aggregateVersion);
+        await this.loadMemoryWorkspace();
+      } catch (error) {
+        this.error = error instanceof Error ? error.message : 'Profile Memory 替换失败，请刷新后重试';
+        await this.loadMemoryWorkspace();
       }
     },
     async deleteMemory(id: string) {

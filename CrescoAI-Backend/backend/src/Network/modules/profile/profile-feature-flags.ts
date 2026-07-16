@@ -12,6 +12,10 @@ export const profileFeatureFlags = {
   recall: () => envFlag('CAREER_AGENT_PROFILE_V2_RECALL', true),
   tools: () => envFlag('CAREER_AGENT_PROFILE_V2_TOOLS', true),
   compactTools: () => envFlag('CAREER_AGENT_PROFILE_COMPACT_TOOLS', true),
+  indexedMutations: () =>
+    envFlag('CAREER_AGENT_PROFILE_INDEXED_MUTATIONS', true),
+  levelProjection: () =>
+    envFlag('CAREER_AGENT_PROFILE_LEVEL_PROJECTION', true),
   l1AutoApply: () => envFlag('CAREER_AGENT_PROFILE_L1_AUTO_APPLY', true),
   l2AutoApply: () => envFlag('CAREER_AGENT_PROFILE_L2_AUTO_APPLY', true),
   l3AutoApply: () => envFlag('CAREER_AGENT_PROFILE_L3_AUTO_APPLY', true),

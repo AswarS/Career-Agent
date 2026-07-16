@@ -8,6 +8,7 @@ import { ProfileMemoryService } from './profile-memory.service';
 import {
   CreateProfileMemoryDto,
   QueryProfileMemoryDto,
+  ReplaceProfileMemoryDto,
   UpdateProfileMemoryDto,
 } from './dto/profile-memory.dto';
 import { ProfileProposalService } from './profile-proposal.service';
@@ -84,7 +85,7 @@ export class ProfileController {
       sourceType: 'user_ui',
       actorType: 'user',
       userConfirmed: true,
-      updateLevel: 'L3',
+      updateLevel: dto.profileLevel ?? (dto.priority === 'hard_constraint' ? 'L3' : dto.timeScope === 'short_term' ? 'L1' : 'L2'),
     });
   }
 
@@ -98,6 +99,21 @@ export class ProfileController {
       sourceType: 'user_ui',
       actorType: 'user',
       userConfirmed: true,
+      updateLevel: 'L3',
+    });
+  }
+
+  @Put('memories/by-index/:profileIndex')
+  replaceMemory(
+    @Req() req: Request,
+    @Param('profileIndex') profileIndex: string,
+    @Body() dto: ReplaceProfileMemoryDto,
+  ) {
+    return this.profileMemoryService.replaceByIndex(req.userId!, profileIndex, dto, {
+      sourceType: 'user_confirmed',
+      actorType: 'user',
+      userConfirmed: true,
+      expectedVersion: dto.expectedVersion,
       updateLevel: 'L3',
     });
   }

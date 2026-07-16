@@ -36,6 +36,17 @@ export interface MessageBlockView {
   hasResultBlocks?: boolean;
 }
 
+export interface MessageReplyUnitView {
+  id: string;
+  textBlock: MessageBlockView | null;
+  executionBlocks: MessageBlockView[];
+  standaloneToolResultBlocks: MessageBlockView[];
+  artifactBlocks: MessageBlockView[];
+  hasHiddenExecutionBlocks: boolean;
+  hiddenExecutionBlockCount: number;
+  pending: boolean;
+}
+
 export interface MessageViewModel {
   message: ThreadMessage;
   id: string;
@@ -49,7 +60,11 @@ export interface MessageViewModel {
   runtimeMetaLabel: string | null;
   accentClass: string | null;
   blocks: MessageBlockView[];
+  replyUnits: MessageReplyUnitView[];
+  textReplyUnitCount: number;
   finalBlocks: MessageBlockView[];
+  textBlocks: MessageBlockView[];
+  artifactBlocks: MessageBlockView[];
   executionBlocks: MessageBlockView[];
   standaloneToolResultBlocks: MessageBlockView[];
   hasHiddenExecutionBlocks: boolean;
@@ -70,7 +85,8 @@ export function createMessageViewModel(
   const multiAgentMode = Boolean(options.multiAgentMode);
   const presentedMessage = getPresentedMessageContent(message);
   const blocks = createMessageBlockViews(message, presentedMessage);
-  const blockGroups = createMessageBlockGroups(blocks);
+  const streaming = Boolean(message.streaming);
+  const blockGroups = createMessageBlockGroups(blocks, streaming);
 
   return {
     message,
@@ -85,12 +101,16 @@ export function createMessageViewModel(
     runtimeMetaLabel: formatRuntimeMeta(message),
     accentClass: formatAgentAccentClass(message, multiAgentMode),
     blocks,
+    replyUnits: blockGroups.replyUnits,
+    textReplyUnitCount: blockGroups.replyUnits.filter((unit) => unit.textBlock).length,
     finalBlocks: blockGroups.finalBlocks,
+    textBlocks: blockGroups.textBlocks,
+    artifactBlocks: blockGroups.artifactBlocks,
     executionBlocks: blockGroups.executionBlocks,
     standaloneToolResultBlocks: blockGroups.standaloneToolResultBlocks,
     hasHiddenExecutionBlocks: blockGroups.hasHiddenExecutionBlocks,
     hiddenExecutionBlockCount: blockGroups.hiddenExecutionBlockCount,
-    streaming: Boolean(message.streaming),
+    streaming,
   };
 }
 
@@ -141,7 +161,7 @@ function createMessageBlockViews(
     : [];
 }
 
-function createMessageBlockGroups(blocks: MessageBlockView[]) {
+function createExecutionBlockGroup(blocks: MessageBlockView[]) {
   const toolCallIds = new Set(
     blocks
       .filter((block) => block.type === 'tool_call' && block.toolUseId)
@@ -184,17 +204,97 @@ function createMessageBlockGroups(blocks: MessageBlockView[]) {
         hasResultBlocks: resultBlocks.length > 0,
       };
     });
-  const finalBlocks = blocks.filter((block) => (
-    block.type === 'text' || block.type === 'artifact'
-  ));
   const hiddenExecutionBlockCount = executionBlocks.length + standaloneToolResultBlocks.length;
 
   return {
-    finalBlocks,
     executionBlocks,
     standaloneToolResultBlocks,
     hasHiddenExecutionBlocks: hiddenExecutionBlockCount > 0,
     hiddenExecutionBlockCount,
+  };
+}
+
+function createMessageBlockGroups(blocks: MessageBlockView[], streaming: boolean) {
+  const textBlocks = blocks.filter((block) => block.type === 'text');
+  const artifactBlocks = blocks.filter((block) => block.type === 'artifact');
+  const processBlocks = blocks.filter((block) => block.type !== 'text' && block.type !== 'artifact');
+  const finalBlocks = [...textBlocks, ...artifactBlocks];
+  const executionGroup = createExecutionBlockGroup(processBlocks);
+  const replySegments: Array<{
+    textBlock: MessageBlockView;
+    processBlocks: MessageBlockView[];
+  }> = [];
+  let pendingProcessBlocks: MessageBlockView[] = [];
+
+  for (const block of blocks) {
+    if (block.type === 'artifact') {
+      continue;
+    }
+
+    if (block.type !== 'text') {
+      pendingProcessBlocks.push(block);
+      continue;
+    }
+
+    replySegments.push({
+      textBlock: block,
+      processBlocks: pendingProcessBlocks,
+    });
+    pendingProcessBlocks = [];
+  }
+
+  if (!streaming && pendingProcessBlocks.length && replySegments.length) {
+    replySegments[replySegments.length - 1]!.processBlocks.push(...pendingProcessBlocks);
+    pendingProcessBlocks = [];
+  }
+
+  const replyUnits: MessageReplyUnitView[] = replySegments.map((segment, index) => {
+    const unitExecutionGroup = createExecutionBlockGroup(segment.processBlocks);
+    return {
+      id: `reply-${segment.textBlock.id}`,
+      textBlock: segment.textBlock,
+      executionBlocks: unitExecutionGroup.executionBlocks,
+      standaloneToolResultBlocks: unitExecutionGroup.standaloneToolResultBlocks,
+      artifactBlocks: index === replySegments.length - 1 ? artifactBlocks : [],
+      hasHiddenExecutionBlocks: unitExecutionGroup.hasHiddenExecutionBlocks,
+      hiddenExecutionBlockCount: unitExecutionGroup.hiddenExecutionBlockCount,
+      pending: false,
+    };
+  });
+
+  if (pendingProcessBlocks.length) {
+    const pendingExecutionGroup = createExecutionBlockGroup(pendingProcessBlocks);
+    replyUnits.push({
+      id: 'reply-pending-execution',
+      textBlock: null,
+      executionBlocks: pendingExecutionGroup.executionBlocks,
+      standaloneToolResultBlocks: pendingExecutionGroup.standaloneToolResultBlocks,
+      artifactBlocks: replySegments.length ? [] : artifactBlocks,
+      hasHiddenExecutionBlocks: pendingExecutionGroup.hasHiddenExecutionBlocks,
+      hiddenExecutionBlockCount: pendingExecutionGroup.hiddenExecutionBlockCount,
+      pending: streaming,
+    });
+  }
+
+  if (!replyUnits.length && artifactBlocks.length) {
+    replyUnits.push({
+      id: 'reply-artifacts',
+      textBlock: null,
+      executionBlocks: [],
+      standaloneToolResultBlocks: [],
+      artifactBlocks,
+      hasHiddenExecutionBlocks: false,
+      hiddenExecutionBlockCount: 0,
+      pending: false,
+    });
+  }
+
+  return {
+    finalBlocks,
+    textBlocks,
+    artifactBlocks,
+    replyUnits,
+    ...executionGroup,
   };
 }
 

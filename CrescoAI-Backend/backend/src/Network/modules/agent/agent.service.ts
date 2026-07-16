@@ -1216,6 +1216,7 @@ export class AgentService {
             let finalResultText: string | undefined;
             let blocks: AgentMessageBlock[] = [];
             let blockIndex = 0;
+            let textBlockIndex = 0;
             let model: string | undefined;
             let usage: Record<string, unknown> | undefined;
 
@@ -1287,16 +1288,17 @@ export class AgentService {
                   }
                   if (blockType === 'text' && typeof block.text === 'string' && block.text) {
                     const safeText = sanitizeServerPhysicalPaths(block.text);
+                    const textBlockId = `text-${textBlockIndex++}`;
                     textParts.push(safeText);
                     currentMessageTextParts.push(safeText);
-                    blocks = appendTextToAgentBlock(blocks, 'text-0', safeText);
+                    blocks = appendTextToAgentBlock(blocks, textBlockId, safeText);
                     pushBlockEvent({
                       type: 'message.block.delta',
                       messageId: actualAssistantMessageId,
-                      blockId: 'text-0',
+                      blockId: textBlockId,
                       blockType: 'text',
                       delta: safeText,
-                      block: createTextAgentBlock('text-0'),
+                      block: createTextAgentBlock(textBlockId),
                     });
                     continue;
                   }
@@ -1348,14 +1350,16 @@ export class AgentService {
                   const alreadyStreamed = finalAssistantText === finalResultText
                     || textParts[textParts.length - 1]?.trim() === finalResultText;
                   if (!alreadyStreamed) {
+                    const finalTextBlockId = `text-${textBlockIndex++}`;
+                    blocks = appendTextToAgentBlock(blocks, finalTextBlockId, finalResultText);
                     emitMessageCreated(actualAssistantMessageId);
                     pushBlockEvent({
                       type: 'message.block.delta',
                       messageId: actualAssistantMessageId,
-                      blockId: 'final-text-0',
+                      blockId: finalTextBlockId,
                       blockType: 'text',
                       delta: finalResultText,
-                      block: createTextAgentBlock('final-text-0'),
+                      block: createTextAgentBlock(finalTextBlockId),
                     });
                   }
                 }
@@ -1521,8 +1525,10 @@ export class AgentService {
           return await runWithSessionContext(ctx, async () => {
             const textParts: string[] = [];
             const thinkingParts: string[] = [];
+            let finalAssistantText: string | undefined;
             let blocks: AgentMessageBlock[] = [];
             let blockIndex = 0;
+            let textBlockIndex = 0;
             let model: string | undefined;
             let usage: Record<string, unknown> | undefined;
 
@@ -1540,14 +1546,17 @@ export class AgentService {
             for await (const msg of stream) {
               const msgMessage = (msg as any).message;
               if (msgMessage && Array.isArray(msgMessage.content)) {
+                const currentMessageTextParts: string[] = [];
                 if (typeof msgMessage.id === 'string' && msgMessage.id.trim()) {
                   assistantMessageId = msgMessage.id;
                 }
                 for (const block of msgMessage.content) {
                   if (block.type === 'text' && typeof block.text === 'string') {
                     const safeText = sanitizeServerPhysicalPaths(block.text);
+                    const textBlockId = `text-${textBlockIndex++}`;
                     textParts.push(safeText);
-                    blocks = appendTextToAgentBlock(blocks, 'text-0', safeText);
+                    currentMessageTextParts.push(safeText);
+                    blocks = appendTextToAgentBlock(blocks, textBlockId, safeText);
                     continue;
                   }
                   const publicBlock = createPublicAgentBlockFromContentBlock(block, blockIndex);
@@ -1564,6 +1573,9 @@ export class AgentService {
                 }
                 if (msgMessage.usage && !usage) {
                   usage = msgMessage.usage;
+                }
+                if (currentMessageTextParts.length && msgMessage.stop_reason === 'end_turn') {
+                  finalAssistantText = currentMessageTextParts.join('\n').trim();
                 }
               } else if ((msg as any).type !== 'result') {
                 const publicBlock = createPublicAgentBlockFromContentBlock(msg as Record<string, unknown>, blockIndex);
@@ -1583,7 +1595,11 @@ export class AgentService {
               }
             }
 
-            const reply = sanitizeServerPhysicalPaths(textParts.join('\n').trim());
+            const reply = sanitizeServerPhysicalPaths(
+              finalAssistantText
+              ?? textParts[textParts.length - 1]
+              ?? '',
+            );
             const thinking = sanitizeServerPhysicalPaths(thinkingParts.join('\n').trim());
 
             return { reply, thinking, blocks, model, usage, assistantMessageId };

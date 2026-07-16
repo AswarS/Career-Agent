@@ -143,13 +143,13 @@ export class ProfileRecallService {
       'Use only information relevant to the current request. Active hard constraints must not be violated.',
     ];
     if (input.hardConstraints.length) {
-      lines.push('## Hard constraints', ...input.hardConstraints.map((item) => `- ${item.content} [profile:${item.id}]`));
+      lines.push('## Hard constraints', ...input.hardConstraints.map((item) => `- [${item.profileIndex}][${item.profileLevel}] ${item.content}`));
     }
     if (input.shortTerm.length) {
-      lines.push('## Relevant short-term Profile', ...input.shortTerm.map((item) => `- ${item.content} [profile:${item.id}]`));
+      lines.push('## Relevant short-term Profile', ...input.shortTerm.map((item) => `- [${item.profileIndex}][${item.profileLevel}] ${item.content}`));
     }
     if (input.longTerm.length) {
-      lines.push('## Relevant long-term Profile', ...input.longTerm.map((item) => `- ${item.content} [profile:${item.id}]`));
+      lines.push('## Relevant long-term Profile', ...input.longTerm.map((item) => `- [${item.profileIndex}][${item.profileLevel}] ${item.content}`));
     }
     if (input.baseFacts.length) {
       lines.push('## Necessary base facts', ...input.baseFacts.map((item) => `- ${item.key}: ${item.value}`));

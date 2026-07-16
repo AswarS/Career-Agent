@@ -5,6 +5,7 @@ import { DataSource, FindOptionsWhere, LessThanOrEqual, Not, Repository } from '
 import {
   CreateProfileMemoryDto,
   QueryProfileMemoryDto,
+  ReplaceProfileMemoryDto,
   UpdateProfileMemoryDto,
 } from './dto/profile-memory.dto';
 import { ProfileMemoryItemEntity } from './entities/profile-memory-item.entity';
@@ -41,6 +42,7 @@ export class ProfileMemoryService {
     if (query.timeScope) where.timeScope = query.timeScope;
     if (query.priority) where.priority = query.priority;
     if (query.category) where.category = query.category;
+    if (query.profileLevel) where.profileLevel = query.profileLevel;
     const entities = await this.memoryRepo.find({
       where,
       order: { updatedAt: 'DESC' },
@@ -78,27 +80,66 @@ export class ProfileMemoryService {
   ) {
     if (!profileFeatureFlags.v2Write()) throw profileAccessDenied('Profile V2 writes are disabled');
     await this.baseService.getState(userId);
-    const expectedVersion = await this.getAggregateVersion(userId);
+    const expectedVersion = meta.expectedVersion ?? await this.getAggregateVersion(userId);
     const content = this.normalizeContent(candidate.content);
+    if (!content) throw profileValidationError('memory content is required');
     if (containsSensitiveProfileData(content)) {
       throw profileValidationError('sensitive data cannot be stored in Profile Memory');
     }
     const result = await this.dataSource.transaction(async (manager) => {
       const state = await this.requireVersion(manager, userId, expectedVersion);
+      const operation = candidate.operation ?? 'legacy';
       const conflicts = conflictIds.length
         ? await manager.find(ProfileMemoryItemEntity, {
             where: conflictIds.map((id) => ({ id, userId, status: 'active' as const })),
           })
         : [];
+      if (operation === 'replace') {
+        const target = conflicts.find((item) => item.id === candidate.expectedTargetId)
+          ?? conflicts[0];
+        if (
+          !target
+          || target.profileIndex !== candidate.profileIndex
+          || target.version !== candidate.expectedTargetVersion
+        ) {
+          throw profileVersionConflict(
+            candidate.expectedTargetVersion ?? 0,
+            target?.version ?? 0,
+          );
+        }
+        const competingSlot = candidate.slotKey?.trim().toLowerCase();
+        if (competingSlot) {
+          const conflict = await manager.findOne(ProfileMemoryItemEntity, {
+            where: {
+              userId,
+              slotKey: competingSlot,
+              status: 'active',
+              id: Not(target.id),
+            },
+          });
+          if (conflict) {
+            throw profileValidationError(
+              `replacement slot conflicts with ${conflict.profileIndex ?? conflict.id}`,
+            );
+          }
+        }
+      }
       const before = conflicts.map((item) => this.projectionService.toRecord(item));
       for (const conflict of conflicts) {
         conflict.status = 'superseded';
         conflict.version += 1;
         await manager.save(conflict);
       }
+      const replaced = operation === 'replace' || operation === 'legacy'
+        ? conflicts[0]
+        : undefined;
+      const profileIndex = replaced?.profileIndex
+        ?? await this.allocateProfileIndex(state);
       const entity = manager.create(ProfileMemoryItemEntity, {
         id: randomUUID(),
         userId,
+        profileIndex,
+        profileLevel: this.persistentLevel(candidate.level, candidate.timeScope, candidate.priority),
         content,
         normalizedKey: this.normalizedKey(content, candidate.category),
         category: candidate.category.trim().toLowerCase(),
@@ -111,8 +152,9 @@ export class ProfileMemoryService {
         sourceMessageId: candidate.sourceMessageId ?? meta.sourceMessageId ?? null,
         status: 'active',
         expiresAt: candidate.expiresAt ? new Date(candidate.expiresAt) : null,
-        supersedesId: conflicts[0]?.id ?? null,
+        supersedesId: replaced?.id ?? conflicts[0]?.id ?? null,
         version: 1,
+        itemVersion: replaced ? replaced.itemVersion + 1 : 1,
       });
       const saved = await manager.save(entity);
       state.aggregateVersion += 1;
@@ -124,7 +166,7 @@ export class ProfileMemoryService {
         aggregateVersion: state.aggregateVersion,
         targetType: 'memory',
         targetId: saved.id,
-        operation: conflicts.length ? 'supersede' : 'create',
+        operation: operation === 'replace' || conflicts.length ? 'supersede' : 'create',
         beforeJson: before.length ? JSON.stringify(before) : null,
         afterJson: JSON.stringify(after),
         sourceType: meta.sourceType,
@@ -164,6 +206,12 @@ export class ProfileMemoryService {
       where: { userId, normalizedKey, status: 'active' },
     });
     if (duplicate) return this.projectionService.toRecord(duplicate);
+    let expiresAt = input.expiresAt ?? null;
+    if (input.timeScope === 'short_term' && !expiresAt) {
+      const reviewAt = new Date();
+      reviewAt.setUTCDate(reviewAt.getUTCDate() + 60);
+      expiresAt = reviewAt.toISOString();
+    }
 
     const result = await this.dataSource.transaction(async (manager) => {
       const state = await this.requireVersion(manager, userId, input.expectedVersion);
@@ -173,6 +221,14 @@ export class ProfileMemoryService {
             where: { userId, slotKey: normalizedSlot, status: 'active' },
           })
         : [];
+      if (profileFeatureFlags.indexedMutations() && conflicts.length) {
+        throw profileValidationError(
+          'add cannot replace an existing slot; use replace with profileIndex',
+          {
+            profileIndexes: conflicts.map((item) => item.profileIndex ?? item.id),
+          },
+        );
+      }
       for (const conflict of conflicts) {
         conflict.status = 'superseded';
         conflict.version += 1;
@@ -181,6 +237,12 @@ export class ProfileMemoryService {
       const entity = manager.create(ProfileMemoryItemEntity, {
         id: randomUUID(),
         userId,
+        profileIndex: conflicts[0]?.profileIndex ?? await this.allocateProfileIndex(state),
+        profileLevel: this.persistentLevel(
+          input.profileLevel,
+          input.timeScope,
+          input.priority,
+        ),
         content,
         normalizedKey,
         category: input.category.trim().toLowerCase(),
@@ -192,9 +254,10 @@ export class ProfileMemoryService {
         sourceConversationId: meta.sourceConversationId ?? null,
         sourceMessageId: meta.sourceMessageId ?? null,
         status: 'active',
-        expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
+        expiresAt: expiresAt ? new Date(expiresAt) : null,
         supersedesId: conflicts[0]?.id ?? null,
         version: 1,
+        itemVersion: conflicts[0] ? conflicts[0].itemVersion + 1 : 1,
       });
       const saved = await manager.save(entity);
       await this.recordMutation(
@@ -243,6 +306,15 @@ export class ProfileMemoryService {
       }
       if (input.timeScope !== undefined) entity.timeScope = input.timeScope;
       if (input.priority !== undefined) entity.priority = input.priority;
+      if (input.profileLevel !== undefined) {
+        entity.profileLevel = this.persistentLevel(
+          input.profileLevel,
+          input.timeScope ?? entity.timeScope,
+          input.priority ?? entity.priority,
+        );
+      } else if (input.priority === 'hard_constraint') {
+        entity.profileLevel = 'L3';
+      }
       if (input.status !== undefined) entity.status = input.status;
       if (input.expiresAt !== undefined) {
         entity.expiresAt = input.expiresAt ? new Date(input.expiresAt) : null;
@@ -265,13 +337,68 @@ export class ProfileMemoryService {
           }
         }
       }
+      const changesContent = [
+        input.content,
+        input.category,
+        input.slotKey,
+        input.appliesTo,
+        input.timeScope,
+        input.priority,
+        input.profileLevel,
+        input.expiresAt,
+      ].some((value) => value !== undefined);
       entity.version += 1;
+      if (changesContent) entity.itemVersion += 1;
       const saved = await manager.save(entity);
       await this.recordMutation(manager, state, saved, before, 'update', meta);
       return this.projectionService.toRecord(saved);
     });
     await this.projectionService.projectUser(userId);
     return result;
+  }
+
+  async replaceByIndex(
+    userId: number,
+    profileIndex: string,
+    input: ReplaceProfileMemoryDto,
+    meta: ProfileMutationMeta,
+  ) {
+    if (!profileFeatureFlags.v2Write()) throw profileAccessDenied('Profile V2 writes are disabled');
+    const normalizedIndex = profileIndex.trim().toUpperCase();
+    if (!/^P\d{6,}$/.test(normalizedIndex)) {
+      throw profileValidationError('profileIndex must match P followed by at least 6 digits');
+    }
+    const target = await this.memoryRepo.findOne({
+      where: { userId, profileIndex: normalizedIndex, status: 'active' },
+    });
+    if (!target) throw profileResourceNotFound('active profile memory', normalizedIndex);
+    const current = this.toRecord(target);
+    const effectiveTimeScope = input.timeScope ?? target.timeScope;
+    return this.applyCandidate(userId, {
+      operation: 'replace',
+      profileIndex: normalizedIndex,
+      expectedTargetId: target.id,
+      expectedTargetVersion: target.version,
+      content: input.content,
+      category: input.category ?? target.category,
+      level: input.profileLevel,
+      slotKey: input.slotKey ?? target.slotKey,
+      appliesTo: input.appliesTo ?? current.appliesTo,
+      timeScope: effectiveTimeScope,
+      priority: input.priority ?? target.priority,
+      sourceType: meta.sourceType,
+      sourceConversationId: meta.sourceConversationId ?? null,
+      sourceMessageId: meta.sourceMessageId ?? null,
+      expiresAt: input.expiresAt !== undefined
+        ? input.expiresAt
+        : effectiveTimeScope === 'long_term'
+          ? null
+          : current.expiresAt,
+    }, [target.id], {
+      ...meta,
+      expectedVersion: input.expectedVersion,
+      updateLevel: 'L3',
+    });
   }
 
   async softDelete(userId: number, id: string, expectedVersion: number) {
@@ -387,5 +514,22 @@ export class ProfileMemoryService {
 
   private normalizeList(values: string[]) {
     return [...new Set(values.map((item) => item.trim().toLowerCase()).filter(Boolean))];
+  }
+
+  private allocateProfileIndex(state: ProfileStateEntity) {
+    const sequence = Math.max(state.nextProfileIndex ?? 1, 1);
+    state.nextProfileIndex = sequence + 1;
+    return `P${String(sequence).padStart(6, '0')}`;
+  }
+
+  private persistentLevel(
+    requested: ProfileMemoryCandidate['level'] | CreateProfileMemoryDto['profileLevel'],
+    timeScope: ProfileMemoryCandidate['timeScope'] | CreateProfileMemoryDto['timeScope'],
+    priority: ProfileMemoryCandidate['priority'] | CreateProfileMemoryDto['priority'],
+  ): 'L1' | 'L2' | 'L3' {
+    if (priority === 'hard_constraint') return 'L3';
+    if (requested === 'L1' && timeScope !== 'short_term') return 'L2';
+    if (requested === 'L1' || requested === 'L2' || requested === 'L3') return requested;
+    return timeScope === 'short_term' ? 'L1' : 'L2';
   }
 }

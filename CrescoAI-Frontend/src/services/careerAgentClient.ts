@@ -18,6 +18,7 @@ import type {
   ProfileRevisionRecord,
   ProfileStateRecord,
   CreateProfileMemoryInput,
+  ReplaceProfileMemoryInput,
 } from '../modules/profile/profileV2Types';
 
 export interface CreateThreadInput {
@@ -56,6 +57,7 @@ export interface CareerAgentClient {
   listProfileMemories?(filters?: Record<string, string>): Promise<ProfileMemoryRecord[]>;
   getProfileState?(): Promise<ProfileStateRecord>;
   createProfileMemory?(input: CreateProfileMemoryInput, expectedVersion: number): Promise<ProfileMemoryRecord>;
+  replaceProfileMemory?(profileIndex: string, input: ReplaceProfileMemoryInput, expectedVersion: number): Promise<ProfileMemoryRecord>;
   updateProfileMemory?(id: string, patch: Partial<ProfileMemoryRecord>, expectedVersion: number): Promise<ProfileMemoryRecord>;
   deleteProfileMemory?(id: string, expectedVersion: number): Promise<void>;
   listProfileProposals?(): Promise<ProfileChangeProposalRecord[]>;

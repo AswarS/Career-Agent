@@ -211,6 +211,14 @@ describe('workspace streamed block presentation', () => {
         block: { id: 'text-0', type: 'text', text: '' },
       },
       {
+        type: 'message.block.delta',
+        messageId: 'message-assistant',
+        blockId: 'text-1',
+        blockType: 'text',
+        delta: 'Incomplete final',
+        block: { id: 'text-1', type: 'text', text: '' },
+      },
+      {
         type: 'message.completed',
         accepted: true,
         status: 'done',
@@ -218,7 +226,11 @@ describe('workspace streamed block presentation', () => {
         messageId: 'message-user',
         assistantMessageId: 'message-assistant',
         reply: 'Authoritative final reply',
-        blocks: [{ id: 'status-0', type: 'status', text: 'Execution detail' }],
+        blocks: [
+          { id: 'text-0', type: 'text', text: 'Intermediate text' },
+          { id: 'status-0', type: 'status', text: 'Execution detail' },
+          { id: 'text-1', type: 'text', text: 'Incomplete final' },
+        ],
       },
     ]));
 
@@ -228,7 +240,8 @@ describe('workspace streamed block presentation', () => {
     const assistantMessage = workspaceStore.messages.find((message) => message.id === 'message-assistant');
     expect(assistantMessage?.content).toBe('Authoritative final reply');
     expect(assistantMessage?.blocks?.filter((block) => block.type === 'text')).toEqual([
-      { id: 'text-0', type: 'text', text: 'Authoritative final reply' },
+      { id: 'text-0', type: 'text', text: 'Intermediate text' },
+      { id: 'text-1', type: 'text', text: 'Authoritative final reply' },
     ]);
   });
 

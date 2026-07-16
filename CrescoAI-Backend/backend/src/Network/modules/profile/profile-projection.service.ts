@@ -77,6 +77,9 @@ export class ProfileProjectionService {
   toRecord(entity: ProfileMemoryItemEntity): ProfileMemoryRecord {
     return {
       id: entity.id,
+      profileIndex: entity.profileIndex ?? `LEGACY-${entity.id}`,
+      profileLevel: entity.profileLevel ?? 'L2',
+      itemVersion: entity.itemVersion ?? 1,
       content: entity.content,
       category: entity.category,
       slotKey: entity.slotKey,

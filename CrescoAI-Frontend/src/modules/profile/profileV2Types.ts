@@ -1,6 +1,7 @@
 export type ProfileTimeScope = 'long_term' | 'short_term';
 export type ProfilePriority = 'hard_constraint' | 'high' | 'normal' | 'background';
 export type ProfileMemoryStatus = 'active' | 'superseded' | 'expired' | 'deleted';
+export type ProfilePersistentLevel = 'L1' | 'L2' | 'L3';
 export type ProfileProposalStatus = 'pending' | 'applied' | 'rejected' | 'expired';
 
 export interface EducationBackgroundItem {
@@ -49,6 +50,9 @@ export type BaseProfilePatch = Partial<Pick<
 
 export interface ProfileMemoryRecord {
   id: string;
+  profileIndex: string;
+  profileLevel: ProfilePersistentLevel;
+  itemVersion: number;
   content: string;
   category: string;
   slotKey: string;
@@ -105,5 +109,13 @@ export interface ProfileStateRecord {
 
 export type CreateProfileMemoryInput = Pick<
   ProfileMemoryRecord,
-  'content' | 'category' | 'timeScope' | 'priority'
+  'content' | 'category' | 'timeScope' | 'priority' | 'profileLevel'
 > & Partial<Pick<ProfileMemoryRecord, 'slotKey' | 'appliesTo' | 'expiresAt'>>;
+
+export type ReplaceProfileMemoryInput = Pick<
+  ProfileMemoryRecord,
+  'content' | 'profileLevel'
+> & Partial<Pick<
+  ProfileMemoryRecord,
+  'category' | 'slotKey' | 'appliesTo' | 'timeScope' | 'priority' | 'expiresAt'
+>>;

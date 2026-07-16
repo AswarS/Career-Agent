@@ -13,6 +13,7 @@ import type {
   BaseProfilePatch,
   CreateProfileMemoryInput,
   ProfileMemoryRecord,
+  ReplaceProfileMemoryInput,
 } from '../modules/profile/profileV2Types';
 import {
   buildProfileSnapshotSections,
@@ -82,6 +83,10 @@ async function createProfileMemory(input: CreateProfileMemoryInput) {
 
 async function updateProfileMemory(id: string, patch: Partial<ProfileMemoryRecord>) {
   await profileV2Store.updateMemory(id, patch);
+}
+
+async function replaceProfileMemory(profileIndex: string, input: ReplaceProfileMemoryInput) {
+  await profileV2Store.replaceMemory(profileIndex, input);
 }
 
 async function deleteProfileMemory(id: string) {
@@ -421,6 +426,7 @@ function formatSuggestionStatus(status: typeof profileSuggestionsStatus.value) {
       :profile-state="profileState"
       @create="createProfileMemory"
       @update="updateProfileMemory"
+      @replace="replaceProfileMemory"
       @delete="deleteProfileMemory"
     />
     <ProfileProposalPanel
