@@ -22,6 +22,11 @@ import {
   normalizeCanonicalMessageBlocks,
   THINKING_BLOCK_TITLE,
 } from './canonical-message-blocks.js';
+import {
+  extractAskUserQuestionResult,
+  extractAskUserQuestions,
+  stripAskUserQuestionResultMetadata,
+} from '../agent/ask-user-question.js';
 
 type ProjectedConversationMessage = ConversationMessage & {
   uuid?: string;
@@ -344,6 +349,19 @@ export class ConversationTranscriptProjectionService {
     if (this.isToolFacingAssistantBlock(blockType, block)) {
       const toolName = this.readToolName(block);
       const toolUseId = this.readToolUseId(block);
+      const questions = extractAskUserQuestions(block);
+      if (questions) {
+        return {
+          id: toolUseId ? `ask-question-${toolUseId}` : `ask-question-${index}`,
+          type: 'ask_question',
+          title: '需要你的选择',
+          name: toolName,
+          toolUseId,
+          status: 'pending',
+          text: '请回答以下问题，以便继续。',
+          questions,
+        };
+      }
       return {
         id: toolUseId ? `tool-call-${toolUseId}` : `tool-call-${index}`,
         type: 'tool_call',
@@ -413,8 +431,9 @@ export class ConversationTranscriptProjectionService {
   ): MessageBlock {
     const toolName = this.readToolName(block);
     const toolUseId = this.readToolUseId(block);
+    const askUserQuestionResult = extractAskUserQuestionResult(block);
     const resultText = this.redactSensitiveReasoningText(
-      this.extractAssistantToolResultText(block),
+      stripAskUserQuestionResultMetadata(this.extractAssistantToolResultText(block)),
     );
 
     return {
@@ -425,6 +444,7 @@ export class ConversationTranscriptProjectionService {
       toolUseId,
       text: resultText || (block.is_error === true || block.isError === true ? '工具返回错误。' : '工具已返回。'),
       isError: block.is_error === true || block.isError === true,
+      ...(askUserQuestionResult ? { answers: askUserQuestionResult.answers } : {}),
     };
   }
 

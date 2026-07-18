@@ -132,6 +132,37 @@ describe('createMessageViewModel', () => {
     expect(viewModel.finalBlocks[0]?.text).toBe('Authoritative final reply');
   });
 
+  it('keeps interactive AskUserQuestion blocks visible instead of hiding them with execution details', () => {
+    const viewModel = createMessageViewModel(createMessage({
+      content: '',
+      streaming: true,
+      blocks: [{
+        id: 'ask-question-tool-1',
+        type: 'ask_question',
+        title: '需要你的选择',
+        toolUseId: 'tool-1',
+        status: 'pending',
+        questions: [{
+          header: '职业方向',
+          question: '你希望优先探索哪条职业路径？',
+          multiSelect: true,
+          options: [
+            { label: '产品经理', description: '探索产品规划与协作。' },
+            { label: '数据分析', description: '探索数据驱动决策。' },
+          ],
+        }],
+      }],
+    }));
+
+    expect(viewModel.askQuestionBlocks).toHaveLength(1);
+    expect(viewModel.replyUnits[0]?.askQuestionBlocks[0]).toMatchObject({
+      id: 'ask-question-tool-1',
+      toolUseId: 'tool-1',
+      status: 'pending',
+    });
+    expect(viewModel.hasHiddenExecutionBlocks).toBe(false);
+  });
+
   it('keeps inline think fallback as a status block for legacy streaming messages', () => {
     const viewModel = createMessageViewModel(createMessage({
       content: '<think>先组织答案。</think>\n\n这里是正文。',

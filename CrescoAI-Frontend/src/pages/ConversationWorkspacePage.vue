@@ -7,7 +7,7 @@ import ConversationMessageCard from '../modules/conversation/ConversationMessage
 import MobileRailTrigger from '../modules/navigation/MobileRailTrigger.vue';
 import { shouldUseMultiAgentPresentation } from '../modules/conversation/messagePresentation';
 import { useWorkspaceStore } from '../stores/workspace';
-import type { DraftMessageSubmission, MessageAction } from '../types/entities';
+import type { AskQuestionResponse, DraftMessageSubmission, MessageAction } from '../types/entities';
 
 const route = useRoute();
 const router = useRouter();
@@ -109,6 +109,10 @@ async function handleMessageAction(action: MessageAction) {
 
   await workspaceStore.openArtifact(action.artifactId, action.viewMode ?? 'pane');
 }
+
+async function handleQuestionResponse(toolUseId: string, response: AskQuestionResponse) {
+  await workspaceStore.respondToInteractiveTool(threadId.value, toolUseId, response);
+}
 </script>
 
 <template>
@@ -144,6 +148,7 @@ async function handleMessageAction(action: MessageAction) {
             :key="message.id"
             :message="message"
             :multi-agent-mode="multiAgentMode"
+            :respond-to-question="handleQuestionResponse"
             @action="handleMessageAction"
           />
 

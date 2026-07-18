@@ -3,12 +3,13 @@ export const SKILL_BLOCK_TITLE = 'Skill'
 
 export interface CanonicalMessageBlock {
   id: string
-  type: 'text' | 'status' | 'tool_call' | 'tool_result' | 'skill' | 'artifact'
+  type: 'text' | 'status' | 'tool_call' | 'tool_result' | 'skill' | 'artifact' | 'ask_question'
   text?: string
   title?: string
   name?: string | null
   status?: string | null
   toolUseId?: string | null
+  answers?: Record<string, string>
 }
 
 export function extractLoadedSkillNameFromText(value: string | null | undefined): string | null {

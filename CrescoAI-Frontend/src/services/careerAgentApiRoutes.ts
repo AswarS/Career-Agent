@@ -6,6 +6,7 @@ export const CAREER_AGENT_API_ROUTE_PATTERNS = {
   thread: `${CAREER_AGENT_API_BASE_PATH}/threads/:threadId`,
   threadMessages: `${CAREER_AGENT_API_BASE_PATH}/threads/:threadId/messages`,
   threadMessagesStream: `${CAREER_AGENT_API_BASE_PATH}/threads/:threadId/messages/stream`,
+  threadToolResponse: `${CAREER_AGENT_API_BASE_PATH}/threads/:threadId/tool-responses/:toolUseId`,
   threadFiles: `${CAREER_AGENT_API_BASE_PATH}/threads/:threadId/files`,
   threadFile: `${CAREER_AGENT_API_BASE_PATH}/threads/:threadId/files/:fileName`,
   profile: `${CAREER_AGENT_API_BASE_PATH}/profile`,
@@ -57,6 +58,11 @@ export const CAREER_AGENT_API_ROUTE_DESCRIPTORS = [
     method: 'POST',
     path: CAREER_AGENT_API_ROUTE_PATTERNS.threadMessages,
     purpose: '向当前会话发送文本或带附件引用的消息。',
+  },
+  {
+    method: 'POST',
+    path: CAREER_AGENT_API_ROUTE_PATTERNS.threadToolResponse,
+    purpose: '提交 AskUserQuestion 的答案并恢复当前 agent。',
   },
   {
     method: 'POST',
@@ -158,6 +164,11 @@ export const CAREER_AGENT_API_ROUTES = {
   },
   streamThreadMessage(threadId: string) {
     return CAREER_AGENT_API_ROUTE_PATTERNS.threadMessagesStream.replace(':threadId', encodeURIComponent(threadId));
+  },
+  threadToolResponse(threadId: string, toolUseId: string) {
+    return CAREER_AGENT_API_ROUTE_PATTERNS.threadToolResponse
+      .replace(':threadId', encodeURIComponent(threadId))
+      .replace(':toolUseId', encodeURIComponent(toolUseId));
   },
   threadFiles(threadId: string) {
     return CAREER_AGENT_API_ROUTE_PATTERNS.threadFiles.replace(':threadId', encodeURIComponent(threadId));

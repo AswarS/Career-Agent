@@ -1,5 +1,7 @@
 import type {
   AgentAccent,
+  AskQuestion,
+  AskQuestionOption,
   ArtifactRecord,
   ArtifactRenderMode,
   ArtifactStatus,
@@ -386,6 +388,7 @@ function normalizeMessageBlockType(value: unknown): MessageBlockType | null {
     || value === 'tool_result'
     || value === 'skill'
     || value === 'artifact'
+    || value === 'ask_question'
   ) {
     return value;
   }
@@ -403,6 +406,68 @@ function normalizeMessageBlockType(value: unknown): MessageBlockType | null {
   }
 
   return null;
+}
+
+function normalizeAskQuestionOption(value: unknown): AskQuestionOption | null {
+  if (!isUnknownRecord(value)) {
+    return null;
+  }
+
+  const label = normalizeOptionalText(value.label as string | null | undefined);
+  const description = normalizeOptionalText(value.description as string | null | undefined);
+  if (!label || !description) {
+    return null;
+  }
+
+  const preview = normalizeOptionalText(value.preview as string | null | undefined);
+  return preview ? { label, description, preview } : { label, description };
+}
+
+function normalizeAskQuestions(value: unknown): AskQuestion[] | undefined {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 4) {
+    return undefined;
+  }
+
+  const questions = value.map((item) => {
+    if (!isUnknownRecord(item)) {
+      return null;
+    }
+
+    const question = normalizeOptionalText(item.question as string | null | undefined);
+    const header = normalizeOptionalText(item.header as string | null | undefined);
+    const options = Array.isArray(item.options)
+      ? item.options
+        .map(normalizeAskQuestionOption)
+        .filter((option): option is AskQuestionOption => Boolean(option))
+      : [];
+    if (!question || !header || options.length < 2 || options.length > 4) {
+      return null;
+    }
+
+    return {
+      question,
+      header,
+      options,
+      multiSelect: item.multiSelect === true || item.multi_select === true,
+    } satisfies AskQuestion;
+  });
+
+  return questions.every((question): question is AskQuestion => Boolean(question))
+    ? questions
+    : undefined;
+}
+
+function normalizeAskQuestionAnswers(value: unknown): Record<string, string> | undefined {
+  const record = normalizeRecord(value);
+  if (!record) return undefined;
+
+  const answers = Object.entries(record)
+    .filter((entry): entry is [string, string] => typeof entry[0] === 'string' && typeof entry[1] === 'string')
+    .slice(0, 4)
+    .map(([question, answer]) => [question.trim().slice(0, 4_000), answer.trim().slice(0, 4_000)] as const)
+    .filter(([question, answer]) => Boolean(question && answer));
+
+  return answers.length ? Object.fromEntries(answers) : undefined;
 }
 
 function normalizeBlockText(value: unknown): string | undefined {
@@ -506,6 +571,14 @@ function normalizeMessageBlock(input: unknown, index: number): MessageBlock | nu
   }
   if (input.isError === true || input.is_error === true) {
     block.isError = true;
+  }
+  const questions = normalizeAskQuestions(input.questions);
+  if (questions) {
+    block.questions = questions;
+  }
+  const answers = normalizeAskQuestionAnswers(input.answers);
+  if (answers) {
+    block.answers = answers;
   }
 
   const media = normalizeMessageMedia(

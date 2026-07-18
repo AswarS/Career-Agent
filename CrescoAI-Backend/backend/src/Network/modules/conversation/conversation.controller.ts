@@ -22,6 +22,7 @@ import type { Request, Response } from 'express';
 import { ConversationService } from './conversation.service';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { SendMultimodalMessageDto } from './dto/send-multimodal-message.dto';
+import { RespondToToolDto } from './dto/respond-to-tool.dto';
 import { OwnershipGuard } from '../auth/ownership.guard';
 
 @Controller('api/career-agent/threads')
@@ -141,6 +142,22 @@ export class ConversationController {
     @Body() dto: SendMultimodalMessageDto,
   ) {
     return this.conversationService.sendMessage(conversationId, dto, req.userId);
+  }
+
+  @Post(':id/tool-responses/:toolUseId')
+  @UseGuards(OwnershipGuard)
+  respondToInteractiveTool(
+    @Req() req: Request,
+    @Param('id') conversationId: string,
+    @Param('toolUseId') toolUseId: string,
+    @Body() dto: RespondToToolDto,
+  ) {
+    return this.conversationService.respondToInteractiveTool(
+      conversationId,
+      toolUseId,
+      dto,
+      req.userId,
+    );
   }
 
   @Post(':id/files')

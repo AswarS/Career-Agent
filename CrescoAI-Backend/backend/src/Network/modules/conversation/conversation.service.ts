@@ -20,6 +20,7 @@ import {
 } from '../../utils/publicOutputSanitizer.js';
 import { DataSource, Repository } from 'typeorm';
 import { AgentService } from '../agent/agent.service';
+import type { AgentAskQuestion } from '../agent/agent.runtime.js';
 import { SkillService } from '../skill/skill.service';
 import type { SkillHandlerResult, SkillProgressEvent } from '../skill/skill.registry';
 import { ArtifactService } from '../artifact/artifact.service';
@@ -32,6 +33,7 @@ import {
 } from './canonical-message-blocks.js';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { SendMultimodalMessageDto } from './dto/send-multimodal-message.dto';
+import { RespondToToolDto } from './dto/respond-to-tool.dto';
 import { ConversationEntity } from './entities/conversation.entity';
 import { MessageEntity } from './entities/message.entity';
 import { ResourceEntity } from '../resource/entities/resource.entity';
@@ -85,7 +87,7 @@ export interface MessageMedia {
   createdAt?: string;
 }
 
-export type MessageBlockType = 'text' | 'status' | 'tool_call' | 'tool_result' | 'skill' | 'artifact';
+export type MessageBlockType = 'text' | 'status' | 'tool_call' | 'tool_result' | 'skill' | 'artifact' | 'ask_question';
 
 export interface MessageBlock {
   id: string;
@@ -96,6 +98,8 @@ export interface MessageBlock {
   status?: string | null;
   toolUseId?: string | null;
   isError?: boolean;
+  questions?: AgentAskQuestion[];
+  answers?: Record<string, string>;
   media?: MessageMedia[];
   files?: MessageMedia[];
   actions?: MessageAction[];
@@ -795,6 +799,31 @@ export class ConversationService {
       ) as MessageBlock[] | undefined,
       raw: sanitizeServerPhysicalPathsInValue(agentResponse.raw),
     };
+  }
+
+  async respondToInteractiveTool(
+    conversationId: string,
+    toolUseId: string,
+    dto: RespondToToolDto,
+    requestUserId?: number,
+  ) {
+    const conversation = await this.getConversationByIdentifier(conversationId, requestUserId);
+    const accepted = await this.agentService.respondToInteractiveTool(
+      conversation.id,
+      String(conversation.userId),
+      toolUseId,
+      {
+        approved: dto.approved,
+        answers: this.normalizeToolAnswers(dto.answers),
+        annotations: this.normalizeToolAnnotations(dto.annotations),
+      },
+    );
+
+    if (!accepted) {
+      throw new NotFoundException('This question is no longer waiting for a response');
+    }
+
+    return { accepted: true };
   }
 
   async *sendMessageStream(
@@ -1671,6 +1700,46 @@ export class ConversationService {
     }
 
     throw new NotFoundException(`Conversation ${identifier} not found`);
+  }
+
+  private normalizeToolAnswers(value: unknown): Record<string, string> | undefined {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return undefined;
+    }
+
+    const answers = Object.entries(value)
+      .filter((entry): entry is [string, string] => typeof entry[0] === 'string' && typeof entry[1] === 'string')
+      .slice(0, 4)
+      .map(([question, answer]) => [question.trim().slice(0, 4_000), answer.trim().slice(0, 4_000)] as const)
+      .filter(([question, answer]) => Boolean(question && answer));
+
+    return answers.length ? Object.fromEntries(answers) : undefined;
+  }
+
+  private normalizeToolAnnotations(
+    value: unknown,
+  ): Record<string, { preview?: string; notes?: string }> | undefined {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return undefined;
+    }
+
+    const annotations: Array<[string, { preview?: string; notes?: string }]> = [];
+    for (const [question, annotation] of Object.entries(value).slice(0, 4)) {
+      if (!annotation || typeof annotation !== 'object' || Array.isArray(annotation)) {
+        continue;
+      }
+      const record = annotation as Record<string, unknown>;
+      const preview = typeof record.preview === 'string' ? record.preview.trim().slice(0, 20_000) : undefined;
+      const notes = typeof record.notes === 'string' ? record.notes.trim().slice(0, 4_000) : undefined;
+      if (question.trim() && (preview || notes)) {
+        annotations.push([question.trim().slice(0, 4_000), {
+          ...(preview ? { preview } : {}),
+          ...(notes ? { notes } : {}),
+        }]);
+      }
+    }
+
+    return annotations.length ? Object.fromEntries(annotations) : undefined;
   }
 
   private toThreadSummary(conversation: ConversationEntity) {

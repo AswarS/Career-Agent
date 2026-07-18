@@ -4,7 +4,7 @@ import {
   type CareerAgentClient,
 } from './careerAgentClient';
 import { CAREER_AGENT_API_ROUTES } from './careerAgentApiRoutes';
-import type { DraftMessageAttachment, ProfileRecord } from '../types/entities';
+import type { AskQuestionResponse, DraftMessageAttachment, ProfileRecord } from '../types/entities';
 import type {
   BaseProfilePatch,
   BaseProfileRecord,
@@ -383,6 +383,15 @@ export function createUpstreamCareerAgentClient(
       );
 
       return normalizeSendThreadMessageResult(payload);
+    },
+    async respondToInteractiveTool(threadId: string, toolUseId: string, response: AskQuestionResponse) {
+      await requestJson<{ accepted: boolean }>(
+        CAREER_AGENT_API_ROUTES.threadToolResponse(threadId, toolUseId),
+        {
+          method: 'POST',
+          data: response,
+        },
+      );
     },
     async *streamMessage(threadId, input, streamOptions) {
       const path = CAREER_AGENT_API_ROUTES.streamThreadMessage(threadId);

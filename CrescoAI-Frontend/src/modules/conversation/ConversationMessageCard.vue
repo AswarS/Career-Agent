@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import MarkdownContent from '../../components/MarkdownContent.vue';
-import type { MessageAction, ThreadMessage } from '../../types/entities';
+import AskUserQuestionCard from './AskUserQuestionCard.vue';
+import type { AskQuestionResponse, MessageAction, ThreadMessage } from '../../types/entities';
 import { downloadMessageFile } from '../../services/messageFileDownloads';
 import {
   createMessageViewModel,
@@ -13,6 +14,7 @@ import {
 const props = defineProps<{
   message: ThreadMessage;
   multiAgentMode?: boolean;
+  respondToQuestion?: (toolUseId: string, response: AskQuestionResponse) => Promise<void>;
 }>();
 
 const emit = defineEmits<{
@@ -24,6 +26,26 @@ const viewModel = computed(() => createMessageViewModel(props.message, {
 }));
 const expandedReplyUnitIds = ref(new Set<string>());
 const expandedToolResultIds = ref(new Set<string>());
+const answeredInteractiveToolUseIds = computed(() => new Set(
+  viewModel.value.blocks
+    .filter((block) => block.type === 'tool_result' && block.toolUseId)
+    .map((block) => block.toolUseId),
+));
+const interactiveAnswersByToolUseId = computed(() => new Map(
+  viewModel.value.blocks
+    .filter((block) => block.type === 'tool_result' && block.toolUseId && block.answers)
+    .map((block) => [block.toolUseId!, block.answers!] as const),
+));
+const activeQuestionBlockId = computed(() => {
+  if (!props.message.streaming) {
+    return null;
+  }
+
+  return [...viewModel.value.askQuestionBlocks]
+    .reverse()
+    .find((block) => !isQuestionAnswered(block.toolUseId))
+    ?.id ?? null;
+});
 
 function handleAction(action: MessageAction) {
   emit('action', action);
@@ -93,6 +115,25 @@ async function handleFileDownload(file: MessageFileAttachmentView) {
   } catch (error) {
     console.error(error);
   }
+}
+
+async function respondToQuestion(toolUseId: string, response: AskQuestionResponse) {
+  if (!props.respondToQuestion) {
+    throw new Error('当前连接不支持提交问题答案。');
+  }
+  await props.respondToQuestion(toolUseId, response);
+}
+
+function isQuestionAnswered(toolUseId: string | null | undefined) {
+  return Boolean(toolUseId && answeredInteractiveToolUseIds.value.has(toolUseId));
+}
+
+function isQuestionCollapsed(block: MessageBlockView) {
+  return activeQuestionBlockId.value !== block.id;
+}
+
+function getQuestionAnswers(toolUseId: string | null | undefined) {
+  return toolUseId ? interactiveAnswersByToolUseId.value.get(toolUseId) : undefined;
 }
 
 </script>
@@ -345,11 +386,22 @@ async function handleFileDownload(file: MessageFileAttachmentView) {
           </div>
         </section>
       </template>
+
+      <AskUserQuestionCard
+        v-for="block in unit.askQuestionBlocks"
+        :key="block.id"
+        :block="block"
+        :answers="getQuestionAnswers(block.toolUseId)"
+        :collapsed="isQuestionCollapsed(block)"
+        :completed="isQuestionAnswered(block.toolUseId)"
+        :disabled="!message.streaming || isQuestionAnswered(block.toolUseId)"
+        :respond="respondToQuestion"
+      />
       </section>
     </div>
 
     <p
-      v-if="!viewModel.textBlocks.length && !viewModel.artifactBlocks.length && !viewModel.hasHiddenExecutionBlocks"
+      v-if="!viewModel.textBlocks.length && !viewModel.artifactBlocks.length && !viewModel.askQuestionBlocks.length && !viewModel.hasHiddenExecutionBlocks"
       class="status-copy"
     >
       {{ viewModel.content }}

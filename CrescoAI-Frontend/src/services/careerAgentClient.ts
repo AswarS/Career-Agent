@@ -1,5 +1,6 @@
 import type {
   ArtifactRecord,
+  AskQuestionResponse,
   DraftMessageAttachment,
   ProfileRecord,
   ProfileSuggestion,
@@ -44,6 +45,11 @@ export interface CareerAgentClient {
   getThreadMessages(threadId: string): Promise<ThreadMessage[]>;
   uploadThreadFile(threadId: string, attachment: DraftMessageAttachment | File): Promise<UploadedConversationFile>;
   sendMessage(threadId: string, input: SendThreadMessageInput): Promise<SendThreadMessageResult>;
+  respondToInteractiveTool?(
+    threadId: string,
+    toolUseId: string,
+    response: AskQuestionResponse,
+  ): Promise<void>;
   streamMessage?(
     threadId: string,
     input: SendThreadMessageInput,

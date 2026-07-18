@@ -654,6 +654,83 @@ describe('normalizeThreadMessage', () => {
     });
   });
 
+  it('normalizes AskUserQuestion blocks into a safe interactive question payload', () => {
+    const event = normalizeMessageStreamEvent({
+      type: 'message.block.completed',
+      conversation_id: 'session-1',
+      message_id: 'msg-assistant-1',
+      block: {
+        id: 'ask-question-tool-1',
+        type: 'ask_question',
+        title: '需要你的选择',
+        name: 'AskUserQuestion',
+        toolUseId: 'tool-1',
+        status: 'pending',
+        questions: [{
+          header: '职业方向',
+          question: '你希望优先探索哪条职业路径？',
+          multiSelect: false,
+          options: [
+            { label: '产品经理', description: '探索产品规划与协作。' },
+            { label: '数据分析', description: '探索数据驱动决策。', preview: 'SQL + Python' },
+          ],
+        }],
+      },
+    }, 'session-1');
+
+    expect(event).toEqual({
+      type: 'message.block.completed',
+      messageId: 'msg-assistant-1',
+      block: {
+        id: 'ask-question-tool-1',
+        type: 'ask_question',
+        title: '需要你的选择',
+        name: 'AskUserQuestion',
+        toolUseId: 'tool-1',
+        status: 'pending',
+        questions: [{
+          header: '职业方向',
+          question: '你希望优先探索哪条职业路径？',
+          multiSelect: false,
+          options: [
+            { label: '产品经理', description: '探索产品规划与协作。' },
+            { label: '数据分析', description: '探索数据驱动决策。', preview: 'SQL + Python' },
+          ],
+        }],
+      },
+    });
+  });
+
+  it('keeps AskUserQuestion answers on the matching tool result for history rendering', () => {
+    const event = normalizeMessageStreamEvent({
+      type: 'message.block.completed',
+      conversation_id: 'session-1',
+      message_id: 'msg-assistant-1',
+      block: {
+        id: 'tool-result-1',
+        type: 'tool_result',
+        toolUseId: 'tool-1',
+        answers: {
+          '你希望优先探索哪条职业路径？': '产品经理',
+          '目前最担心什么？': '已跳过',
+        },
+      },
+    }, 'session-1');
+
+    expect(event).toMatchObject({
+      type: 'message.block.completed',
+      block: {
+        id: 'tool-result-1',
+        type: 'tool_result',
+        toolUseId: 'tool-1',
+        answers: {
+          '你希望优先探索哪条职业路径？': '产品经理',
+          '目前最担心什么？': '已跳过',
+        },
+      },
+    });
+  });
+
   it('normalizes stream completion metadata without forcing absent reasoning to null', () => {
     const event = normalizeMessageStreamEvent({
       type: 'message.completed',

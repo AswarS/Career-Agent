@@ -136,7 +136,10 @@ function buildToolPermissionContext(
 // canUseTool — server mode permission callback
 // ---------------------------------------------------------------------------
 
-const TOOL_RESPONSE_TIMEOUT_MS = 30_000
+// A browser user needs more than one short request cycle to read and answer a
+// multi-question form.  Keep the session alive long enough for a normal human
+// response while still releasing abandoned interactive tool waits.
+export const INTERACTIVE_TOOL_RESPONSE_TIMEOUT_MS = 10 * 60_000
 const SESSION_CWD_MUTATION_TOOLS = new Set(['EnterWorktree', 'ExitWorktree'])
 
 const READ_PATH_TOOLS = new Set(['Read', 'Glob', 'Grep', 'LS'])
@@ -403,7 +406,7 @@ function waitForToolResponse(
     const timeout = setTimeout(() => {
       context.pendingToolResponses.delete(toolUseId)
       resolve(undefined)
-    }, TOOL_RESPONSE_TIMEOUT_MS)
+    }, INTERACTIVE_TOOL_RESPONSE_TIMEOUT_MS)
 
     context.pendingToolResponses.set(toolUseId, {
       resolve: (payload) => {

@@ -10,9 +10,11 @@ import {
   type GeneratedFile,
   createConversation,
 } from './agent.runtime';
+import { extractAskUserQuestions } from './ask-user-question.js';
 import {
   runWithSessionContext,
   type SessionContext,
+  type ToolResponsePayload,
 } from '../../../server/SessionContext.js';
 import { createIsolatedState } from '../../../bootstrap/state.js';
 import { createQueryEngineForSession } from '../../../server/queryEngineFactory.js';
@@ -325,6 +327,19 @@ function createPublicAgentBlockFromContentBlock(
   if (isToolFacingProcessBlock(blockType, block)) {
     const toolName = readToolName(block);
     const toolUseId = readToolUseId(block);
+    const questions = extractAskUserQuestions(block);
+    if (questions) {
+      return {
+        id: toolUseId ? `ask-question-${toolUseId}` : `ask-question-${index}`,
+        type: 'ask_question',
+        title: '需要你的选择',
+        name: toolName,
+        toolUseId,
+        status: 'pending',
+        text: '请回答以下问题，以便继续。',
+        questions,
+      };
+    }
     return {
       id: toolUseId ? `tool-call-${toolUseId}` : `tool-call-${index}`,
       type: 'tool_call',
@@ -648,6 +663,24 @@ export class AgentService {
       });
     }
     return meta;
+  }
+
+  /** Resolve an interactive tool invocation for the active conversation session. */
+  async respondToInteractiveTool(
+    conversationId: string,
+    userId: string,
+    toolUseId: string,
+    payload: ToolResponsePayload,
+  ): Promise<boolean> {
+    this.assertCachedSessionOwner(conversationId, userId);
+    const context = this.sessionContexts.get(conversationId);
+    const pending = context?.pendingToolResponses.get(toolUseId);
+    if (!pending) {
+      return false;
+    }
+
+    pending.resolve(payload);
+    return true;
   }
 
   async sendMessage(input: AgentSendMessageInput): Promise<AgentSendMessageResult> {

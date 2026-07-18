@@ -30,6 +30,19 @@ export interface AgentAttachmentInput {
   mimeType?: string;
 }
 
+export interface AgentAskQuestionOption {
+  label: string;
+  description: string;
+  preview?: string;
+}
+
+export interface AgentAskQuestion {
+  question: string;
+  header: string;
+  options: AgentAskQuestionOption[];
+  multiSelect: boolean;
+}
+
 export interface AgentSendMessageInput {
   conversationId: string;
   userId: string;
@@ -58,7 +71,7 @@ export interface GeneratedFile {
   sizeBytes?: number;
 }
 
-export type AgentMessageBlockType = 'text' | 'status' | 'tool_call' | 'tool_result' | 'skill' | 'artifact';
+export type AgentMessageBlockType = 'text' | 'status' | 'tool_call' | 'tool_result' | 'skill' | 'artifact' | 'ask_question';
 
 export interface AgentMessageBlock {
   id: string;
@@ -69,6 +82,7 @@ export interface AgentMessageBlock {
   status?: string | null;
   toolUseId?: string | null;
   isError?: boolean;
+  questions?: AgentAskQuestion[];
   raw?: Record<string, unknown> | null;
 }
 

@@ -19,6 +19,25 @@ export type MessageActionKind = 'open-artifact';
 export type MessageMediaKind = 'image' | 'audio' | 'video' | 'html' | 'app' | 'file';
 export type DraftMessageAttachmentKind = 'image' | 'file';
 
+export interface AskQuestionOption {
+  label: string;
+  description: string;
+  preview?: string;
+}
+
+export interface AskQuestion {
+  question: string;
+  header: string;
+  options: AskQuestionOption[];
+  multiSelect: boolean;
+}
+
+export interface AskQuestionResponse {
+  approved: boolean;
+  answers?: Record<string, string>;
+  annotations?: Record<string, { preview?: string; notes?: string }>;
+}
+
 export interface MessageAction {
   id: string;
   kind: MessageActionKind;
@@ -50,7 +69,7 @@ export interface MessageFileAttachment {
   sizeBytes?: number;
 }
 
-export type MessageBlockType = 'text' | 'status' | 'tool_call' | 'tool_result' | 'skill' | 'artifact';
+export type MessageBlockType = 'text' | 'status' | 'tool_call' | 'tool_result' | 'skill' | 'artifact' | 'ask_question';
 
 export interface MessageBlock {
   id: string;
@@ -61,6 +80,8 @@ export interface MessageBlock {
   status?: string | null;
   toolUseId?: string | null;
   isError?: boolean;
+  questions?: AskQuestion[];
+  answers?: Record<string, string>;
   media?: MessageMedia[];
   files?: MessageFileAttachment[];
   actions?: MessageAction[];

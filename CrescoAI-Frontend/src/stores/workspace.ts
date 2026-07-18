@@ -16,6 +16,7 @@ import type {
   ArtifactRecord,
   ArtifactStatus,
   ArtifactViewMode,
+  AskQuestionResponse,
   DraftMessageSubmission,
   LoadState,
   MessageAction,
@@ -36,6 +37,9 @@ const simulateArtifactRefreshLifecycle = shouldSimulateArtifactRefreshLifecycle(
 let initializePromise: Promise<void> | null = null;
 let threadLoadRequestToken = 0;
 let artifactRefreshRequestToken = 0;
+const INTERACTIVE_TOOL_HISTORY_POLL_INTERVAL_MS = 750;
+const INTERACTIVE_TOOL_HISTORY_POLL_ATTEMPTS = 120;
+const INTERACTIVE_TOOL_STREAM_SETTLE_INTERVAL_MS = 100;
 
 function createMessageId(prefix: string) {
   const randomValue = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -128,6 +132,93 @@ function mergeThreadMessages(
       && !serverMessages.some((serverMessage) => representsSamePendingUserTurn(serverMessage, message))
     )),
   ];
+}
+
+/**
+ * Transcript projection can briefly lag the terminal SSE event after an
+ * interactive tool resumes. Do not replace a fully rendered live reply with
+ * that older, partial projection during the post-stream refresh.
+ */
+export function preserveCompletedLiveReplies(
+  currentMessages: ThreadMessage[],
+  refreshedMessages: ThreadMessage[],
+): ThreadMessage[] {
+  const currentById = new Map(currentMessages.map((message) => [message.id, message]));
+
+  return refreshedMessages.map((refreshedMessage) => {
+    const currentMessage = currentById.get(refreshedMessage.id);
+    if (
+      !currentMessage
+      || currentMessage.role !== 'assistant'
+      || currentMessage.streaming
+    ) {
+      return refreshedMessage;
+    }
+
+    const liveReply = deriveMessageContentFromBlocks(currentMessage.blocks, currentMessage.content).trim();
+    const refreshedReply = deriveMessageContentFromBlocks(
+      refreshedMessage.blocks,
+      refreshedMessage.content,
+    ).trim();
+    if (!liveReply || refreshedReply) {
+      return refreshedMessage;
+    }
+
+    return {
+      ...refreshedMessage,
+      content: liveReply,
+      reasoning: refreshedMessage.reasoning ?? currentMessage.reasoning,
+      blocks: reconcileCompletedReplyBlock(
+        refreshedMessage.blocks,
+        currentMessage.blocks,
+        liveReply,
+      ),
+      raw: refreshedMessage.raw ?? currentMessage.raw,
+      streaming: false,
+    };
+  });
+}
+
+export function hasCompletedInteractiveToolReply(
+  messages: ThreadMessage[],
+  toolUseId: string,
+) {
+  const questionIndex = messages.findIndex((message) => (
+    message.role === 'assistant'
+    && message.blocks?.some((block) => (
+      block.type === 'ask_question' && block.toolUseId === toolUseId
+    ))
+  ));
+  if (questionIndex < 0) {
+    return false;
+  }
+
+  const questionMessage = messages[questionIndex]!;
+  const questionBlockIndex = questionMessage.blocks?.findIndex((block) => (
+    block.type === 'ask_question' && block.toolUseId === toolUseId
+  )) ?? -1;
+  const isTerminalAssistantMessage = (message: ThreadMessage) => (
+    message.role === 'assistant'
+    && message.stopReason !== 'tool_use'
+  );
+
+  // The first terminal stream event may contain an interim "Assistant is
+  // thinking..." reply alongside the question.  It is not a continuation of
+  // the tool call, so only text blocks that follow the question are terminal.
+  if (isTerminalAssistantMessage(questionMessage)
+    && questionBlockIndex >= 0
+    && questionMessage.blocks?.slice(questionBlockIndex + 1).some((block) => (
+    block.type === 'text' && Boolean(block.text?.trim())
+  ))) {
+    return true;
+  }
+
+  // Some transcript projections keep the continuation as a later assistant
+  // record instead of merging it into the question message.
+  return messages.slice(questionIndex + 1).some((message) => (
+    isTerminalAssistantMessage(message)
+    && Boolean(deriveMessageContentFromBlocks(message.blocks, message.content).trim())
+  ));
 }
 
 function normalizeInlineText(value: string) {
@@ -905,6 +996,7 @@ export const useWorkspaceStore = defineStore('workspace', {
       const messageContent = content || '（已添加附件）';
       const refreshThreadMessages = async () => {
         const nextMessages = await client.getThreadMessages(targetThreadId);
+        const reconciledMessages = preserveCompletedLiveReplies(this.messages, nextMessages);
 
         revokeLocalMessageResources(this.transientMessagesByThread[targetThreadId] ?? []);
         delete this.transientMessagesByThread[targetThreadId];
@@ -915,7 +1007,7 @@ export const useWorkspaceStore = defineStore('workspace', {
         }
 
         revokeLocalMessageResources(this.messages);
-        this.messages = nextMessages;
+        this.messages = reconciledMessages;
         this.messagesStatus = 'ready';
         return true;
       };
@@ -1329,6 +1421,67 @@ export const useWorkspaceStore = defineStore('workspace', {
       this.messages = nextMessages;
       this.messagesStatus = 'ready';
       this.messageSubmitStatusByThread[targetThreadId] = 'ready';
+    },
+    async respondToInteractiveTool(
+      threadId: string,
+      toolUseId: string,
+      response: AskQuestionResponse,
+    ) {
+      if (!client.respondToInteractiveTool) {
+        throw new Error('当前服务不支持交互式问题。');
+      }
+
+      await client.respondToInteractiveTool(threadId, toolUseId, response);
+      void this.recoverInteractiveToolReply(threadId, toolUseId);
+    },
+    async recoverInteractiveToolReply(threadId: string, toolUseId: string) {
+      for (let attempt = 0; attempt < INTERACTIVE_TOOL_HISTORY_POLL_ATTEMPTS; attempt += 1) {
+        await new Promise<void>((resolve) => {
+          setTimeout(resolve, INTERACTIVE_TOOL_HISTORY_POLL_INTERVAL_MS);
+        });
+
+        let history: ThreadMessage[];
+        try {
+          history = await client.getThreadMessages(threadId);
+        } catch {
+          continue;
+        }
+
+        if (!hasCompletedInteractiveToolReply(history, toolUseId)) {
+          continue;
+        }
+
+        if (this.activeThreadId !== threadId) {
+          return;
+        }
+
+        // The original message stream performs one last history refresh when
+        // it closes after a tool response.  Wait for that refresh before
+        // applying the recovered terminal history, otherwise it can overwrite
+        // the final reply with the interim tool-use placeholder.
+        while (this.messageSubmitStatusByThread[threadId] === 'loading') {
+          await new Promise<void>((resolve) => {
+            setTimeout(resolve, INTERACTIVE_TOOL_STREAM_SETTLE_INTERVAL_MS);
+          });
+        }
+
+        try {
+          history = await client.getThreadMessages(threadId);
+        } catch {
+          continue;
+        }
+
+        if (!hasCompletedInteractiveToolReply(history, toolUseId)) {
+          continue;
+        }
+
+        const transientMessages = this.transientMessagesByThread[threadId] ?? [];
+        const refreshedMessages = mergeThreadMessages(history, transientMessages);
+        this.messages = preserveCompletedLiveReplies(this.messages, refreshedMessages);
+        this.messagesStatus = 'ready';
+        this.messageSubmitStatusByThread[threadId] = 'ready';
+        return;
+      }
     },
     closeArtifact() {
       this.artifactPaneOpen = false;

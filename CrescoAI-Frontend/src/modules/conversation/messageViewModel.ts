@@ -1,4 +1,5 @@
 import type {
+  AskQuestion,
   MessageAction,
   MessageBlock,
   MessageBlockType,
@@ -29,6 +30,8 @@ export interface MessageBlockView {
   status?: string | null;
   toolUseId?: string | null;
   isError?: boolean;
+  questions?: AskQuestion[];
+  answers?: Record<string, string>;
   media: MessageMediaView[];
   files: MessageFileAttachmentView[];
   actions: MessageAction[];
@@ -42,6 +45,7 @@ export interface MessageReplyUnitView {
   executionBlocks: MessageBlockView[];
   standaloneToolResultBlocks: MessageBlockView[];
   artifactBlocks: MessageBlockView[];
+  askQuestionBlocks: MessageBlockView[];
   hasHiddenExecutionBlocks: boolean;
   hiddenExecutionBlockCount: number;
   pending: boolean;
@@ -65,6 +69,7 @@ export interface MessageViewModel {
   finalBlocks: MessageBlockView[];
   textBlocks: MessageBlockView[];
   artifactBlocks: MessageBlockView[];
+  askQuestionBlocks: MessageBlockView[];
   executionBlocks: MessageBlockView[];
   standaloneToolResultBlocks: MessageBlockView[];
   hasHiddenExecutionBlocks: boolean;
@@ -106,6 +111,7 @@ export function createMessageViewModel(
     finalBlocks: blockGroups.finalBlocks,
     textBlocks: blockGroups.textBlocks,
     artifactBlocks: blockGroups.artifactBlocks,
+    askQuestionBlocks: blockGroups.askQuestionBlocks,
     executionBlocks: blockGroups.executionBlocks,
     standaloneToolResultBlocks: blockGroups.standaloneToolResultBlocks,
     hasHiddenExecutionBlocks: blockGroups.hasHiddenExecutionBlocks,
@@ -217,8 +223,11 @@ function createExecutionBlockGroup(blocks: MessageBlockView[]) {
 function createMessageBlockGroups(blocks: MessageBlockView[], streaming: boolean) {
   const textBlocks = blocks.filter((block) => block.type === 'text');
   const artifactBlocks = blocks.filter((block) => block.type === 'artifact');
-  const processBlocks = blocks.filter((block) => block.type !== 'text' && block.type !== 'artifact');
-  const finalBlocks = [...textBlocks, ...artifactBlocks];
+  const askQuestionBlocks = blocks.filter((block) => block.type === 'ask_question');
+  const processBlocks = blocks.filter((block) => (
+    block.type !== 'text' && block.type !== 'artifact' && block.type !== 'ask_question'
+  ));
+  const finalBlocks = [...textBlocks, ...artifactBlocks, ...askQuestionBlocks];
   const executionGroup = createExecutionBlockGroup(processBlocks);
   const replySegments: Array<{
     textBlock: MessageBlockView;
@@ -227,7 +236,7 @@ function createMessageBlockGroups(blocks: MessageBlockView[], streaming: boolean
   let pendingProcessBlocks: MessageBlockView[] = [];
 
   for (const block of blocks) {
-    if (block.type === 'artifact') {
+    if (block.type === 'artifact' || block.type === 'ask_question') {
       continue;
     }
 
@@ -256,6 +265,7 @@ function createMessageBlockGroups(blocks: MessageBlockView[], streaming: boolean
       executionBlocks: unitExecutionGroup.executionBlocks,
       standaloneToolResultBlocks: unitExecutionGroup.standaloneToolResultBlocks,
       artifactBlocks: index === replySegments.length - 1 ? artifactBlocks : [],
+      askQuestionBlocks: index === replySegments.length - 1 ? askQuestionBlocks : [],
       hasHiddenExecutionBlocks: unitExecutionGroup.hasHiddenExecutionBlocks,
       hiddenExecutionBlockCount: unitExecutionGroup.hiddenExecutionBlockCount,
       pending: false,
@@ -270,19 +280,21 @@ function createMessageBlockGroups(blocks: MessageBlockView[], streaming: boolean
       executionBlocks: pendingExecutionGroup.executionBlocks,
       standaloneToolResultBlocks: pendingExecutionGroup.standaloneToolResultBlocks,
       artifactBlocks: replySegments.length ? [] : artifactBlocks,
+      askQuestionBlocks: replySegments.length ? [] : askQuestionBlocks,
       hasHiddenExecutionBlocks: pendingExecutionGroup.hasHiddenExecutionBlocks,
       hiddenExecutionBlockCount: pendingExecutionGroup.hiddenExecutionBlockCount,
       pending: streaming,
     });
   }
 
-  if (!replyUnits.length && artifactBlocks.length) {
+  if (!replyUnits.length && (artifactBlocks.length || askQuestionBlocks.length)) {
     replyUnits.push({
       id: 'reply-artifacts',
       textBlock: null,
       executionBlocks: [],
       standaloneToolResultBlocks: [],
       artifactBlocks,
+      askQuestionBlocks,
       hasHiddenExecutionBlocks: false,
       hiddenExecutionBlockCount: 0,
       pending: false,
@@ -293,6 +305,7 @@ function createMessageBlockGroups(blocks: MessageBlockView[], streaming: boolean
     finalBlocks,
     textBlocks,
     artifactBlocks,
+    askQuestionBlocks,
     replyUnits,
     ...executionGroup,
   };
@@ -416,6 +429,8 @@ function toBlockView(block: MessageBlock): MessageBlockView | null {
     status: block.status,
     toolUseId: block.toolUseId,
     isError: block.isError,
+    questions: block.questions,
+    answers: block.answers,
     media: (block.media ?? []).map(toMediaView),
     files: (block.files ?? []).map(toFileView),
     actions: block.actions ?? [],
@@ -485,6 +500,9 @@ function defaultBlockTitle(block: MessageBlock) {
   if (block.type === 'artifact') {
     return '生成内容';
   }
+  if (block.type === 'ask_question') {
+    return '需要你的选择';
+  }
   if (block.type === 'status') {
     return '思考';
   }
@@ -500,6 +518,9 @@ function defaultBlockText(block: MessageBlock) {
   }
   if (block.type === 'skill') {
     return block.status ? `状态：${block.status}` : '';
+  }
+  if (block.type === 'ask_question') {
+    return '请回答以下问题，以便继续。';
   }
   return '';
 }
