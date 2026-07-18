@@ -205,7 +205,10 @@ export const WebSearchTool = buildTool({
   name: WEB_SEARCH_TOOL_NAME,
   searchHint: 'search the web for current information',
   maxResultSizeChars: 100_000,
-  shouldDefer: true,
+  // Third-party model gateways such as GLM/DeepSeek may return a
+  // tool_reference without expanding the referenced schema on the next turn.
+  // Keep WebSearch available from turn one so it never depends on ToolSearch.
+  alwaysLoad: true,
   async description(input) {
     return `The assistant wants to search the web for: ${input.query}`
   },
