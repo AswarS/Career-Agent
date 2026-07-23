@@ -1,5 +1,13 @@
 import { profileFeatureFlags } from './profile-feature-flags';
 
+export const PROFILE_MEMORY_SCOPE_PROMPT = `## Profile ownership scope
+
+Profile is the specialized career-domain memory. Use it only for information that directly affects career planning, job recommendations, employment decisions, role positioning, or career learning plans.
+
+Profile includes stable career facts, target roles or companies, career-direction decisions, salary and location expectations, employment constraints, job-search stages, interview priorities, and skills or experience when they materially affect career recommendations.
+
+Do not use Profile for generic collaboration preferences, response style, non-career hobbies, project decisions, repository conventions, external reference locations, or other durable context owned by auto-memory. If a message mixes career and non-career facts, update only the career facts through Profile and continue evaluating the remaining facts for auto-memory. Never mirror the same fact into both systems.`;
+
 export const PROFILE_LEVEL_CLASSIFICATION_PROMPT = `## L0-L3 Profile content classification
 
 Classify the resulting Profile content before deciding whether to call a write tool. The submitted level describes where the persisted item belongs, not probability or confidence. The server separately determines the mutation updateLevel used for proposals and audit.
@@ -21,33 +29,35 @@ Classification rules:
 
 const COMPACT_TOOL_WORKFLOW_PROMPT = `## Tool workflow
 
-- Use profile_read with source=basic for stable facts.
-- Use profile_read with source=memory and mode=relevant for goals, preferences, constraints, and cross-session context. Use mode=summary only for Profile management.
-- Use profile_update with target=memory after classifying the candidate as L0-L3.
-- Use profile_update with target=basic only for explicitly stated base-fact changes; these changes are L3.
+- Use profile_read with source=basic for stable career facts.
+- Use profile_read with source=memory and mode=relevant for career goals, employment preferences, job-search constraints, and cross-session career context. Use mode=summary only for Profile management.
+- Use profile_update with target=memory after classifying a career-domain candidate as L0-L3.
+- Use profile_update with target=basic only for explicitly stated stable career-fact changes; these changes are L3.
 - profile_update never accepts a user-confirmation flag or an arbitrary user id.`;
 
 const INDEXED_COMPACT_TOOL_WORKFLOW_PROMPT = `## Indexed tool workflow
 
-- Use profile_read with source=basic for stable facts.
-- Use profile_read with source=memory and mode=relevant for goals, preferences, constraints, and cross-session context. Use mode=summary before managing the full Profile.
+- Use profile_read with source=basic for stable career facts.
+- Use profile_read with source=memory and mode=relevant for career goals, employment preferences, job-search constraints, and cross-session career context. Use mode=summary before managing the full Profile.
 - Use profile_update target=memory, operation=add for a new L1-L3 item. Never provide profileIndex for add; the server allocates it.
 - Use profile_update target=memory, operation=replace only after reading the current item. Provide its exact profileIndex and never invent or derive an index.
 - An add that reports a slot conflict must be retried as replace only when the returned existing item is truly what the user intended to change.
 - The level submitted for replace classifies the resulting content. The server audits every replace as updateLevel L3.
-- Use target=basic only for explicitly stated base facts. profile_update never accepts a user-confirmation flag, UUID, file path, or arbitrary user id.`;
+- Use target=basic only for explicitly stated stable career facts. profile_update never accepts a user-confirmation flag, UUID, file path, or arbitrary user id.`;
 
 const LEGACY_TOOL_WORKFLOW_PROMPT = `## Legacy tool workflow
 
-- Use profile_get_basic for stable facts and profile_memory_read for goals, preferences, and constraints.
-- Use profile_memory_propose after classifying a Memory candidate as L0-L3.
-- Use profile_update_basic only for explicitly stated base-fact changes.
+- Use profile_get_basic for stable career facts and profile_memory_read for career goals, employment preferences, and job-search constraints.
+- Use profile_memory_propose after classifying a career-domain Memory candidate as L0-L3.
+- Use profile_update_basic only for explicitly stated stable career-fact changes.
 - profile_memory_apply is only for a proposal that the server already marked as not requiring confirmation.`;
 
 function buildProfileAgentSystemPrompt(toolWorkflow: string) {
   return `# Career Agent Profile
 
-Use Profile tools when the current request depends on the authenticated user's stable facts, goals, preferences, or constraints.
+Use Profile tools when the current request depends on the authenticated user's career facts, career goals, employment preferences, or job-search constraints.
+
+${PROFILE_MEMORY_SCOPE_PROMPT}
 
 ${PROFILE_LEVEL_CLASSIFICATION_PROMPT}
 

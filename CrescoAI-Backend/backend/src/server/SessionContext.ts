@@ -16,6 +16,7 @@ import {
   canonicalizePathForSecurity,
   isPathWithinRoot,
 } from './workspaceSecurity.js'
+import type { ConversationMemoryTurnState } from '../Network/memory/conversationMemoryTypes.js'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -34,6 +35,10 @@ export type SessionConfig = {
   workspaceRoot?: string
   /** Session-scoped auto-memory directory. Never derive this from process globals. */
   autoMemoryDir?: string
+  /** User-scoped OpenClaw-style conversation-memory root. */
+  conversationMemoryDir?: string
+  /** The only conversation-memory summary file writable by this session. */
+  conversationMemorySessionFile?: string
   /** User-owned inputs outside workspaceRoot, for example uploaded files. */
   userReadOnlyRoots?: readonly SessionReadOnlyRoot[]
   /** Application-owned resources intentionally readable by every user. */
@@ -73,6 +78,8 @@ export type SessionContext = {
   pendingToolResponses: Map<string, PendingToolResponse>
   /** Dynamically granted, read-only roots for skills invoked in this session. */
   skillReadOnlyRoots?: Set<string>
+  /** Per-request checkpoint used by the conversation-memory end-turn gate. */
+  conversationMemoryTurn?: ConversationMemoryTurnState
 }
 
 // ---------------------------------------------------------------------------

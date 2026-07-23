@@ -184,11 +184,19 @@ async function checkShellPath(
     autoMemoryDir?: string
   },
 ): Promise<WorkspacePathDecision> {
-  return checkSessionWorkspacePath(path, 'write', {
+  const decision = await checkSessionWorkspacePath(path, 'write', {
     cwd,
     workspaceRoot: options.workspaceRoot,
     autoMemoryDir: options.autoMemoryDir,
   })
+  if (decision.allowed && decision.rootType === 'memory') {
+    return {
+      allowed: false,
+      reason:
+        'Auto-memory is not accessible through shell tools; use Read, Grep, Edit, or Write so memory policy and index updates are enforced',
+    }
+  }
+  return decision
 }
 
 /**

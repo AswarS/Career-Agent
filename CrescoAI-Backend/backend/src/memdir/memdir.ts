@@ -1,7 +1,11 @@
 import { feature } from 'bun:bundle'
 import { join } from 'path'
 import { getFsImplementation } from '../utils/fsOperations.js'
-import { getAutoMemPath, isAutoMemoryEnabled } from './paths.js'
+import {
+  getAutoMemPath,
+  isAutoMemoryEnabled,
+  isNativeLoopAutoMemory,
+} from './paths.js'
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 const teamMemPaths = feature('TEAMMEM')
@@ -119,6 +123,36 @@ export const DIRS_EXIST_GUIDANCE =
   'Both directories already exist — write to them directly with the Write tool (do not run mkdir or check for their existence).'
 
 /**
+ * Native-loop policy for deciding whether the current turn has durable value.
+ * This is deliberately prompt guidance rather than a dedicated memory tool:
+ * the main agent uses the existing Read, Edit, and Write tools only when the
+ * decision is positive.
+ */
+export function buildNativeLoopAutoMemoryGuidelines(
+  memoryDir: string,
+): string[] {
+  return [
+    '## Native-loop memory decision',
+    '',
+    'During the normal agent loop, decide whether the current turn introduced or changed information that will materially help in a future conversation. The default is to do nothing: most turns must not produce a memory write.',
+    '',
+    'Update memory when at least one of these is true:',
+    '- The user explicitly asks you to remember or forget something',
+    '- The user corrects a prior assumption or states a stable collaboration preference',
+    '- The user provides a durable personal constraint, goal, or background fact that is likely to matter in later conversations',
+    '- The user makes a durable project decision whose rationale cannot be recovered from the repository',
+    '',
+    'Do not update memory for transient requests, current-turn progress, plans or tasks that belong only to this conversation, facts derivable from files or git history, guesses, duplicates, or secrets.',
+    '',
+    `To locate an existing topic, use the already loaded \`${ENTRYPOINT_NAME}\` index or Read \`${memoryDir}${ENTRYPOINT_NAME}\` directly. Never enumerate the auto-memory directory with Bash, PowerShell, Glob, ls, or another shell command, and never pass a directory path to Read.`,
+    '',
+    `When the decision is positive, complete the update before your final response as part of the same agent loop. Use only the existing Read, Edit, and Write tools under \`${memoryDir}\`: read the relevant topic first, edit it when it already exists, or write a new topic file when necessary. Never edit \`${ENTRYPOINT_NAME}\` or \`profile-v2.md\` directly; Career-Agent rebuilds the managed index after a successful topic write. Do not invoke a separate memory workflow and do not mention the internal memory update unless it is useful to the user.`,
+    '',
+    'When the decision is negative, make no memory-related tool call. There is no turn-end extractor or audit to catch skipped writes in this mode, so apply this decision carefully without becoming over-eager.',
+  ]
+}
+
+/**
  * Ensure a memory directory exists. Idempotent — called from loadMemoryPrompt
  * (once per session via systemPromptSection cache) so the model can always
  * write without checking existence first. FsOperations.mkdir is recursive
@@ -202,6 +236,8 @@ export function buildMemoryLines(
   extraGuidelines?: string[],
   skipIndex = false,
 ): string[] {
+  const nativeManagedIndex =
+    displayName === AUTO_MEM_DISPLAY_NAME && isNativeLoopAutoMemory()
   const howToSave = skipIndex
     ? [
         '## How to save memories',
@@ -215,7 +251,22 @@ export function buildMemoryLines(
         '- Update or remove memories that turn out to be wrong or outdated',
         '- Do not write duplicate memories. First check if there is an existing memory you can update before writing a new one.',
       ]
-    : [
+    : nativeManagedIndex
+      ? [
+          '## How to save memories',
+          '',
+          'Write each memory to its own topic file (e.g., `user_role.md`, `feedback_testing.md`) using this frontmatter format:',
+          '',
+          ...MEMORY_FRONTMATTER_EXAMPLE,
+          '',
+          `Do not edit \`${ENTRYPOINT_NAME}\` directly. After a successful topic Write or Edit, Career-Agent rebuilds its managed index block synchronously.`,
+          '',
+          '- Keep the name, description, and type fields in memory files up-to-date with the content',
+          '- Organize memory semantically by topic, not chronologically',
+          '- To remove a memory without a delete tool, set `status: deleted` in its frontmatter; it will disappear from the managed index',
+          '- Do not write duplicate memories. First read and update an existing topic when possible.',
+        ]
+      : [
         '## How to save memories',
         '',
         'Saving a memory is a two-step process:',
@@ -429,7 +480,12 @@ export async function loadMemoryPrompt(): Promise<string | null> {
   // MEMORY.md that both sides read + write). Gating on `autoEnabled` here
   // means the !autoEnabled case falls through to the tengu_memdir_disabled
   // telemetry block below, matching the non-KAIROS path.
-  if (feature('KAIROS') && autoEnabled && getKairosActive()) {
+  if (
+    feature('KAIROS') &&
+    autoEnabled &&
+    !isNativeLoopAutoMemory() &&
+    getKairosActive()
+  ) {
     logMemoryDirCounts(getAutoMemPath(), {
       memory_type:
         'auto' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -440,10 +496,14 @@ export async function loadMemoryPrompt(): Promise<string | null> {
   // Cowork injects memory-policy text via env var; thread into all builders.
   const coworkExtraGuidelines =
     process.env.CLAUDE_COWORK_MEMORY_EXTRA_GUIDELINES
-  const extraGuidelines =
-    coworkExtraGuidelines && coworkExtraGuidelines.trim().length > 0
+  const extraGuidelines = [
+    ...(coworkExtraGuidelines && coworkExtraGuidelines.trim().length > 0
       ? [coworkExtraGuidelines]
-      : undefined
+      : []),
+    ...(isNativeLoopAutoMemory()
+      ? buildNativeLoopAutoMemoryGuidelines(getAutoMemPath())
+      : []),
+  ]
 
   if (feature('TEAMMEM')) {
     if (teamMemPaths!.isTeamMemoryEnabled()) {
@@ -466,7 +526,7 @@ export async function loadMemoryPrompt(): Promise<string | null> {
           'team' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       })
       return teamMemPrompts!.buildCombinedMemoryPrompt(
-        extraGuidelines,
+        extraGuidelines.length > 0 ? extraGuidelines : undefined,
         skipIndex,
       )
     }
@@ -484,7 +544,7 @@ export async function loadMemoryPrompt(): Promise<string | null> {
     return buildMemoryLines(
       'auto memory',
       autoDir,
-      extraGuidelines,
+      extraGuidelines.length > 0 ? extraGuidelines : undefined,
       skipIndex,
     ).join('\n')
   }

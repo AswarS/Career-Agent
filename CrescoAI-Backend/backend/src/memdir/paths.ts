@@ -20,18 +20,64 @@ import {
   getSettingsForSource,
 } from '../utils/settings/settings.js'
 
+export const AUTO_MEMORY_STRATEGIES = [
+  'disabled',
+  'background_extract',
+  'native_loop',
+] as const
+
+export type AutoMemoryStrategy = (typeof AUTO_MEMORY_STRATEGIES)[number]
+
+const DEFAULT_AUTO_MEMORY_STRATEGY: AutoMemoryStrategy = 'background_extract'
+
+/**
+ * Selects who is responsible for deciding whether a turn should update
+ * auto-memory.
+ *
+ * - disabled: auto-memory is completely disabled
+ * - background_extract: legacy turn-end extractor and auto-dream own writes
+ * - native_loop: the main agent decides and uses the existing file tools
+ *
+ * Unknown values intentionally fall back to the legacy strategy so a typo in
+ * a rollout environment variable cannot silently disable memory persistence.
+ */
+export function getAutoMemoryStrategy(): AutoMemoryStrategy {
+  const configured = process.env.CAREER_AGENT_AUTO_MEMORY_STRATEGY
+    ?.trim()
+    .toLowerCase()
+
+  return AUTO_MEMORY_STRATEGIES.includes(configured as AutoMemoryStrategy)
+    ? (configured as AutoMemoryStrategy)
+    : DEFAULT_AUTO_MEMORY_STRATEGY
+}
+
+export function isNativeLoopAutoMemory(): boolean {
+  return getAutoMemoryStrategy() === 'native_loop'
+}
+
+export function isBackgroundAutoMemory(): boolean {
+  return (
+    getAutoMemoryStrategy() === 'background_extract' && isAutoMemoryEnabled()
+  )
+}
+
 /**
  * Whether auto-memory features are enabled (memdir, agent memory, past session search).
  * Enabled by default. Priority chain (first defined wins):
- *   1. CLAUDE_CODE_DISABLE_AUTO_MEMORY env var (1/true → OFF, 0/false → ON)
- *   2. CLAUDE_CODE_SIMPLE (--bare) → OFF
- *   3. CCR without persistent storage → OFF (no CLAUDE_CODE_REMOTE_MEMORY_DIR)
- *   4. autoMemoryEnabled in settings.json (supports project-level opt-out)
- *   5. Default: enabled
+ *   1. CLAUDE_CODE_DISABLE_AUTO_MEMORY truthy → OFF
+ *   2. CAREER_AGENT_AUTO_MEMORY_STRATEGY=disabled → OFF
+ *   3. CLAUDE_CODE_DISABLE_AUTO_MEMORY explicitly falsy → ON
+ *   4. CLAUDE_CODE_SIMPLE (--bare) → OFF
+ *   5. CCR without persistent storage → OFF (no remote memory directory)
+ *   6. autoMemoryEnabled in settings.json (supports project-level opt-out)
+ *   7. Default: enabled
  */
 export function isAutoMemoryEnabled(): boolean {
   const envVal = process.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY
   if (isEnvTruthy(envVal)) {
+    return false
+  }
+  if (getAutoMemoryStrategy() === 'disabled') {
     return false
   }
   if (isEnvDefinedFalsy(envVal)) {
@@ -59,16 +105,17 @@ export function isAutoMemoryEnabled(): boolean {
 /**
  * Whether the extract-memories background agent will run this session.
  *
- * The main agent's prompt always has full save instructions regardless of
- * this gate — when the main agent writes memories, the background agent
- * skips that range (hasMemoryWritesSince in extractMemories.ts); when it
- * doesn't, the background agent catches anything missed.
+ * This is legacy-only behavior. Native-loop strategy never runs the
+ * extractor because there is intentionally no turn-end fallback or audit.
  *
  * Callers must also gate on feature('EXTRACT_MEMORIES') — that check cannot
  * live inside this helper because feature() only tree-shakes when used
  * directly in an `if` condition.
  */
 export function isExtractModeActive(): boolean {
+  if (!isBackgroundAutoMemory()) {
+    return false
+  }
   if (!getFeatureValue_CACHED_MAY_BE_STALE('tengu_passport_quail', false)) {
     return false
   }

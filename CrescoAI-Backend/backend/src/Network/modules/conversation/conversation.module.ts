@@ -11,9 +11,10 @@ import { AuthModule } from '../auth/auth.module';
 import { ArtifactModule } from '../artifact/artifact.module';
 import { ProfileModule } from '../profile/profile.module';
 import { ConversationTranscriptProjectionService } from './transcript-projection.service';
+import { ConversationCleanupTaskEntity } from './entities/conversation-cleanup-task.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([ConversationEntity, MessageEntity, ResourceEntity]), AgentModule, SkillModule, AuthModule, ArtifactModule, ProfileModule],
+  imports: [TypeOrmModule.forFeature([ConversationEntity, MessageEntity, ResourceEntity, ConversationCleanupTaskEntity]), AgentModule, SkillModule, AuthModule, ArtifactModule, ProfileModule],
   controllers: [ConversationController],
   providers: [ConversationService, ConversationTranscriptProjectionService],
 })

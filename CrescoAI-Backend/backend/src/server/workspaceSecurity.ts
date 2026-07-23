@@ -1,5 +1,14 @@
 import { realpath } from 'node:fs/promises'
-import { dirname, isAbsolute, join, normalize, resolve, sep } from 'node:path'
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  join,
+  normalize,
+  relative,
+  resolve,
+  sep,
+} from 'node:path'
 import type {
   NetworkReadOnlyFileTool,
   SessionFilesystemRoot,
@@ -101,7 +110,13 @@ export type WorkspacePathDecision =
   | {
       allowed: true
       canonicalPath: string
-      rootType: 'workspace' | 'memory' | 'user-input' | 'shared' | 'skill'
+      rootType:
+        | 'workspace'
+        | 'memory'
+        | 'conversation-memory'
+        | 'user-input'
+        | 'shared'
+        | 'skill'
       rootId?: string
     }
   | {
@@ -118,6 +133,8 @@ export async function checkSessionWorkspacePath(
     cwd: string
     workspaceRoot: string
     autoMemoryDir?: string
+    conversationMemoryDir?: string
+    conversationMemorySessionFile?: string
     toolName?: string
     userReadOnlyRoots?: Iterable<SessionReadOnlyRoot>
     sharedReadOnlyRoots?: Iterable<SessionReadOnlyRoot>
@@ -160,6 +177,62 @@ export async function checkSessionWorkspacePath(
         canonicalPath,
         rootType: 'memory',
         rootId: 'user-auto-memory',
+      }
+    }
+  }
+
+  if (options.conversationMemoryDir) {
+    const memoryRoot = await canonicalizePathForSecurity(
+      options.conversationMemoryDir,
+      options.cwd,
+    )
+    if (memoryRoot && isPathWithinRoot(canonicalPath, memoryRoot)) {
+      const relativePath = relative(memoryRoot, canonicalPath)
+      const normalizedRelative = relativePath.split(sep).join('/')
+      const isAggregate = normalizedRelative === 'MEMORY.md'
+      const isDirectSessionSummary =
+        /^sessions\/[A-Za-z0-9_-]{8,128}\.md$/.test(normalizedRelative)
+
+      if (access === 'read' && options.toolName === 'Read') {
+        if (isAggregate || isDirectSessionSummary) {
+          return {
+            allowed: true,
+            canonicalPath,
+            rootType: 'conversation-memory',
+            rootId: isAggregate
+              ? 'conversation-memory-aggregate'
+              : 'conversation-memory-session',
+          }
+        }
+      }
+
+      if (access === 'write' && isDirectSessionSummary) {
+        const writablePath = options.conversationMemorySessionFile
+          ? await canonicalizePathForSecurity(
+              options.conversationMemorySessionFile,
+              options.cwd,
+            )
+          : null
+        if (
+          writablePath &&
+          normalizePathForSecurity(writablePath) ===
+            normalizePathForSecurity(canonicalPath)
+        ) {
+          return {
+            allowed: true,
+            canonicalPath,
+            rootType: 'conversation-memory',
+            rootId: 'current-conversation-memory-session',
+          }
+        }
+      }
+
+      return {
+        allowed: false,
+        reason:
+          'Conversation memory permits Read on MEMORY.md/session summaries and Write/Edit only on the current session summary',
+        rootType: 'service',
+        rootId: 'conversation-memory-protected',
       }
     }
   }
@@ -211,6 +284,18 @@ export async function checkSessionWorkspacePath(
             rootId: grant.id,
           }
         }
+        if (
+          grant.pathPolicy === 'direct-session-jsonl' &&
+          !isDirectSessionTranscript(canonicalPath, canonicalRoot)
+        ) {
+          return {
+            allowed: false,
+            reason:
+              'Transcript access is limited to direct, safely named JSONL session files',
+            rootType: group.type,
+            rootId: grant.id,
+          }
+        }
         return {
           allowed: true,
           canonicalPath,
@@ -250,4 +335,12 @@ export async function checkSessionWorkspacePath(
     reason:
       'Path is outside the current user workspace and approved read-only roots',
   }
+}
+
+function isDirectSessionTranscript(path: string, root: string): boolean {
+  const relativePath = relative(root, path)
+  return (
+    relativePath === basename(path) &&
+    /^[A-Za-z0-9_-]{8,128}\.jsonl$/i.test(relativePath)
+  )
 }

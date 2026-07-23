@@ -11,6 +11,8 @@ import { APIUserAbortError } from '@anthropic-ai/sdk'
 import { markPostCompaction } from 'src/bootstrap/state.js'
 import { getInvokedSkillsForAgent } from '../../bootstrap/state.js'
 import type { QuerySource } from '../../constants/querySource.js'
+import { getConversationMemoryPreCompactInstructions } from '../../Network/memory/conversationMemoryRuntime.js'
+import { getSessionContext } from '../../server/SessionContext.js'
 import type { CanUseToolFn } from '../../hooks/useCanUseTool.js'
 import type { Tool, ToolUseContext } from '../../Tool.js'
 import type { LocalAgentTaskState } from '../../tasks/LocalAgentTask/LocalAgentTask.js'
@@ -402,6 +404,11 @@ export async function compactConversation(
 
     const appState = context.getAppState()
     void logPermissionContextForAnts(appState.toolPermissionContext, 'summary')
+
+    customInstructions = mergeHookInstructions(
+      customInstructions,
+      getConversationMemoryPreCompactInstructions(getSessionContext()),
+    )
 
     context.onCompactProgress?.({
       type: 'hooks_start',
@@ -832,6 +839,10 @@ export async function partialCompactConversation(
     } else if (userFeedback) {
       customInstructions = `User context: ${userFeedback}`
     }
+    customInstructions = mergeHookInstructions(
+      customInstructions,
+      getConversationMemoryPreCompactInstructions(getSessionContext()),
+    )
 
     context.setStreamMode?.('requesting')
     context.setResponseLength?.(() => 0)

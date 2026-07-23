@@ -27,6 +27,11 @@ import {
   extractAskUserQuestions,
   stripAskUserQuestionResultMetadata,
 } from '../agent/ask-user-question.js';
+import {
+  isConversationMemoryMaintenanceMessage,
+  isInternalTranscriptMessage,
+  shouldSuppressConversationMemoryBlock,
+} from '../../memory/conversationMemoryVisibility.js';
 
 type ProjectedConversationMessage = ConversationMessage & {
   uuid?: string;
@@ -46,6 +51,7 @@ interface ProjectTranscriptInput {
   filePath: string;
   sessionId: string;
   mediaByMessageId?: Map<string, MessageMedia[]>;
+  conversationMemoryDir?: string;
 }
 
 @Injectable()
@@ -58,10 +64,20 @@ export class ConversationTranscriptProjectionService {
     const chain = this.selectConversationChain(messages, leafUuids);
 
     if (!chain.length) {
-      return this.projectLegacyJsonl(input.filePath, input.sessionId, mediaByMessageId);
+      return this.projectLegacyJsonl(
+        input.filePath,
+        input.sessionId,
+        mediaByMessageId,
+        input.conversationMemoryDir,
+      );
     }
 
-    return this.projectTranscriptMessages(chain, input.sessionId, mediaByMessageId);
+    return this.projectTranscriptMessages(
+      chain,
+      input.sessionId,
+      mediaByMessageId,
+      input.conversationMemoryDir,
+    );
   }
 
   private selectConversationChain(
@@ -91,21 +107,42 @@ export class ConversationTranscriptProjectionService {
     events: TranscriptMessage[],
     sessionId: string,
     mediaByMessageId: Map<string, MessageMedia[]>,
+    conversationMemoryDir?: string,
   ): ConversationMessage[] {
     const order: string[] = [];
     const map = new Map<string, ProjectedConversationMessage>();
     let activeAssistantMessageId: string | null = null;
     const hiddenSkillToolUseIds = new Set<string>();
+    const hiddenConversationMemoryToolUseIds = new Set<string>();
 
     for (const event of events) {
+      if (isInternalTranscriptMessage(event)) {
+        // Internal prompts are part of the model chain, not the public chat.
+        // Do not reset activeAssistantMessageId: assistant continuations after
+        // a memory checkpoint still belong to the same public response.
+        continue;
+      }
+
       if (event.type === 'assistant') {
         this.collectHiddenSkillToolUseIds(event, hiddenSkillToolUseIds);
+        const message = (event as any).message as Record<string, unknown> | undefined;
+        if (
+          isConversationMemoryMaintenanceMessage(
+            message?.content,
+            conversationMemoryDir,
+            hiddenConversationMemoryToolUseIds,
+          )
+        ) {
+          continue;
+        }
       }
 
       if (event.type === 'user') {
         const toolResultBlocks = this.projectToolResultBlocksFromUserMessage(
           event,
           hiddenSkillToolUseIds,
+          hiddenConversationMemoryToolUseIds,
+          conversationMemoryDir,
         );
         if (toolResultBlocks.length && activeAssistantMessageId) {
           const existing = map.get(activeAssistantMessageId);
@@ -119,7 +156,12 @@ export class ConversationTranscriptProjectionService {
         }
       }
 
-      const projected = this.projectTranscriptMessage(event, sessionId);
+      const projected = this.projectTranscriptMessage(
+        event,
+        sessionId,
+        hiddenConversationMemoryToolUseIds,
+        conversationMemoryDir,
+      );
       if (!projected) {
         continue;
       }
@@ -146,12 +188,19 @@ export class ConversationTranscriptProjectionService {
   private projectTranscriptMessage(
     event: TranscriptMessage,
     sessionId: string,
+    hiddenConversationMemoryToolUseIds: Set<string>,
+    conversationMemoryDir?: string,
   ): ProjectedConversationMessage | null {
     if (event.type === 'user') {
       return this.projectUserMessage(event, sessionId);
     }
     if (event.type === 'assistant') {
-      return this.projectAssistantMessage(event, sessionId);
+      return this.projectAssistantMessage(
+        event,
+        sessionId,
+        hiddenConversationMemoryToolUseIds,
+        conversationMemoryDir,
+      );
     }
     return null;
   }
@@ -184,6 +233,8 @@ export class ConversationTranscriptProjectionService {
   private projectAssistantMessage(
     event: TranscriptMessage,
     sessionId: string,
+    hiddenConversationMemoryToolUseIds: Set<string>,
+    conversationMemoryDir?: string,
   ): ProjectedConversationMessage | null {
     const message = (event as any).message as Record<string, unknown> | undefined;
     if (message?.role !== 'assistant') {
@@ -195,7 +246,16 @@ export class ConversationTranscriptProjectionService {
       return null;
     }
 
-    const rawContent = message.content;
+    const rawContent = Array.isArray(message.content)
+      ? message.content.filter(
+          (block) =>
+            !shouldSuppressConversationMemoryBlock(
+              block,
+              conversationMemoryDir,
+              hiddenConversationMemoryToolUseIds,
+            ),
+        )
+      : message.content;
     const topLevelReasoning = this.normalizeText(message.reasoning ?? message.think ?? message.thinking);
     const { content, blocks } = this.extractAssistantContent(rawContent);
     const messageBlocks = topLevelReasoning
@@ -384,6 +444,8 @@ export class ConversationTranscriptProjectionService {
   private projectToolResultBlocksFromUserMessage(
     event: TranscriptMessage,
     hiddenSkillToolUseIds: Set<string> = new Set(),
+    hiddenConversationMemoryToolUseIds: Set<string> = new Set(),
+    conversationMemoryDir?: string,
   ): MessageBlock[] {
     const message = (event as any).message as Record<string, unknown> | undefined;
     const content = message?.content;
@@ -394,6 +456,15 @@ export class ConversationTranscriptProjectionService {
     const blocks: MessageBlock[] = [];
     content.forEach((item, index) => {
       if (!this.isRecord(item) || !this.isToolResultContentBlock(item)) {
+        return;
+      }
+      if (
+        shouldSuppressConversationMemoryBlock(
+          item,
+          conversationMemoryDir,
+          hiddenConversationMemoryToolUseIds,
+        )
+      ) {
         return;
       }
       if (this.isInternalSkillToolResultBlock(item, hiddenSkillToolUseIds)) {
@@ -640,6 +711,7 @@ export class ConversationTranscriptProjectionService {
     filePath: string,
     sessionId: string,
     mediaByMessageId: Map<string, MessageMedia[]>,
+    conversationMemoryDir?: string,
   ): Promise<ConversationMessage[]> {
     const raw = await readFile(filePath, 'utf8');
     const events = raw
@@ -655,7 +727,12 @@ export class ConversationTranscriptProjectionService {
       })
       .filter((event): event is TranscriptMessage => Boolean(event));
 
-    return this.projectTranscriptMessages(events, sessionId, mediaByMessageId);
+    return this.projectTranscriptMessages(
+      events,
+      sessionId,
+      mediaByMessageId,
+      conversationMemoryDir,
+    );
   }
 
   private messageId(event: TranscriptMessage): string {

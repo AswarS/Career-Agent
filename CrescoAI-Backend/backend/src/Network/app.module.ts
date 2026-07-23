@@ -36,6 +36,8 @@ import { ProfileMemory1760000001000 } from './migrations/1760000001000-ProfileMe
 import { ProfileProposals1760000002000 } from './migrations/1760000002000-ProfileProposals';
 import { ProfileLevelClassification1760000003000 } from './migrations/1760000003000-ProfileLevelClassification';
 import { ProfileIndexedMemory1760000004000 } from './migrations/1760000004000-ProfileIndexedMemory';
+import { ConversationCleanupTasks1760000005000 } from './migrations/1760000005000-ConversationCleanupTasks';
+import { ConversationCleanupTaskEntity } from './modules/conversation/entities/conversation-cleanup-task.entity';
 
 const networkDir = dirname(fileURLToPath(import.meta.url));
 
@@ -62,6 +64,7 @@ const networkDir = dirname(fileURLToPath(import.meta.url));
         ProfileMemoryItemEntity,
         ProfileProjectionJobEntity,
         ProfileChangeProposalEntity,
+        ConversationCleanupTaskEntity,
       ],
       synchronize:
         process.env.NODE_ENV !== 'production'
@@ -72,6 +75,7 @@ const networkDir = dirname(fileURLToPath(import.meta.url));
         ProfileProposals1760000002000,
         ProfileLevelClassification1760000003000,
         ProfileIndexedMemory1760000004000,
+        ConversationCleanupTasks1760000005000,
       ],
       migrationsRun:
         process.env.NODE_ENV === 'production'

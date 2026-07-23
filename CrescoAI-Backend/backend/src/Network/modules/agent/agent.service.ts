@@ -38,11 +38,19 @@ import {
   ensureNetworkUserWorkspaceDir,
   ensureNetworkTranscriptDir,
   getNetworkAutoMemoryDir,
+  getNetworkConversationMemoryDir,
+  getNetworkConversationMemorySessionPath,
   getNetworkTranscriptDir,
   getNetworkUserFilesDir,
   getNetworkUserWorkspaceDir,
   networkRootDir,
 } from '../../utils/networkTranscriptStorage.js';
+import { prepareConversationMemoryTurn } from '../../memory/conversationMemoryRuntime.js';
+import {
+  isConversationMemoryMaintenanceMessage,
+  isInternalSdkMessage,
+  shouldSuppressConversationMemoryBlock,
+} from '../../memory/conversationMemoryVisibility.js';
 import {
   createSkillLoadedBlock,
   extractLoadedSkillNameFromText,
@@ -499,6 +507,7 @@ export class AgentService {
     string,
     { userId: string; promise: Promise<QueryEngine> }
   >();
+  private disposedConversationOwners = new Map<string, string>();
 
   constructor(
     @Optional() private readonly settingsService?: SettingsService,
@@ -654,6 +663,7 @@ export class AgentService {
     input: AgentCreateConversationInput,
   ): Promise<AgentConversationMetadata> {
     const meta = await createConversation(input);
+    this.disposedConversationOwners.delete(meta.conversationId);
     if (input.apiKey || input.baseUrl || input.provider || input.model) {
       this.conversationConfigs.set(meta.conversationId, {
         apiKey: input.apiKey,
@@ -663,6 +673,61 @@ export class AgentService {
       });
     }
     return meta;
+  }
+
+  async disposeConversationRuntime(
+    userId: string,
+    conversationId: string,
+  ): Promise<void> {
+    this.assertCachedSessionOwner(conversationId, userId);
+    const pending = this.queryEngineInitializations.get(conversationId);
+    if (pending && pending.userId !== userId) {
+      throw new Error('Session ownership mismatch');
+    }
+
+    this.disposedConversationOwners.set(conversationId, userId);
+    const context = this.sessionContexts.get(conversationId);
+    try {
+      context?.abortController?.abort();
+    } catch {
+      // Best-effort abort; map cleanup still prevents runtime reuse.
+    }
+    if (context) {
+      for (const pendingResponse of context.pendingToolResponses.values()) {
+        clearTimeout(pendingResponse.timeout);
+        pendingResponse.resolve({ approved: false });
+      }
+      context.pendingToolResponses.clear();
+      await Promise.allSettled(
+        context.mcpClients.map((client) => client.close()),
+      );
+      for (const connection of context.wsConnections) {
+        try {
+          connection.close?.();
+        } catch {
+          // Best-effort close for runtime-owned websocket connections.
+        }
+      }
+      context.wsConnections.clear();
+    }
+    this.queryEngines.delete(conversationId);
+    this.sessionContexts.delete(conversationId);
+    this.conversationConfigs.delete(conversationId);
+    this.queryEngineInitializations.delete(conversationId);
+    removeSessionMultimodalConfig(conversationId);
+  }
+
+  restoreConversationRuntimeAfterFailedDeletion(
+    userId: string,
+    conversationId: string,
+  ): void {
+    const disposedOwner = this.disposedConversationOwners.get(conversationId);
+    if (disposedOwner && disposedOwner !== userId) {
+      throw new Error('Session ownership mismatch');
+    }
+    if (disposedOwner === userId) {
+      this.disposedConversationOwners.delete(conversationId);
+    }
   }
 
   /** Resolve an interactive tool invocation for the active conversation session. */
@@ -1252,6 +1317,8 @@ export class AgentService {
             let textBlockIndex = 0;
             let model: string | undefined;
             let usage: Record<string, unknown> | undefined;
+            const hiddenConversationMemoryToolUseIds = new Set<string>();
+            const conversationMemoryDir = ctx.config.conversationMemoryDir;
 
             const inputWithAttachments = this.buildPromptWithAttachmentMentions(
               content,
@@ -1259,9 +1326,18 @@ export class AgentService {
               conversationId,
               messageInput.attachments ?? [],
             );
+            const conversationMemoryTurnPrompt =
+              await prepareConversationMemoryTurn(
+                ctx,
+                userMessageId,
+                content,
+              );
             const stream = queryEngine!.submitMessage(inputWithAttachments, {
               uuid: userMessageId,
-              appendSystemPrompt: profileTurnPrompt,
+              appendSystemPrompt: [
+                profileTurnPrompt,
+                conversationMemoryTurnPrompt,
+              ].filter(Boolean).join('\n\n') || undefined,
             });
 
             for await (const msg of stream) {
@@ -1275,6 +1351,10 @@ export class AgentService {
                   assistantMessageId: actualAssistantMessageId,
                   messageCreated,
                 };
+              }
+
+              if (isInternalSdkMessage(msg)) {
+                continue;
               }
 
               const loadedSkillName = extractLoadedSkillNameFromSdkMessage(msg);
@@ -1297,11 +1377,29 @@ export class AgentService {
 
               const msgMessage = (msg as any).message;
               if (msgMessage && Array.isArray(msgMessage.content)) {
+                if (
+                  isConversationMemoryMaintenanceMessage(
+                    msgMessage.content,
+                    conversationMemoryDir,
+                    hiddenConversationMemoryToolUseIds,
+                  )
+                ) {
+                  continue;
+                }
                 const currentMessageTextParts: string[] = [];
                 if (typeof msgMessage.id === 'string' && msgMessage.id.trim()) {
                   emitMessageCreated(msgMessage.id);
                 }
                 for (const block of msgMessage.content) {
+                  if (
+                    shouldSuppressConversationMemoryBlock(
+                      block,
+                      conversationMemoryDir,
+                      hiddenConversationMemoryToolUseIds,
+                    )
+                  ) {
+                    continue;
+                  }
                   const blockType = typeof block.type === 'string' ? block.type : '';
                   const skillToolName = extractSkillNameFromToolUseBlock(block);
                   if (skillToolName) {
@@ -1564,6 +1662,8 @@ export class AgentService {
             let textBlockIndex = 0;
             let model: string | undefined;
             let usage: Record<string, unknown> | undefined;
+            const hiddenConversationMemoryToolUseIds = new Set<string>();
+            const conversationMemoryDir = ctx.config.conversationMemoryDir;
 
             const inputWithAttachments = this.buildPromptWithAttachmentMentions(
               content,
@@ -1571,19 +1671,49 @@ export class AgentService {
               conversationId,
               attachments,
             );
+            const conversationMemoryTurnPrompt =
+              await prepareConversationMemoryTurn(
+                ctx,
+                userMessageId,
+                content,
+              );
             const stream = queryEngine!.submitMessage(inputWithAttachments, {
               uuid: userMessageId,
-              appendSystemPrompt: profileTurnPrompt,
+              appendSystemPrompt: [
+                profileTurnPrompt,
+                conversationMemoryTurnPrompt,
+              ].filter(Boolean).join('\n\n') || undefined,
             });
 
             for await (const msg of stream) {
+              if (isInternalSdkMessage(msg)) {
+                continue;
+              }
               const msgMessage = (msg as any).message;
               if (msgMessage && Array.isArray(msgMessage.content)) {
+                if (
+                  isConversationMemoryMaintenanceMessage(
+                    msgMessage.content,
+                    conversationMemoryDir,
+                    hiddenConversationMemoryToolUseIds,
+                  )
+                ) {
+                  continue;
+                }
                 const currentMessageTextParts: string[] = [];
                 if (typeof msgMessage.id === 'string' && msgMessage.id.trim()) {
                   assistantMessageId = msgMessage.id;
                 }
                 for (const block of msgMessage.content) {
+                  if (
+                    shouldSuppressConversationMemoryBlock(
+                      block,
+                      conversationMemoryDir,
+                      hiddenConversationMemoryToolUseIds,
+                    )
+                  ) {
+                    continue;
+                  }
                   if (block.type === 'text' && typeof block.text === 'string') {
                     const safeText = sanitizeServerPhysicalPaths(block.text);
                     const textBlockId = `text-${textBlockIndex++}`;
@@ -1706,6 +1836,12 @@ export class AgentService {
     );
     const autoMemoryDir = resolve(getNetworkAutoMemoryDir(userId));
     const transcriptDir = getNetworkTranscriptDir(userId);
+    const conversationMemoryDir = resolve(
+      getNetworkConversationMemoryDir(userId),
+    );
+    const conversationMemorySessionFile = resolve(
+      getNetworkConversationMemorySessionPath(userId, conversationId),
+    );
     return {
       sessionId: conversationId,
       userId,
@@ -1726,19 +1862,35 @@ export class AgentService {
         userId,
         workspaceRoot: resolvedWorkspaceDir,
         autoMemoryDir,
+        conversationMemoryDir,
+        conversationMemorySessionFile,
         userReadOnlyRoots: [
           {
             id: `user-${userId}-uploads`,
             root: resolve(getNetworkUserFilesDir(userId)),
             allowedTools: NETWORK_READ_ONLY_FILE_TOOLS,
           },
+          {
+            id: `user-${userId}-transcripts`,
+            root: resolve(transcriptDir),
+            allowedTools: ['Read'] as const,
+            pathPolicy: 'direct-session-jsonl',
+          },
         ],
         sharedReadOnlyRoots: getNetworkSharedReadOnlyRoots(),
         trustedSkillCatalogRoots: getNetworkTrustedSkillCatalogRoots(),
         serviceOnlyRoots: [
           {
-            id: `user-${userId}-transcripts`,
-            root: resolve(transcriptDir),
+            id: `user-${userId}-conversation-memory-daily`,
+            root: resolve(conversationMemoryDir, 'daily'),
+          },
+          {
+            id: `user-${userId}-conversation-memory-state`,
+            root: resolve(conversationMemoryDir, 'state'),
+          },
+          {
+            id: `user-${userId}-conversation-memory-index`,
+            root: resolve(conversationMemoryDir, '.index'),
           },
         ],
       },
@@ -1765,6 +1917,7 @@ export class AgentService {
     config: ConversationConfig,
     userWorkspaceDir: string,
   ): Promise<QueryEngine> {
+    this.assertConversationRuntimeActive(conversationId, userId);
     this.refreshCachedSessionConfig(conversationId, config);
     this.assertCachedSessionOwner(conversationId, userId);
 
@@ -1779,6 +1932,7 @@ export class AgentService {
         throw new Error('Session ownership mismatch');
       }
       const queryEngine = await pending.promise;
+      this.assertConversationRuntimeActive(conversationId, userId);
       this.refreshCachedSessionConfig(conversationId, config);
       return queryEngine;
     }
@@ -1802,6 +1956,7 @@ export class AgentService {
           loadAgentSessionHistory(userId, conversationId),
           getCommands(userWorkspaceDir),
         ]);
+        this.assertConversationRuntimeActive(conversationId, userId);
         const queryEngine = createQueryEngineForSession(ctx, {
           commands,
           initialMessages,
@@ -1903,6 +2058,19 @@ export class AgentService {
     const context = this.sessionContexts.get(sessionId);
     if (context?.userId && context.userId !== userId) {
       throw new Error('Session ownership mismatch');
+    }
+  }
+
+  private assertConversationRuntimeActive(
+    conversationId: string,
+    userId: string,
+  ): void {
+    const disposedOwner = this.disposedConversationOwners.get(conversationId);
+    if (disposedOwner && disposedOwner !== userId) {
+      throw new Error('Session ownership mismatch');
+    }
+    if (disposedOwner === userId) {
+      throw new Error('Conversation runtime has been disposed');
     }
   }
 

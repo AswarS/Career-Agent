@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  OnModuleInit,
   UnsupportedMediaTypeException,
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
@@ -18,7 +19,7 @@ import {
   sanitizeServerPhysicalPaths,
   sanitizeServerPhysicalPathsInValue,
 } from '../../utils/publicOutputSanitizer.js';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 import { AgentService } from '../agent/agent.service';
 import type { AgentAskQuestion } from '../agent/agent.runtime.js';
 import { SkillService } from '../skill/skill.service';
@@ -35,6 +36,7 @@ import { CreateConversationDto } from './dto/create-conversation.dto';
 import { SendMultimodalMessageDto } from './dto/send-multimodal-message.dto';
 import { RespondToToolDto } from './dto/respond-to-tool.dto';
 import { ConversationEntity } from './entities/conversation.entity';
+import { ConversationCleanupTaskEntity } from './entities/conversation-cleanup-task.entity';
 import { MessageEntity } from './entities/message.entity';
 import { ResourceEntity } from '../resource/entities/resource.entity';
 import { ArtifactEntity } from '../artifact/entities/artifact.entity';
@@ -42,9 +44,15 @@ import { GeneratedAppEntity } from '../generated-app/entities/generated-app.enti
 import { execFileNoThrow } from '../../../utils/execFileNoThrow.js';
 import {
   findNetworkTranscriptFile,
+  getNetworkConversationMemoryDir,
   networkRootDir,
   userDataRootDir,
 } from '../../utils/networkTranscriptStorage.js';
+import { deleteConversationMemorySession } from '../../memory/conversationMemoryLifecycle.js';
+import {
+  markConversationMemorySessionDeleting,
+  unmarkConversationMemorySessionDeleting,
+} from '../../memory/conversationMemoryLock.js';
 
 declare global {
   namespace Express {
@@ -435,7 +443,7 @@ const supportedMediaKinds = new Set<MessageMediaKind>([
 ]);
 
 @Injectable()
-export class ConversationService {
+export class ConversationService implements OnModuleInit {
   constructor(
     @InjectDataSource()
     private readonly dataSource: DataSource,
@@ -443,12 +451,24 @@ export class ConversationService {
     private readonly conversationRepo: Repository<ConversationEntity>,
     @InjectRepository(ResourceEntity)
     private readonly messageResourceRepo: Repository<ResourceEntity>,
+    @InjectRepository(ConversationCleanupTaskEntity)
+    private readonly cleanupTaskRepo: Repository<ConversationCleanupTaskEntity>,
     private readonly agentService: AgentService,
     private readonly skillService: SkillService,
     private readonly artifactService: ArtifactService,
     private readonly profileService: ProfileService,
     private readonly transcriptProjection: ConversationTranscriptProjectionService,
   ) {}
+
+  async onModuleInit(): Promise<void> {
+    try {
+      await this.retryPendingConversationCleanupTasks();
+    } catch (error) {
+      console.error('[ConversationService] cleanup task recovery failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
 
   async createConversation(dto: CreateConversationDto, requestUserId: number) {
     const now = new Date();
@@ -498,31 +518,68 @@ export class ConversationService {
     }
 
     const conversation = await this.getConversationByIdentifier(conversationId, requestUserId);
-
-    await this.dataSource.transaction(async (manager) => {
-      await manager.delete(MessageEntity, {
-        userId: conversation.userId,
-        conversationId: conversation.id,
-      });
-      await manager.delete(ResourceEntity, {
-        userId: conversation.userId,
-        conversationId: conversation.id,
-      });
-      await manager.delete(ArtifactEntity, {
-        userId: conversation.userId,
-        conversationId: conversation.id,
-      });
-      await manager.delete(GeneratedAppEntity, {
-        userId: conversation.userId,
-        conversationId: conversation.id,
-      });
-      await manager.delete(ConversationEntity, {
-        cid: conversation.cid,
-        userId: conversation.userId,
-      });
+    const memoryRoot = getNetworkConversationMemoryDir(conversation.userId);
+    const now = new Date();
+    const cleanupTask = this.cleanupTaskRepo.create({
+      id: randomUUID(),
+      userId: conversation.userId,
+      conversationId: conversation.id,
+      status: 'pending',
+      attempts: 0,
+      lastError: null,
+      createdAt: now,
+      updatedAt: now,
+      completedAt: null,
     });
 
-    await this.cleanupConversationFiles(conversation);
+    markConversationMemorySessionDeleting(memoryRoot, conversation.id);
+    try {
+      await this.agentService.disposeConversationRuntime(
+        String(conversation.userId),
+        conversation.id,
+      );
+    } catch (error) {
+      unmarkConversationMemorySessionDeleting(memoryRoot, conversation.id);
+      throw error;
+    }
+
+    try {
+      await this.dataSource.transaction(async (manager) => {
+        await manager.save(ConversationCleanupTaskEntity, cleanupTask);
+        await manager.delete(MessageEntity, {
+          userId: conversation.userId,
+          conversationId: conversation.id,
+        });
+        await manager.delete(ResourceEntity, {
+          userId: conversation.userId,
+          conversationId: conversation.id,
+        });
+        await manager.delete(ArtifactEntity, {
+          userId: conversation.userId,
+          conversationId: conversation.id,
+        });
+        await manager.delete(GeneratedAppEntity, {
+          userId: conversation.userId,
+          conversationId: conversation.id,
+        });
+        await manager.delete(ConversationEntity, {
+          cid: conversation.cid,
+          userId: conversation.userId,
+        });
+      });
+    } catch (error) {
+      unmarkConversationMemorySessionDeleting(memoryRoot, conversation.id);
+      this.agentService.restoreConversationRuntimeAfterFailedDeletion(
+        String(conversation.userId),
+        conversation.id,
+      );
+      throw error;
+    }
+
+    await Promise.all([
+      this.cleanupConversationFiles(conversation),
+      this.processConversationMemoryCleanupTask(cleanupTask),
+    ]);
   }
 
   async uploadConversationFile(
@@ -1977,6 +2034,60 @@ export class ConversationService {
     ]);
   }
 
+  private async retryPendingConversationCleanupTasks(): Promise<void> {
+    const tasks = await this.cleanupTaskRepo.find({
+      where: {
+        status: In(['pending', 'running', 'failed']),
+      },
+      order: { createdAt: 'ASC' },
+      take: 100,
+    });
+    for (const task of tasks) {
+      if (task.attempts >= 10) continue;
+      try {
+        await this.processConversationMemoryCleanupTask(task);
+      } catch (error) {
+        console.error('[ConversationService] cleanup task retry failed', {
+          cleanupTaskId: task.id,
+          conversationId: task.conversationId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  }
+
+  private async processConversationMemoryCleanupTask(
+    task: ConversationCleanupTaskEntity,
+  ): Promise<void> {
+    const attempt = task.attempts + 1;
+    await this.cleanupTaskRepo.update(task.id, {
+      status: 'running',
+      attempts: attempt,
+      lastError: null,
+      updatedAt: new Date(),
+    });
+    try {
+      await deleteConversationMemorySession(task.userId, task.conversationId);
+      const completedAt = new Date();
+      await this.cleanupTaskRepo.update(task.id, {
+        status: 'completed',
+        attempts: attempt,
+        lastError: null,
+        updatedAt: completedAt,
+        completedAt,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await this.cleanupTaskRepo.update(task.id, {
+        status: 'failed',
+        attempts: attempt,
+        lastError: message.slice(0, 4000),
+        updatedAt: new Date(),
+      });
+      throw error;
+    }
+  }
+
   private async removeRuntimeSessionFile(conversation: ConversationEntity) {
     let sessionFilePath: string;
 
@@ -2070,6 +2181,9 @@ export class ConversationService {
       filePath: sessionFilePath,
       sessionId,
       mediaByMessageId: publicMediaByMessageId,
+      conversationMemoryDir: userId === undefined
+        ? undefined
+        : getNetworkConversationMemoryDir(userId),
     });
   }
 

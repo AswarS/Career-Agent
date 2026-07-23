@@ -22,6 +22,7 @@ import type { PermissionDecision } from '../utils/permissions/PermissionResult.j
 import type { Tool } from '../Tool.js'
 import type { FileStateCache } from '../utils/fileStateCache.js'
 import { CAREER_AGENT_LEARNING_SYSTEM_PROMPT } from '../Network/prompts/careerAgentLearningPrompt.js'
+import { getCareerAgentMemoryRoutingPrompt } from '../Network/prompts/careerAgentMemoryRoutingPrompt.js'
 import { getProfileAgentSystemPrompt } from '../Network/modules/profile/profile-agent.prompt.js'
 import { checkSessionWorkspacePath } from './workspaceSecurity.js'
 import { checkShellCommandWorkspace } from './shellWorkspaceGuard.js'
@@ -204,6 +205,9 @@ async function checkServerFileBoundary(
     cwd: context.config.cwd,
     workspaceRoot: context.config.workspaceRoot,
     autoMemoryDir: context.config.autoMemoryDir,
+    conversationMemoryDir: context.config.conversationMemoryDir,
+    conversationMemorySessionFile:
+      context.config.conversationMemorySessionFile,
     toolName: tool.name,
     userReadOnlyRoots: context.config.userReadOnlyRoots,
     sharedReadOnlyRoots: context.config.sharedReadOnlyRoots,
@@ -449,6 +453,7 @@ export function createQueryEngineForSession(
     CAREER_AGENT_LEARNING_SYSTEM_PROMPT,
     getProfileAgentSystemPrompt(),
     context.config.appendSystemPrompt,
+    getCareerAgentMemoryRoutingPrompt(),
   ].filter(Boolean).join('\n\n')
 
   const config: QueryEngineConfig = {

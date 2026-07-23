@@ -1,7 +1,10 @@
 import { z } from 'zod/v4';
 import { buildTool, type Tool, type ToolDef } from '../../../Tool.js';
 import { lazySchema } from '../../../utils/lazySchema.js';
-import { PROFILE_LEVEL_CLASSIFICATION_PROMPT } from './profile-agent.prompt';
+import {
+  PROFILE_LEVEL_CLASSIFICATION_PROMPT,
+  PROFILE_MEMORY_SCOPE_PROMPT,
+} from './profile-agent.prompt';
 import { profileFeatureFlags } from './profile-feature-flags';
 import type { ProfileMemoryService } from './profile-memory.service';
 import type { ProfileProposalService } from './profile-proposal.service';
@@ -152,9 +155,9 @@ export function createCompactProfileTools(runtime: ProfileToolRuntime): Tool[] {
       ...common,
       name: 'profile_read',
       isReadOnly: () => true,
-      searchHint: 'read authenticated user basic profile or relevant profile memory',
-      async description() { return 'Read the authenticated user Profile. Set source=basic for stable facts, or source=memory with summary/relevant mode for goals, preferences, and constraints.'; },
-      async prompt() { return 'Use source=basic only when stable facts are needed. Use source=memory, mode=relevant with the current query for normal tasks; reserve summary for Profile management and before choosing a profileIndex to replace.'; },
+      searchHint: 'read authenticated user career profile or relevant career memory',
+      async description() { return 'Read career-specific Profile data. Set source=basic for identity, education, location, and current employment facts; use source=memory for career goals, target roles, job preferences, and employment constraints. Do not use Profile for generic user preferences or project context.'; },
+      async prompt() { return `${PROFILE_MEMORY_SCOPE_PROMPT}\n\nUse source=basic only when stable career facts are needed. Use source=memory, mode=relevant with the current query for normal career tasks; reserve summary for Profile management and before choosing a profileIndex to replace.`; },
       get inputSchema() { return readInput(); },
       get outputSchema() { return resultSchema(); },
       async call(input) {
@@ -175,17 +178,17 @@ export function createCompactProfileTools(runtime: ProfileToolRuntime): Tool[] {
     buildTool({
       ...common,
       name: 'profile_update',
-      searchHint: 'classify and update authenticated user basic profile or profile memory',
+      searchHint: 'classify and update authenticated user career profile or career memory',
       async description() {
         return profileFeatureFlags.indexedMutations()
-          ? 'Update the authenticated user Profile. For target=memory choose operation=add to allocate a new public index, or operation=replace with an existing profileIndex. target=basic updates stable facts.'
-          : 'Update the authenticated user Profile through one strict target branch. target=memory submits an L0-L3 candidate; target=basic submits an L3 base-fact change.';
+          ? 'Update career-specific Profile data such as employment facts, target roles, career direction, salary expectations, job-search preferences, and employment constraints. For target=memory choose operation=add or replace; target=basic updates stable career facts. Non-career durable context belongs to auto-memory.'
+          : 'Update career-specific Profile data through one strict target branch. target=memory submits an L0-L3 career candidate; target=basic submits an L3 stable career-fact change. Non-career durable context belongs to auto-memory.';
       },
       async prompt() {
         const workflow = profileFeatureFlags.indexedMutations()
           ? 'For memory add, never provide profileIndex. For memory replace, first read the item and provide its exact profileIndex; never guess an index. The submitted level classifies the resulting content, while replace is audited as updateLevel L3.'
-          : 'Use target=memory for goals, preferences, and constraints.';
-        return `${PROFILE_LEVEL_CLASSIFICATION_PROMPT}\n\n${workflow} Use target=basic only for explicitly stated stable facts. L1-L3 auto-apply by default, but the server may ignore prohibited content, correct the content level, report a conflict, or create a proposal when an auto-apply flag is disabled.`;
+          : 'Use target=memory for career goals, employment preferences, and job-search constraints.';
+        return `${PROFILE_MEMORY_SCOPE_PROMPT}\n\n${PROFILE_LEVEL_CLASSIFICATION_PROMPT}\n\n${workflow} Use target=basic only for explicitly stated stable career facts. L1-L3 auto-apply by default, but the server may ignore prohibited content, correct the content level, report a conflict, or create a proposal when an auto-apply flag is disabled.`;
       },
       get inputSchema() { return updateInput(); },
       get outputSchema() { return resultSchema(); },
@@ -287,7 +290,7 @@ export function createLegacyProfileTools(runtime: ProfileToolRuntime): Tool[] {
       isReadOnly: () => true,
       searchHint: 'read authenticated user base career profile',
       async description() { return 'Read the authenticated user base Profile and missing fields. No user id parameter is accepted.'; },
-      async prompt() { return 'Use this when stable identity, education, location, or current career status is relevant.'; },
+      async prompt() { return `${PROFILE_MEMORY_SCOPE_PROMPT}\n\nUse this when stable identity, education, location, or current career status is relevant.`; },
       get inputSchema() { return getBasicInput(); },
       get outputSchema() { return resultSchema(); },
       async call() { return { data: { result: await runtime.baseService.getBaseProfile(runtime.userId) } }; },
@@ -296,9 +299,9 @@ export function createLegacyProfileTools(runtime: ProfileToolRuntime): Tool[] {
       ...common,
       name: 'profile_memory_read',
       isReadOnly: () => true,
-      searchHint: 'read authenticated user profile memory summary or relevant items',
-      async description() { return 'Read active Profile Memory for the authenticated user. Deleted, expired, and superseded items are excluded.'; },
-      async prompt() { return 'Use relevant mode with the current query; use summary only for Profile management.'; },
+      searchHint: 'read authenticated user career memory summary or relevant items',
+      async description() { return 'Read active career-specific Profile Memory for the authenticated user. Deleted, expired, and superseded items are excluded. Generic preferences and project context belong to auto-memory.'; },
+      async prompt() { return `${PROFILE_MEMORY_SCOPE_PROMPT}\n\nUse relevant mode with the current career query; use summary only for Profile management.`; },
       get inputSchema() { return readMemoryInput(); },
       get outputSchema() { return resultSchema(); },
       async call(input) {
@@ -309,10 +312,10 @@ export function createLegacyProfileTools(runtime: ProfileToolRuntime): Tool[] {
     buildTool({
       ...common,
       name: 'profile_memory_propose',
-      searchHint: 'classify grounded profile memory as L0, L1, L2, or L3 and submit it to policy',
-      async description() { return 'Classify a grounded Profile Memory candidate as L0-L3 and submit it for deterministic server validation. L0 is ignored; L1-L3 auto-apply by default and can be changed to proposals by feature flags.'; },
+      searchHint: 'classify grounded career profile memory as L0, L1, L2, or L3 and submit it to policy',
+      async description() { return 'Classify a grounded career-specific Profile Memory candidate as L0-L3 and submit it for deterministic server validation. Non-career durable context belongs to auto-memory. L0 is ignored; L1-L3 auto-apply by default and can be changed to proposals by feature flags.'; },
       async prompt() {
-        return `${PROFILE_LEVEL_CLASSIFICATION_PROMPT}\n\nBefore calling, choose exactly one level. Do not provide a numeric confidence. The server may reject prohibited content or raise the risk level for hard constraints and conflicts, but it will not use a confidence score to classify the candidate.`;
+        return `${PROFILE_MEMORY_SCOPE_PROMPT}\n\n${PROFILE_LEVEL_CLASSIFICATION_PROMPT}\n\nBefore calling, choose exactly one level. Do not provide a numeric confidence. The server may reject prohibited content or raise the risk level for hard constraints and conflicts, but it will not use a confidence score to classify the candidate.`;
       },
       get inputSchema() { return proposeMemoryInput(); },
       get outputSchema() { return resultSchema(); },
@@ -328,7 +331,7 @@ export function createLegacyProfileTools(runtime: ProfileToolRuntime): Tool[] {
       name: 'profile_update_basic',
       searchHint: 'submit an L3 base profile change',
       async description() { return 'Submit an L3 base Profile change. It auto-applies by default and becomes a confirmation proposal when L3 auto-apply is disabled.'; },
-      async prompt() { return 'Use only after the user explicitly states a base fact changed.'; },
+      async prompt() { return `${PROFILE_MEMORY_SCOPE_PROMPT}\n\nUse only after the user explicitly states a stable career fact changed.`; },
       get inputSchema() { return updateBasicInput(); },
       get outputSchema() { return resultSchema(); },
       async call(input) {

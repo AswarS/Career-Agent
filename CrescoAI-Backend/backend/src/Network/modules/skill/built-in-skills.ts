@@ -402,7 +402,7 @@ async function copyGeneratedArtifactToUserDir(
       ? dirname(originalPath)
       : originalPath;
   const sourceStat = sourcePath === originalPath ? originalStat : await stat(sourcePath);
-  const targetDir = join(USER_DATA_DIR, String(userId), `${kind}_generated`);
+  const targetDir = join(USER_DATA_DIR, String(userId), 'workspace', `${kind}_generated`);
   await mkdir(targetDir, { recursive: true });
   const targetPath = join(targetDir, basename(sourcePath));
 

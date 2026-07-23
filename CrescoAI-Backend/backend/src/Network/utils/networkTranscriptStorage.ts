@@ -26,6 +26,34 @@ export function getNetworkAutoMemoryDir(userId: string | number): string {
   return join(getNetworkUserDir(userId), 'memory', 'auto');
 }
 
+/**
+ * OpenClaw-style conversation memory is an independent memory lane.  It must
+ * not share files or lifecycle code with profile memory or native auto-memory.
+ */
+export function getNetworkConversationMemoryDir(
+  userId: string | number,
+): string {
+  return join(getNetworkUserDir(userId), 'memory', 'conversation');
+}
+
+export function getNetworkConversationMemorySessionPath(
+  userId: string | number,
+  sessionId: string,
+): string {
+  assertSafeNetworkSessionId(sessionId);
+  return join(
+    getNetworkConversationMemoryDir(userId),
+    'sessions',
+    `${sessionId}.md`,
+  );
+}
+
+export function assertSafeNetworkSessionId(sessionId: string): void {
+  if (!/^[A-Za-z0-9_-]{8,128}$/.test(sessionId)) {
+    throw new Error('Invalid Network session id');
+  }
+}
+
 export function getNetworkUserFilesDir(userId: string | number): string {
   return join(networkRootDir, 'files', String(userId));
 }

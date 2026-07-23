@@ -24,5 +24,6 @@ export type SessionFilesystemRoot = {
 export type SessionReadOnlyRoot = SessionFilesystemRoot & {
   /** File tools that may read this root. Shell access is intentionally absent. */
   allowedTools: readonly NetworkReadOnlyFileTool[]
+  /** Optional server-defined shape restriction inside the granted root. */
+  pathPolicy?: 'direct-session-jsonl'
 }
-
