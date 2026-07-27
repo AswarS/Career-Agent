@@ -12,6 +12,7 @@ import { CreateCareerAgentBaseline1785000000000 } from './migrations/17850000000
 import { AddPublicUserId1785128058000 } from './migrations/1785128058000-AddPublicUserId.js';
 import { AlignCareerAgentSchema1785128059000 } from './migrations/1785128059000-AlignCareerAgentSchema.js';
 import { AddIntegrationKernel1785128060000 } from './migrations/1785128060000-AddIntegrationKernel.js';
+import { ConsolidateProfileV2Snapshot1785128061000 } from './migrations/1785128061000-ConsolidateProfileV2Snapshot.js';
 
 await mkdir(dirname(careerAgentDatabasePath), { recursive: true });
 
@@ -29,6 +30,7 @@ const dataSource = new DataSource({
     AddPublicUserId1785128058000,
     AlignCareerAgentSchema1785128059000,
     AddIntegrationKernel1785128060000,
+    ConsolidateProfileV2Snapshot1785128061000,
   ],
   migrationsTransactionMode: 'all',
   synchronize: false,

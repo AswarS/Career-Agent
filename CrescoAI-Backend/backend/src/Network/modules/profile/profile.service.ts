@@ -1,21 +1,15 @@
 import {
   BadRequestException,
-  ConflictException,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { randomUUID } from 'node:crypto';
 import { DataSource, Repository } from 'typeorm';
 import { UserEntity } from '../user/entities/user.entity';
 import { UpdateProfileDto } from './dto/update-profile.dto';
-import { CareerProfileVersionEntity } from './entities/career-profile-version.entity';
 import { ProfileSuggestionEntity } from './entities/profile-suggestion.entity';
-import {
-  hashCanonicalProfile,
-  serializeCanonicalProfile,
-} from './profile-version.utils';
 import {
   createDefaultProfile,
   hasProfilePatchFields,
@@ -27,6 +21,8 @@ import {
   type ProfileSuggestion,
 } from './profile.types';
 import { profileFeatureFlags } from './profile-feature-flags';
+import { ProfileExternalSnapshotService } from './profile-external-snapshot.service';
+import { ProfileLegacyAdapterService } from './profile-legacy-adapter.service';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -45,6 +41,10 @@ export class ProfileService {
     private readonly suggestionRepo: Repository<ProfileSuggestionEntity>,
     @InjectDataSource()
     private readonly dataSource: DataSource,
+    @Optional()
+    private readonly legacyAdapter?: ProfileLegacyAdapterService,
+    @Optional()
+    private readonly externalSnapshotService?: ProfileExternalSnapshotService,
   ) {}
 
   async getProfile(userId: number) {
@@ -64,42 +64,23 @@ export class ProfileService {
       });
     }
 
-    if (!this.dataSource) {
+    if (!this.dataSource || !this.legacyAdapter) {
       throw new InternalServerErrorException({
-        code: 'PROFILE_VERSION_STORE_UNAVAILABLE',
-        message: 'profile version storage is unavailable',
+        code: 'PROFILE_V2_STORE_UNAVAILABLE',
+        message: 'Profile V2 storage is unavailable',
       });
     }
 
-    return this.dataSource.transaction(async (manager) => {
-      const userRepo = manager.getRepository(UserEntity);
-      const user = await userRepo.findOne({ where: { id: userId } });
-      if (!user) {
-        throw new NotFoundException({
-          code: 'USER_NOT_FOUND',
-          message: 'user not found',
-        });
-      }
-      const profile = normalizeProfileRecord(source, user.displayName);
-      const profileJson = serializeCanonicalProfile(profile);
-      const currentVersion = user.profileVersion ?? 0;
-      const nextVersion = currentVersion + 1;
-      const profileVersionId = randomUUID();
-      const suggestion = dto.suggestionRowId
-        ? await manager.getRepository(ProfileSuggestionEntity).findOne({
-            where: {
-              rowId: dto.suggestionRowId,
-              userId,
-              status: 'pending',
-            },
-          })
-        : null;
-      if (dto.suggestionRowId && !suggestion) {
-        throw new NotFoundException({
-          code: 'PROFILE_SUGGESTION_NOT_FOUND',
-          message: 'pending profile suggestion not found',
-        });
-      }
+    const user = await this.findUser(userId);
+    const profile = normalizeProfileRecord(source, user.displayName);
+    if (dto.suggestionRowId) {
+      const suggestion = await this.suggestionRepo.findOne({
+        where: {
+          rowId: dto.suggestionRowId,
+          userId,
+          status: 'pending',
+        },
+      });
       if (
         suggestion
         && !this.profileContainsPatch(
@@ -112,42 +93,8 @@ export class ProfileService {
           message: 'saved profile does not contain the accepted suggestion',
         });
       }
-      const claimedVersion = await userRepo.update(
-        { id: userId, profileVersion: currentVersion },
-        { profileVersion: nextVersion },
-      );
-      if (claimedVersion.affected !== 1) {
-        throw new ConflictException({
-          code: 'PROFILE_VERSION_CONFLICT',
-          message: 'profile changed concurrently; reload and retry',
-        });
-      }
-
-      await manager.getRepository(CareerProfileVersionEntity).insert({
-        id: profileVersionId,
-        userId,
-        version: nextVersion,
-        schemaVersion: profile.schemaVersion,
-        profileJson,
-        contentHash: hashCanonicalProfile(profileJson),
-        createdBy: suggestion ? 'suggestion' : 'user',
-        sourceThreadId: suggestion?.sourceThreadId ?? null,
-      });
-      user.profileJson = profileJson;
-      user.profileVersion = nextVersion;
-      user.currentProfileVersionId = profileVersionId;
-      if (profile.basicInfo.fullName) {
-        user.displayName = profile.basicInfo.fullName;
-      }
-      await userRepo.save(user);
-      if (suggestion) {
-        suggestion.status = 'accepted';
-        suggestion.resolvedAt = new Date();
-        await manager.getRepository(ProfileSuggestionEntity).save(suggestion);
-      }
-
-      return profile;
-    });
+    }
+    return this.legacyAdapter.apply(userId, profile, dto.suggestionRowId);
   }
 
   async rejectSuggestion(userId: number, rowId: number) {
@@ -167,53 +114,13 @@ export class ProfileService {
   }
 
   async getCurrentProfileSnapshot(userId: number) {
-    if (!this.dataSource) {
+    if (!this.externalSnapshotService) {
       throw new InternalServerErrorException({
-        code: 'PROFILE_VERSION_STORE_UNAVAILABLE',
-        message: 'profile version storage is unavailable',
+        code: 'PROFILE_V2_STORE_UNAVAILABLE',
+        message: 'Profile V2 snapshot storage is unavailable',
       });
     }
-    const user = await this.findUser(userId);
-    if (!user.currentProfileVersionId) {
-      throw new InternalServerErrorException({
-        code: 'PROFILE_VERSION_MISSING',
-        message: 'current profile version is missing',
-      });
-    }
-    const version = await this.dataSource
-      .getRepository(CareerProfileVersionEntity)
-      .findOne({ where: { id: user.currentProfileVersionId, userId } });
-    if (!version) {
-      throw new InternalServerErrorException({
-        code: 'PROFILE_VERSION_MISSING',
-        message: 'current profile version is missing',
-      });
-    }
-
-    let profile: unknown;
-    try {
-      profile = JSON.parse(version.profileJson) as unknown;
-    } catch {
-      throw new InternalServerErrorException({
-        code: 'PROFILE_DATA_CORRUPT',
-        message: 'current profile version contains invalid JSON',
-      });
-    }
-    if (hashCanonicalProfile(version.profileJson) !== version.contentHash) {
-      throw new InternalServerErrorException({
-        code: 'PROFILE_DATA_CORRUPT',
-        message: 'current profile version hash does not match its content',
-      });
-    }
-
-    return {
-      externalUserId: user.publicUserId,
-      profileVersion: String(version.version),
-      schemaVersion: version.schemaVersion,
-      updatedAt: version.createdAt.toISOString(),
-      profile,
-      contentHash: version.contentHash,
-    };
+    return this.externalSnapshotService.getCurrentSnapshot(userId);
   }
 
   async listSuggestions(userId: number): Promise<ProfileSuggestion[]> {

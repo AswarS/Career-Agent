@@ -9,12 +9,9 @@ import { CreateCareerAgentBaseline1785000000000 } from '../src/Network/migration
 import { AddPublicUserId1785128058000 } from '../src/Network/migrations/1785128058000-AddPublicUserId.js';
 import { AlignCareerAgentSchema1785128059000 } from '../src/Network/migrations/1785128059000-AlignCareerAgentSchema.js';
 import { AddIntegrationKernel1785128060000 } from '../src/Network/migrations/1785128060000-AddIntegrationKernel.js';
+import { ConsolidateProfileV2Snapshot1785128061000 } from '../src/Network/migrations/1785128061000-ConsolidateProfileV2Snapshot.js';
 import { resolveCareerAgentSecurityConfig } from '../src/Network/security.config.js';
-import { CareerProfileVersionEntity } from '../src/Network/modules/profile/entities/career-profile-version.entity.js';
-import { ProfileSuggestionEntity } from '../src/Network/modules/profile/entities/profile-suggestion.entity.js';
-import { ProfileService } from '../src/Network/modules/profile/profile.service.js';
 import type { UserEntity } from '../src/Network/modules/user/entities/user.entity.js';
-import { UserEntity as RuntimeUserEntity } from '../src/Network/modules/user/entities/user.entity.js';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -65,6 +62,7 @@ function migrationDataSource(database: string) {
       AddPublicUserId1785128058000,
       AlignCareerAgentSchema1785128059000,
       AddIntegrationKernel1785128060000,
+      ConsolidateProfileV2Snapshot1785128061000,
     ],
     migrationsTransactionMode: 'all',
     synchronize: false,
@@ -79,7 +77,7 @@ describe('public user identity', () => {
     try {
       const dataSource = migrationDataSource(database);
       await dataSource.initialize();
-      expect(await dataSource.runMigrations({ transaction: 'all' })).toHaveLength(4);
+      expect(await dataSource.runMigrations({ transaction: 'all' })).toHaveLength(5);
       const tables = await dataSource.query(`
         SELECT "name"
         FROM "sqlite_master"
@@ -90,6 +88,9 @@ describe('public user identity', () => {
         FROM "sqlite_master"
         WHERE "type" = 'trigger'
       `) as Array<{ name: string }>;
+      const userColumns = await dataSource.query(
+        'PRAGMA table_info("users")',
+      ) as Array<{ name: string }>;
       expect(await dataSource.runMigrations({ transaction: 'all' })).toHaveLength(0);
       await dataSource.destroy();
       const tableNames = new Set(tables.map(({ name }) => name));
@@ -99,8 +100,13 @@ describe('public user identity', () => {
       expect(tableNames.has('messages')).toBe(true);
       expect(tableNames.has('api_settings')).toBe(true);
       expect(tableNames.has('profile_suggestions')).toBe(true);
-      expect(tableNames.has('career_profile_versions')).toBe(true);
+      expect(tableNames.has('career_profile_versions')).toBe(false);
       expect(tableNames.has('integration_outbox')).toBe(true);
+      expect(userColumns.some(({ name }) => name === 'profileVersion'))
+        .toBe(false);
+      expect(userColumns.some(
+        ({ name }) => name === 'currentProfileVersionId',
+      )).toBe(false);
       expect(triggers.map(({ name }) => name)).toContain(
         'TRG_users_publicUserId_immutable',
       );
@@ -219,95 +225,6 @@ describe('public user identity', () => {
       NODE_ENV: 'production',
       CAREER_AGENT_JWT_SECRET: 'a-secure-production-secret-with-32-characters',
     }).jwtSecret).toBe('a-secure-production-secret-with-32-characters');
-  });
-
-  test('registration and accepted suggestions create auditable profile versions', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'career-agent-profile-'));
-    const database = join(directory, 'career.sqlite');
-    const migrationSource = migrationDataSource(database);
-    let dataSource: DataSource | undefined;
-
-    try {
-      await migrationSource.initialize();
-      await migrationSource.runMigrations({ transaction: 'all' });
-      await migrationSource.destroy();
-      dataSource = new DataSource({
-        type: 'sqlite',
-        database,
-        entities: [
-          RuntimeUserEntity,
-          ProfileSuggestionEntity,
-          CareerProfileVersionEntity,
-        ],
-      });
-      await dataSource.initialize();
-
-      const authService = new AuthService(
-        dataSource.getRepository(RuntimeUserEntity),
-        dataSource,
-      );
-      const session = await authService.register({
-        email: 'profile-version@example.test',
-        password: 'ProfileVersionPass-2026!',
-        display_name: 'Profile Version User',
-      });
-      const user = await dataSource
-        .getRepository(RuntimeUserEntity)
-        .findOneByOrFail({ publicUserId: session.user.id });
-      const suggestionRepo = dataSource.getRepository(ProfileSuggestionEntity);
-      const suggestion = await suggestionRepo.save(suggestionRepo.create({
-        id: 'target-role',
-        userId: user.id,
-        title: 'Target role',
-        rationale: 'User confirmed a target role',
-        sourceThreadId: 'thread-profile-version',
-        patchJson: JSON.stringify({
-          intentConstraints: { targetRole: 'AI Product Manager' },
-        }),
-        status: 'pending',
-        resolvedAt: null,
-      }));
-      const profileService = new ProfileService(
-        dataSource.getRepository(RuntimeUserEntity),
-        suggestionRepo,
-        dataSource,
-      );
-
-      await profileService.updateProfile(user.id, {
-        profile: {
-          basicInfo: { fullName: 'Profile Version User' },
-          intentConstraints: { targetRole: 'AI Product Manager' },
-        },
-        suggestionRowId: suggestion.rowId,
-      });
-      const snapshot = await profileService.getCurrentProfileSnapshot(user.id);
-      const versions = await dataSource
-        .getRepository(CareerProfileVersionEntity)
-        .find({ where: { userId: user.id }, order: { version: 'ASC' } });
-      const accepted = await suggestionRepo.findOneByOrFail({
-        rowId: suggestion.rowId,
-      });
-
-      expect(versions.map(({ version, createdBy }) => ({
-        version,
-        createdBy,
-      }))).toEqual([
-        { version: 1, createdBy: 'registration' },
-        { version: 2, createdBy: 'suggestion' },
-      ]);
-      expect(snapshot.profileVersion).toBe('2');
-      expect(snapshot.contentHash).toMatch(/^[a-f0-9]{64}$/);
-      expect(accepted.status).toBe('accepted');
-      expect(accepted.resolvedAt).toBeInstanceOf(Date);
-    } finally {
-      if (dataSource?.isInitialized) {
-        await dataSource.destroy();
-      }
-      if (migrationSource.isInitialized) {
-        await migrationSource.destroy();
-      }
-      await rm(directory, { recursive: true, force: true });
-    }
   });
 
   test('registration exposes an opaque UUID and uses it as the JWT subject', async () => {

@@ -52,12 +52,6 @@ export class UserEntity {
   @Column({ type: 'integer', default: 1 })
   accountVersion!: number;
 
-  @Column({ type: 'integer', default: 0 })
-  profileVersion!: number;
-
-  @Column({ type: 'varchar', length: 36, nullable: true })
-  currentProfileVersionId!: string | null;
-
   @CreateDateColumn()
   createdAt!: Date;
 

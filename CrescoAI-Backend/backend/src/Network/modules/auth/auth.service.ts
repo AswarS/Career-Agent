@@ -14,11 +14,11 @@ import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
 import { createDefaultProfile } from '../profile/profile.types';
 import { careerAgentJwtSecret } from '../../security.config.js';
-import { CareerProfileVersionEntity } from '../profile/entities/career-profile-version.entity.js';
-import {
-  hashCanonicalProfile,
-  serializeCanonicalProfile,
-} from '../profile/profile-version.utils.js';
+import { serializeCanonicalProfile } from '../profile/profile-version.utils.js';
+import { BaseProfileEntity } from '../profile/entities/base-profile.entity.js';
+import { ProfileProjectionJobEntity } from '../profile/entities/profile-projection-job.entity.js';
+import { ProfileRevisionEntity } from '../profile/entities/profile-revision.entity.js';
+import { ProfileStateEntity } from '../profile/entities/profile-state.entity.js';
 
 const scrypt = promisify(scryptCallback);
 interface AccessTokenPayload {
@@ -70,12 +70,10 @@ export class AuthService {
       tokenVersion: 0,
       accountStatus: 'active',
       accountVersion: 1,
-      profileVersion: 0,
-      currentProfileVersionId: null,
     });
     let saved: UserEntity | undefined;
     try {
-      saved = await this.persistNewUser(user, profileJson);
+      saved = await this.persistNewUser(user, displayName);
     } catch (error) {
       if (this.isUniqueConstraintError(error)) {
         throw new ConflictException(this.error('USER_ALREADY_EXISTS', 'email or username already exists'));
@@ -165,7 +163,7 @@ export class AuthService {
     };
   }
 
-  private async persistNewUser(user: UserEntity, profileJson: string) {
+  private async persistNewUser(user: UserEntity, displayName: string) {
     if (!this.dataSource) {
       const saved = await this.userRepo.save(user);
       saved.userId = String(saved.id);
@@ -175,20 +173,57 @@ export class AuthService {
     return this.dataSource.transaction(async (manager) => {
       const userRepo = manager.getRepository(UserEntity);
       const saved = await userRepo.save(user);
-      const profileVersionId = randomUUID();
-      await manager.getRepository(CareerProfileVersionEntity).insert({
-        id: profileVersionId,
+      const base = await manager.save(manager.create(BaseProfileEntity, {
         userId: saved.id,
+        name: displayName,
+        gender: '',
+        birthDate: null,
+        educationLevel: '',
+        educationBackgroundJson: '[]',
+        currentCity: '',
+        currentStatus: '',
+        currentRole: '',
+        currentIndustry: '',
+        yearsOfExperience: null,
+        contactLanguage: '',
         version: 1,
-        schemaVersion: 'career_profile_v1',
-        profileJson,
-        contentHash: hashCanonicalProfile(profileJson),
-        createdBy: 'registration',
-        sourceThreadId: null,
-      });
+      }));
+      const state = await manager.save(manager.create(ProfileStateEntity, {
+        userId: saved.id,
+        aggregateVersion: 1,
+        projectionVersion: 0,
+        projectionStatus: 'pending',
+        nextProfileIndex: 1,
+      }));
+      await manager.save(manager.create(ProfileRevisionEntity, {
+        userId: saved.id,
+        aggregateVersion: state.aggregateVersion,
+        targetType: 'base_profile',
+        targetId: String(base.id),
+        operation: 'create',
+        beforeJson: null,
+        afterJson: JSON.stringify({
+          name: base.name,
+          currentCity: base.currentCity,
+          currentRole: base.currentRole,
+          currentStatus: base.currentStatus,
+          educationBackgroundJson: base.educationBackgroundJson,
+        }),
+        sourceType: 'registration',
+        updateLevel: 'L3',
+        sourceConversationId: null,
+        sourceMessageId: null,
+        userConfirmed: true,
+        actorType: 'user',
+      }));
+      await manager.save(manager.create(ProfileProjectionJobEntity, {
+        userId: saved.id,
+        targetVersion: state.aggregateVersion,
+        status: 'pending',
+        retryCount: 0,
+        lastError: null,
+      }));
       saved.userId = String(saved.id);
-      saved.profileVersion = 1;
-      saved.currentProfileVersionId = profileVersionId;
       return userRepo.save(saved);
     });
   }

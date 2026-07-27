@@ -14,7 +14,6 @@ import { UserEntity } from './entities/user.entity';
 import { ResourceEntity } from '../resource/entities/resource.entity';
 import { GeneratedAppEntity } from '../generated-app/entities/generated-app.entity';
 import { IntegrationOutboxEntity } from '../integration/entities/integration-outbox.entity';
-import { CareerProfileVersionEntity } from '../profile/entities/career-profile-version.entity';
 import { BaseProfileEntity } from '../profile/entities/base-profile.entity';
 import { ProfileStateEntity } from '../profile/entities/profile-state.entity';
 import { ProfileMemoryItemEntity } from '../profile/entities/profile-memory-item.entity';
@@ -88,7 +87,6 @@ export class UserService {
       await manager.delete(TeamEntity, { userId: targetUserId });
       await manager.delete(ResourceEntity, { userId: targetUserId });
       await manager.delete(GeneratedAppEntity, { userId: targetUserId });
-      await manager.delete(CareerProfileVersionEntity, { userId: targetUserId });
       await manager.delete(ProfileProjectionJobEntity, { userId: targetUserId });
       await manager.delete(ProfileRevisionEntity, { userId: targetUserId });
       await manager.delete(ProfileChangeProposalEntity, { userId: targetUserId });

@@ -201,6 +201,22 @@ describe('Career Agent HTTP smoke flow', () => {
         .expect(200);
       expect(profileResponse.body.intentConstraints.targetRole).toBe('AI 产品经理');
 
+      const snapshotResponse = await request(server)
+        .get('/api/career-agent/profile/snapshot')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(200);
+      expect(snapshotResponse.body.externalUserId).toBe(userId);
+      expect(snapshotResponse.body.schemaVersion).toBe('career_profile_v2');
+      expect(snapshotResponse.body.profileVersion).toMatch(/^\d+$/);
+      expect(snapshotResponse.body.contentHash).toMatch(/^[a-f0-9]{64}$/);
+      expect(snapshotResponse.body.profile.memories).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            slotKey: 'legacy.intentConstraints.targetRole',
+          }),
+        ]),
+      );
+
       const artifactsResponse = await request(server)
         .get('/api/career-agent/artifacts')
         .set('Authorization', `Bearer ${accessToken}`)

@@ -28,6 +28,7 @@ import { ProposeBaseProfileDto, ProposeProfileMemoryDto } from './dto/profile-pr
 import { ProfileMaintenanceService } from './profile-maintenance.service';
 import { profileAccessDenied, profileValidationError } from './profile.errors';
 import { profileFeatureFlags } from './profile-feature-flags';
+import { ProfileExternalSnapshotService } from './profile-external-snapshot.service';
 
 @Controller('api/career-agent/profile')
 export class ProfileController {
@@ -37,6 +38,7 @@ export class ProfileController {
     private readonly profileMemoryService: ProfileMemoryService,
     private readonly profileProposalService: ProfileProposalService,
     private readonly profileMaintenanceService: ProfileMaintenanceService,
+    private readonly externalSnapshotService: ProfileExternalSnapshotService,
   ) {}
 
   @Get()
@@ -60,6 +62,12 @@ export class ProfileController {
     @Param('rowId', ParseIntPipe) rowId: number,
   ) {
     return this.profileService.rejectSuggestion(req.userId!, rowId);
+  }
+
+  @Get('snapshot')
+  getExternalSnapshot(@Req() req: Request) {
+    this.assertV2Read();
+    return this.externalSnapshotService.getCurrentSnapshot(req.userId!);
   }
 
   @Get('base')

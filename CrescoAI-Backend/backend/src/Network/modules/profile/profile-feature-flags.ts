@@ -24,5 +24,5 @@ export const profileFeatureFlags = {
   projectionWorker: () =>
     envFlag('CAREER_AGENT_PROFILE_PROJECTION_WORKER', true),
   legacyMigration: () =>
-    envFlag('CAREER_AGENT_PROFILE_LEGACY_MIGRATION', true),
+    envFlag('CAREER_AGENT_PROFILE_LEGACY_MIGRATION', false),
 };
