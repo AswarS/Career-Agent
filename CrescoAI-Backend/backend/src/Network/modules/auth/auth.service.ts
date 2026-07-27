@@ -2,12 +2,13 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  OnModuleInit,
   UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { randomBytes, scrypt as scryptCallback, createHash, createHmac, timingSafeEqual } from 'node:crypto';
+import { randomBytes, randomUUID, scrypt as scryptCallback, createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import { UserEntity } from '../user/entities/user.entity';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
@@ -27,11 +28,21 @@ interface AccessTokenPayload {
 }
 
 @Injectable()
-export class AuthService {
+export class AuthService implements OnModuleInit {
   constructor(
     @InjectRepository(UserEntity)
     private readonly userRepo: Repository<UserEntity>,
   ) {}
+
+  async onModuleInit() {
+    const usersWithoutPublicId = await this.userRepo.find({
+      where: { publicUserId: IsNull() },
+    });
+
+    for (const user of usersWithoutPublicId) {
+      await this.ensurePublicUserId(user);
+    }
+  }
 
   async register(dto: RegisterDto) {
     const email = this.normalizeEmail(dto.email);
@@ -50,6 +61,7 @@ export class AuthService {
     const passwordHash = await this.hashPassword(dto.password);
     const user = this.userRepo.create({
       userId: undefined,
+      publicUserId: randomUUID(),
       email,
       username,
       displayName,
@@ -111,7 +123,7 @@ export class AuthService {
   }
 
   async logout(userId: string) {
-    const user = await this.userRepo.findOne({ where: { id: Number(userId) } });
+    const user = await this.findUserBySubject(userId);
     if (user) {
       user.refreshTokenHash = null;
       user.refreshTokenExpiresAt = null;
@@ -123,11 +135,12 @@ export class AuthService {
   }
 
   async getSession(userId: string) {
-    const user = await this.userRepo.findOne({ where: { id: Number(userId) } });
+    const user = await this.findUserBySubject(userId);
     if (!user) {
       throw new UnauthorizedException(this.error('UNAUTHORIZED', 'session is invalid'));
     }
 
+    await this.ensurePublicUserId(user);
     return {
       user: this.toAuthUser(user),
     };
@@ -135,22 +148,27 @@ export class AuthService {
 
   async verifyAccessToken(token: string) {
     const payload = this.verifySignedToken(token);
-    const user = await this.userRepo.findOne({ where: { id: Number(payload.sub) } });
+    const user = await this.findUserBySubject(payload.sub);
 
     if (!user || user.tokenVersion !== payload.token_version) {
       throw new UnauthorizedException(this.error('UNAUTHORIZED', 'token is invalid or expired'));
     }
 
-    return this.toAuthUser(user);
+    await this.ensurePublicUserId(user);
+    return {
+      ...this.toAuthUser(user),
+      internalUserId: user.id,
+    };
   }
 
   private async issueSession(user: UserEntity) {
+    await this.ensurePublicUserId(user);
     const now = Math.floor(Date.now() / 1000);
     const accessExpiresIn = this.accessTokenExpiresInSeconds();
     const refreshExpiresIn = this.refreshTokenExpiresInSeconds();
     const expiresAtDate = new Date((now + accessExpiresIn) * 1000);
     const payload: AccessTokenPayload = {
-      sub: String(user.id),
+      sub: user.publicUserId!,
       email: user.email,
       username: user.username,
       display_name: user.displayName,
@@ -231,6 +249,37 @@ export class AuthService {
     });
 
     return query.where(clauses.join(' OR '), params).getOne();
+  }
+
+  private async findUserBySubject(subject: string) {
+    const normalizedSubject = subject?.trim();
+    if (!normalizedSubject) {
+      return null;
+    }
+
+    const byPublicId = await this.userRepo.findOne({
+      where: { publicUserId: normalizedSubject },
+    });
+    if (byPublicId) {
+      return byPublicId;
+    }
+
+    // Compatibility for access tokens issued before publicUserId existed.
+    const legacyId = Number(normalizedSubject);
+    if (!Number.isInteger(legacyId) || legacyId < 1) {
+      return null;
+    }
+    return this.userRepo.findOne({ where: { id: legacyId } });
+  }
+
+  private async ensurePublicUserId(user: UserEntity) {
+    if (user.publicUserId) {
+      return user.publicUserId;
+    }
+
+    user.publicUserId = randomUUID();
+    await this.userRepo.save(user);
+    return user.publicUserId;
   }
 
   private async hashPassword(password: string) {
@@ -346,7 +395,9 @@ export class AuthService {
     const displayName = user.displayName ?? this.normalizeDisplayName(undefined, user.email, user.username);
 
     return {
-      id: String(user.id),
+      id: user.publicUserId!,
+      publicUserId: user.publicUserId!,
+      public_user_id: user.publicUserId!,
       email: user.email,
       username: user.username,
       display_name: displayName,

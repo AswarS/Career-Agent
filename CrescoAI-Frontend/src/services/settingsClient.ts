@@ -13,6 +13,8 @@ import { readStoredAuthSession } from './authSessionStorage';
 
 interface UpstreamAccountSetting {
   id?: string | number;
+  public_user_id?: string | number;
+  publicUserId?: string | number;
   email?: string | null;
   username?: string | null;
   display_name?: string | null;
@@ -117,7 +119,7 @@ export function normalizeAccountSetting(input: UpstreamAccountSetting | null | u
     ?? '用户';
 
   return {
-    id: String(input?.id ?? storedUser?.id ?? '1'),
+    id: String(input?.publicUserId ?? input?.public_user_id ?? input?.id ?? storedUser?.id ?? '1'),
     email,
     username,
     displayName,

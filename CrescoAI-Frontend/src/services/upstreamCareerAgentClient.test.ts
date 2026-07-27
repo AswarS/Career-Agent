@@ -150,11 +150,10 @@ describe('createUpstreamCareerAgentClient', () => {
     });
   });
 
-  it('creates a thread with the configured user id', async () => {
+  it('creates a thread using the authenticated user identity', async () => {
     const request = vi.fn(async () => ({
       data: {
         id: 2,
-        userId: 1,
         title: '新对话',
         preview: '',
         updatedAt: 1776644879000,
@@ -173,10 +172,10 @@ describe('createUpstreamCareerAgentClient', () => {
       url: '/api/career-agent/threads',
       method: 'POST',
       data: expect.objectContaining({
-        userId: 1,
         title: '新对话',
       }),
     }));
+    expect(request.mock.calls[0]?.[0]?.data).not.toHaveProperty('userId');
     expect(thread.id).toBe('2');
   });
 

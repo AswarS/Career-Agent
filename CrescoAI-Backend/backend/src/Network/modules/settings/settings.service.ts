@@ -27,7 +27,9 @@ export class SettingsService {
     return {
       account: user
         ? {
-            id: String(user.id),
+            id: user.publicUserId!,
+            publicUserId: user.publicUserId!,
+            public_user_id: user.publicUserId!,
             email: user.email,
             username: user.username,
             display_name: user.displayName,
@@ -123,7 +125,9 @@ export class SettingsService {
     return {
       message: 'username updated successfully',
       account: {
-        id: String(user.id),
+        id: user.publicUserId!,
+        publicUserId: user.publicUserId!,
+        public_user_id: user.publicUserId!,
         email: user.email,
         username: user.username,
         display_name: user.displayName,

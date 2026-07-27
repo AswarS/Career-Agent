@@ -8,10 +8,10 @@ export class UserController {
 
   @Delete(':id')
   deleteUser(@Req() req: Request, @Param('id') id: string) {
-    const targetUserId = Number(id);
-    if (!Number.isInteger(targetUserId) || targetUserId < 1) {
+    const targetUserIdentity = id.trim();
+    if (!targetUserIdentity) {
       throw new BadRequestException('Invalid user id');
     }
-    return this.userService.deleteUserCascade(targetUserId, req.userId);
+    return this.userService.deleteUserCascade(targetUserIdentity, req.userId);
   }
 }

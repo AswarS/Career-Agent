@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { join } from 'node:path';
 import { rm } from 'node:fs/promises';
@@ -19,12 +19,20 @@ export class UserService {
     @InjectDataSource() private readonly dataSource: DataSource,
     @InjectRepository(ConversationEntity)
     private readonly conversationRepo: Repository<ConversationEntity>,
+    @InjectRepository(UserEntity)
+    private readonly userRepo: Repository<UserEntity>,
   ) {}
 
-  async deleteUserCascade(targetUserId: number, requesterUserId?: number) {
+  async deleteUserCascade(targetUserIdentity: string, requesterUserId?: number) {
     if (!requesterUserId) {
       throw new ForbiddenException('Missing user identity');
     }
+
+    const targetUser = await this.findUserByPublicOrLegacyId(targetUserIdentity);
+    if (!targetUser) {
+      throw new NotFoundException('User not found');
+    }
+    const targetUserId = targetUser.id;
     if (requesterUserId !== targetUserId) {
       throw new ForbiddenException('You can only delete your own account data');
     }
@@ -53,9 +61,25 @@ export class UserService {
 
     return {
       success: true,
-      userId: targetUserId,
+      userId: targetUser.publicUserId ?? String(targetUserId),
+      publicUserId: targetUser.publicUserId ?? null,
       deletedConversations: conversationIds.length,
     };
+  }
+
+  private async findUserByPublicOrLegacyId(identity: string) {
+    const byPublicId = await this.userRepo.findOne({
+      where: { publicUserId: identity },
+    });
+    if (byPublicId) {
+      return byPublicId;
+    }
+
+    const legacyId = Number(identity);
+    if (!Number.isInteger(legacyId) || legacyId < 1) {
+      return null;
+    }
+    return this.userRepo.findOne({ where: { id: legacyId } });
   }
 
   private async cleanupUserFiles(userId: number) {

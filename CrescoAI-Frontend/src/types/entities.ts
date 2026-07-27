@@ -296,6 +296,7 @@ export type ArtifactPayload = ArtifactRecord['payload'];
 
 export interface AuthUser {
   id: string;
+  publicUserId?: string;
   email: string | null;
   username: string | null;
   displayName: string;
@@ -324,6 +325,7 @@ export interface RegisterCredentials {
 
 export interface AccountSetting {
   id: string;
+  publicUserId?: string;
   email: string | null;
   username: string | null;
   displayName: string;
