@@ -2,13 +2,12 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
-  OnModuleInit,
   UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomBytes, randomUUID, scrypt as scryptCallback, createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
-import { IsNull, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { UserEntity } from '../user/entities/user.entity';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
@@ -28,21 +27,11 @@ interface AccessTokenPayload {
 }
 
 @Injectable()
-export class AuthService implements OnModuleInit {
+export class AuthService {
   constructor(
     @InjectRepository(UserEntity)
     private readonly userRepo: Repository<UserEntity>,
   ) {}
-
-  async onModuleInit() {
-    const usersWithoutPublicId = await this.userRepo.find({
-      where: { publicUserId: IsNull() },
-    });
-
-    for (const user of usersWithoutPublicId) {
-      await this.ensurePublicUserId(user);
-    }
-  }
 
   async register(dto: RegisterDto) {
     const email = this.normalizeEmail(dto.email);
@@ -140,7 +129,6 @@ export class AuthService implements OnModuleInit {
       throw new UnauthorizedException(this.error('UNAUTHORIZED', 'session is invalid'));
     }
 
-    await this.ensurePublicUserId(user);
     return {
       user: this.toAuthUser(user),
     };
@@ -154,7 +142,6 @@ export class AuthService implements OnModuleInit {
       throw new UnauthorizedException(this.error('UNAUTHORIZED', 'token is invalid or expired'));
     }
 
-    await this.ensurePublicUserId(user);
     return {
       ...this.toAuthUser(user),
       internalUserId: user.id,
@@ -162,7 +149,6 @@ export class AuthService implements OnModuleInit {
   }
 
   private async issueSession(user: UserEntity) {
-    await this.ensurePublicUserId(user);
     const now = Math.floor(Date.now() / 1000);
     const accessExpiresIn = this.accessTokenExpiresInSeconds();
     const refreshExpiresIn = this.refreshTokenExpiresInSeconds();
@@ -270,16 +256,6 @@ export class AuthService implements OnModuleInit {
       return null;
     }
     return this.userRepo.findOne({ where: { id: legacyId } });
-  }
-
-  private async ensurePublicUserId(user: UserEntity) {
-    if (user.publicUserId) {
-      return user.publicUserId;
-    }
-
-    user.publicUserId = randomUUID();
-    await this.userRepo.save(user);
-    return user.publicUserId;
   }
 
   private async hashPassword(password: string) {

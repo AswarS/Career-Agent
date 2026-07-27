@@ -2,7 +2,7 @@ const CAREER_AGENT_API_BASE_PATH = '/api/career-agent';
 
 export const CAREER_AGENT_API_ROUTE_PATTERNS = {
   createThread: `${CAREER_AGENT_API_BASE_PATH}/threads`,
-  listThreads: `${CAREER_AGENT_API_BASE_PATH}/threads/:userId`,
+  listThreads: `${CAREER_AGENT_API_BASE_PATH}/threads`,
   thread: `${CAREER_AGENT_API_BASE_PATH}/threads/:threadId`,
   threadMessages: `${CAREER_AGENT_API_BASE_PATH}/threads/:threadId/messages`,
   threadMessagesStream: `${CAREER_AGENT_API_BASE_PATH}/threads/:threadId/messages/stream`,
@@ -116,8 +116,8 @@ export const CAREER_AGENT_API_ROUTES = {
   createThread() {
     return CAREER_AGENT_API_ROUTE_PATTERNS.createThread;
   },
-  listThreads(userId: string) {
-    return CAREER_AGENT_API_ROUTE_PATTERNS.listThreads.replace(':userId', encodeURIComponent(userId));
+  listThreads() {
+    return CAREER_AGENT_API_ROUTE_PATTERNS.listThreads;
   },
   thread(threadId: string) {
     return CAREER_AGENT_API_ROUTE_PATTERNS.thread.replace(':threadId', encodeURIComponent(threadId));

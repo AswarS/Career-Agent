@@ -15,16 +15,10 @@ export class UserEntity {
   @Column({ nullable: true })
   userId?: string;
 
-  /**
-   * Stable, opaque identifier exposed across API and module boundaries.
-   *
-   * `id` remains the internal database key. This column is temporarily
-   * nullable so existing databases can be synchronized and backfilled safely
-   * during a rolling upgrade.
-   */
-  @Index({ unique: true })
-  @Column({ nullable: true, length: 36 })
-  publicUserId?: string;
+  /** Stable, opaque identifier exposed across API and module boundaries. */
+  @Index('IDX_users_publicUserId_unique', { unique: true })
+  @Column({ length: 36 })
+  publicUserId!: string;
 
   @Index({ unique: true })
   @Column({ nullable: true })

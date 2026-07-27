@@ -37,8 +37,8 @@
 - 前端已提供登录/注册页；mock 模式使用本地模拟 session
 - upstream 联调模式建议实现 `POST /api/career-agent/auth/login`、`POST /api/career-agent/auth/register`、`GET /api/career-agent/auth/session`、`POST /api/career-agent/auth/logout`
 - upstream 登录/注册成功后建议返回 `AuthSession`，前端会保存 `access_token` 并在后续请求中携带 `Authorization: Bearer <token>`
-- upstream 联调模式，当前会话列表先按路径参数携带用户 id：`GET /api/career-agent/threads/:userId`
-- 前端默认用户 id 为 `1`，可通过 `VITE_CAREER_AGENT_USER_ID` 覆盖；登录后如 session 返回 `user.id`，前端优先使用该 id 读取会话列表和创建会话
+- upstream 联调模式通过 `GET /api/career-agent/threads` 获取当前认证用户的会话列表，不再在路径或请求体中提交用户 id
+- 登录后由 Bearer Token 确定用户身份；session 返回的 `user.id` 是不可变公开 UUID
 - 写请求（POST/PUT/DELETE）建议携带 x-request-id 用于链路追踪
 
 ### 2.6 成功与失败返回
@@ -298,8 +298,8 @@ ProfileRecord 使用 `career_profile_v1` 分组结构。基础信息主要由用
 ### 5.1 获取会话列表
 
 - 方法：GET
-- 路径：/api/career-agent/threads/:userId
-- 路径参数：userId(string)，当前本地默认值为 1
+- 路径：/api/career-agent/threads
+- 用户身份：由 Authorization Bearer Token 确定
 - 响应 200：ThreadSummary[]
 
 ### 5.2 获取会话消息

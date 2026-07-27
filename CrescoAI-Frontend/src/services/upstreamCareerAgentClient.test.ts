@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { AxiosInstance } from 'axios';
+import type { AxiosInstance, AxiosRequestConfig } from 'axios';
 import { createUpstreamCareerAgentClient } from './upstreamCareerAgentClient';
 import { sanitizeProfileRecord } from './upstreamContracts';
 
@@ -11,7 +11,7 @@ function createHttpClient(request: ReturnType<typeof vi.fn>) {
 
 describe('createUpstreamCareerAgentClient', () => {
   it('requests the artifact catalog and normalizes the response', async () => {
-    const request = vi.fn(async () => ({
+    const request = vi.fn(async (_config: AxiosRequestConfig) => ({
       data: [
       {
         id: 'artifact-weekly-plan',
@@ -139,7 +139,7 @@ describe('createUpstreamCareerAgentClient', () => {
     const threads = await client.listThreads();
 
     expect(request).toHaveBeenCalledWith({
-      url: '/api/career-agent/threads/7',
+      url: '/api/career-agent/threads',
     });
     expect(threads[0]).toEqual({
       id: '1',
@@ -151,7 +151,7 @@ describe('createUpstreamCareerAgentClient', () => {
   });
 
   it('creates a thread using the authenticated user identity', async () => {
-    const request = vi.fn(async () => ({
+    const request = vi.fn(async (_config: AxiosRequestConfig) => ({
       data: {
         id: 2,
         title: '新对话',

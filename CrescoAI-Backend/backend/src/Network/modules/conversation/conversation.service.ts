@@ -32,6 +32,7 @@ import { MessageEntity } from './entities/message.entity';
 import { ResourceEntity } from '../resource/entities/resource.entity';
 import { ArtifactEntity } from '../artifact/entities/artifact.entity';
 import { GeneratedAppEntity } from '../generated-app/entities/generated-app.entity';
+import { UserEntity } from '../user/entities/user.entity';
 import { execFileNoThrow } from '../../../utils/execFileNoThrow.js';
 
 declare global {
@@ -387,6 +388,8 @@ export class ConversationService {
     private readonly conversationRepo: Repository<ConversationEntity>,
     @InjectRepository(ResourceEntity)
     private readonly messageResourceRepo: Repository<ResourceEntity>,
+    @InjectRepository(UserEntity)
+    private readonly userRepo: Repository<UserEntity>,
     private readonly agentService: AgentService,
     private readonly skillService: SkillService,
     private readonly artifactService: ArtifactService,
@@ -754,7 +757,7 @@ export class ConversationService {
       let responseActions: MessageAction[] = [];
       if (skillResult.outputFiles?.length) {
         skillLogger.info('ConversationService', 'Skill outputFiles:', skillResult.outputFiles);
-        const media = this.skillOutputFilesToMedia(skillResult.outputFiles, conversation.userId);
+        const media = await this.skillOutputFilesToMedia(skillResult.outputFiles, conversation.userId);
         skillLogger.info('ConversationService', 'Mapped media:', media.map(m => ({ id: m.id, kind: m.kind, url: m.url })));
         const persisted = await this.persistAssistantGeneratedResources(
           conversation.userId,
@@ -863,7 +866,7 @@ export class ConversationService {
       let responseActions: MessageAction[] = [];
       if (skillResult.outputFiles?.length) {
         skillLogger.info('ConversationService', 'Skill outputFiles:', skillResult.outputFiles);
-        const media = this.skillOutputFilesToMedia(skillResult.outputFiles, conversation.userId);
+        const media = await this.skillOutputFilesToMedia(skillResult.outputFiles, conversation.userId);
         skillLogger.info('ConversationService', 'Mapped media:', media.map(m => ({ id: m.id, kind: m.kind, url: m.url })));
         const persisted = await this.persistAssistantGeneratedResources(
           conversation.userId,
@@ -940,7 +943,7 @@ export class ConversationService {
 
     const replyFiles = this.normalizeReplyFiles(agentResponse.file);
     const toolGeneratedMedia = agentResponse.generatedFiles?.length
-      ? this.skillOutputFilesToMedia(agentResponse.generatedFiles, conversation.userId)
+      ? await this.skillOutputFilesToMedia(agentResponse.generatedFiles, conversation.userId)
       : [];
     const assistantResources = [...replyFiles, ...toolGeneratedMedia];
     const persistedAssistantResources = await this.persistAssistantGeneratedResources(
@@ -1101,7 +1104,7 @@ export class ConversationService {
         assistantMessageId = event.assistantMessageId || assistantMessageId;
         const replyFiles = this.normalizeReplyFiles(event.file);
         const toolGeneratedMedia = event.generatedFiles?.length
-          ? this.skillOutputFilesToMedia(event.generatedFiles, conversation.userId)
+          ? await this.skillOutputFilesToMedia(event.generatedFiles, conversation.userId)
           : [];
         const assistantResources = [...replyFiles, ...toolGeneratedMedia];
         const persistedAssistantResources = await this.persistAssistantGeneratedResources(
@@ -1718,7 +1721,7 @@ export class ConversationService {
     }
 
     skillLogger.info('ConversationService', 'Skill outputFiles:', skillResult.outputFiles);
-    const media = this.skillOutputFilesToMedia(skillResult.outputFiles, userId);
+    const media = await this.skillOutputFilesToMedia(skillResult.outputFiles, userId);
     skillLogger.info('ConversationService', 'Mapped media:', media.map((item) => ({
       id: item.id,
       kind: item.kind,
@@ -2671,7 +2674,7 @@ export class ConversationService {
     return mapping;
   }
 
-  private skillOutputFilesToMedia(
+  private async skillOutputFilesToMedia(
     outputFiles: Array<{
       path?: string;
       url?: string;
@@ -2681,9 +2684,11 @@ export class ConversationService {
       sizeBytes?: number;
     }>,
     userId?: number,
-  ): MessageMedia[] {
+  ): Promise<MessageMedia[]> {
     const media: MessageMedia[] = [];
-    const uid = userId ?? '';
+    const uid = userId === undefined
+      ? ''
+      : await this.getPublicUserId(userId);
     for (const f of outputFiles) {
       const storagePath = f.path ?? f.url;
       if (!storagePath) {
@@ -2713,6 +2718,17 @@ export class ConversationService {
       });
     }
     return media;
+  }
+
+  private async getPublicUserId(userId: number) {
+    const user = await this.userRepo.findOne({
+      where: { id: userId },
+      select: ['publicUserId'],
+    });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    return user.publicUserId;
   }
 
   private isSupportedMediaKind(kind: unknown): kind is MessageMediaKind {

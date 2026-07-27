@@ -22,7 +22,9 @@ export class SettingsService {
   async getSettings(userId: number) {
     const user = await this.userRepo.findOne({ where: { id: userId } });
     const setting = await this.settingsRepo.findOne({ where: { userId } });
-    const apiSettings = setting ? [this.toApiSettingView(setting)] : [];
+    const apiSettings = setting && user
+      ? [this.toApiSettingView(setting, user.publicUserId)]
+      : [];
 
     return {
       account: user
@@ -52,8 +54,13 @@ export class SettingsService {
 
   /** List endpoint — returns array of normalised view objects */
   async listApiSettings(userId: number) {
-    const setting = await this.settingsRepo.findOne({ where: { userId } });
-    return setting ? [this.toApiSettingView(setting)] : [];
+    const [setting, user] = await Promise.all([
+      this.settingsRepo.findOne({ where: { userId } }),
+      this.userRepo.findOne({ where: { id: userId } }),
+    ]);
+    return setting && user
+      ? [this.toApiSettingView(setting, user.publicUserId)]
+      : [];
   }
 
   async upsertSettings(userId: number, dto: UpdateApiSettingsDto) {
@@ -89,7 +96,8 @@ export class SettingsService {
     if (videoModels !== undefined) existing.videoModels = videoModels;
 
     const saved = await this.settingsRepo.save(existing);
-    const view = this.toApiSettingView(saved);
+    const publicUserId = await this.getPublicUserId(userId);
+    const view = this.toApiSettingView(saved, publicUserId);
 
     return {
       message: 'api setting saved successfully',
@@ -203,10 +211,19 @@ export class SettingsService {
     }
   }
 
-  private toApiSettingView(setting: ApiSettingsEntity) {
+  private async getPublicUserId(userId: number) {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('user not found');
+    }
+    return user.publicUserId;
+  }
+
+  private toApiSettingView(setting: ApiSettingsEntity, publicUserId: string) {
     return {
       id: String(setting.id),
-      userId: String(setting.userId),
+      userId: publicUserId,
+      user_id: publicUserId,
       provider: 'anthropic',
       model: setting.model ?? defaultAnthropicModel,
       base_url: setting.baseUrl ?? defaultAnthropicBaseUrl,

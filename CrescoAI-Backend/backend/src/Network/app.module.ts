@@ -27,6 +27,9 @@ import { ProfileModule } from './modules/profile/profile.module';
 import { ProfileSuggestionEntity } from './modules/profile/entities/profile-suggestion.entity';
 
 const networkDir = dirname(fileURLToPath(import.meta.url));
+const synchronizeSchema =
+  process.env.CAREER_AGENT_SCHEMA_SYNC === 'true'
+  || process.env.NODE_ENV !== 'production';
 
 @Module({
   controllers: [AppController],
@@ -46,7 +49,9 @@ const networkDir = dirname(fileURLToPath(import.meta.url));
         GeneratedAppEntity,
         ProfileSuggestionEntity,
       ],
-      synchronize: true,
+      // Production schema changes are applied explicitly with
+      // `bun run network:migrate`, before any application instances start.
+      synchronize: synchronizeSchema,
     }),
     AgentModule,
     ConversationModule,

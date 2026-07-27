@@ -35,8 +35,8 @@
 ### 2.5 认证与请求上下文
 
 - mock 模式可不启用登录
-- upstream 联调模式，当前会话列表先按路径参数携带用户 id：`GET /api/career-agent/threads/:userId`
-- 前端默认用户 id 为 `1`，可通过 `VITE_CAREER_AGENT_USER_ID` 覆盖
+- upstream 联调模式通过 `GET /api/career-agent/threads` 获取当前认证用户的会话列表
+- 用户身份完全由 Bearer Token 确定，不在路径或请求体中接收用户 id
 - 写请求（POST/PUT/DELETE）建议携带 x-request-id 用于链路追踪
 
 ### 2.6 成功与失败返回
@@ -296,8 +296,8 @@ ProfileRecord 使用 `career_profile_v1` 分组结构。基础信息主要由用
 ### 5.1 获取会话列表
 
 - 方法：GET
-- 路径：/api/career-agent/threads/:userId
-- 路径参数：userId(string)，当前本地默认值为 1
+- 路径：/api/career-agent/threads
+- 用户身份：由 Authorization Bearer Token 确定
 - 响应 200：ThreadSummary[]
 
 ### 5.2 获取会话消息

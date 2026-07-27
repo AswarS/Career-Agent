@@ -25,7 +25,7 @@ import {
   normalizeUploadedConversationFile,
   sanitizeProfileRecord,
 } from './upstreamContracts';
-import { readStoredAuthToken, readStoredAuthTokenType, readStoredAuthUserId } from './authSessionStorage';
+import { readStoredAuthToken, readStoredAuthTokenType } from './authSessionStorage';
 
 export interface UpstreamCareerAgentClientOptions {
   baseUrl: string;
@@ -266,8 +266,6 @@ export function createUpstreamCareerAgentClient(
   options: UpstreamCareerAgentClientOptions,
 ): CareerAgentClient {
   const httpClient = options.httpClient ?? createAxiosClient(options.baseUrl, Boolean(options.withCredentials));
-  const getEffectiveUserId = () => readStoredAuthUserId() ?? options.userId;
-
   async function requestJson<T>(path: string, config?: AxiosRequestConfig): Promise<T> {
     try {
       const response = await httpClient.request<T>({
@@ -301,7 +299,7 @@ export function createUpstreamCareerAgentClient(
   return {
     async listThreads() {
       const payload = await requestJson<UpstreamThreadSummary[]>(
-        CAREER_AGENT_API_ROUTES.listThreads(getEffectiveUserId()),
+        CAREER_AGENT_API_ROUTES.listThreads(),
       );
       return payload.map(normalizeThreadSummary);
     },

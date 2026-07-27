@@ -144,6 +144,16 @@ describe('Career Agent HTTP smoke flow', () => {
         .set('Authorization', `Bearer ${accessToken}`)
         .expect(200);
 
+      await request(server)
+        .get('/api/career-agent/threads')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(200);
+
+      await request(server)
+        .get('/api/career-agent/threads/not-a-user-identity')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(403);
+
       const threadResponse = await request(server)
         .post('/api/career-agent/threads')
         .set('Authorization', `Bearer ${accessToken}`)
