@@ -805,6 +805,10 @@ export const useWorkspaceStore = defineStore('workspace', {
       const refreshThreadMessages = async () => {
         const nextMessages = await client.getThreadMessages(targetThreadId);
 
+        revokeLocalMessageResources(this.transientMessagesByThread[targetThreadId] ?? []);
+        delete this.transientMessagesByThread[targetThreadId];
+        this.messageSubmitStatusByThread[targetThreadId] = 'ready';
+
         if (this.activeThreadId !== targetThreadId) {
           return false;
         }
@@ -812,7 +816,6 @@ export const useWorkspaceStore = defineStore('workspace', {
         revokeLocalMessageResources(this.messages);
         this.messages = nextMessages;
         this.messagesStatus = 'ready';
-        this.messageSubmitStatusByThread[targetThreadId] = 'ready';
         return true;
       };
       const sendBufferedAndRefresh = async () => {
@@ -922,7 +925,7 @@ export const useWorkspaceStore = defineStore('workspace', {
         if (event.type === 'message.completed') {
           mergeAssistantPayload(event.assistantMessageId, {
             content: event.reply,
-            reasoning: event.reasoning ?? null,
+            reasoning: event.reasoning,
             media: event.media,
             files: event.files,
             actions: event.actions,

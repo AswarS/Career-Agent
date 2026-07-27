@@ -33,7 +33,7 @@ const networkDir = dirname(fileURLToPath(import.meta.url));
   imports: [
     TypeOrmModule.forRoot({
       type: 'sqlite',
-      database: join(networkDir, 'data', 'test.sqlite'),
+      database: process.env.CAREER_AGENT_DATABASE_PATH ?? join(networkDir, 'data', 'test.sqlite'),
       entities: [
         UserEntity,
         ArtifactEntity,
