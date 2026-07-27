@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { resolveRuntimeConfig } from '../config/runtime';
+import { createAuthClient } from './authClient';
 import { readStoredAuthSession, readStoredAuthTokenType, writeStoredAuthSession } from './authSessionStorage';
 
 const storage = new Map<string, string>();
@@ -69,5 +71,21 @@ describe('authSessionStorage', () => {
 
     expect(readStoredAuthSession()?.user.username).toBe('career_user');
     expect(readStoredAuthSession()?.refreshToken).toBe('refresh-token');
+  });
+
+  it('creates a token-free local session when upstream authentication is disabled', async () => {
+    const client = createAuthClient(resolveRuntimeConfig({
+      MODE: 'test',
+      VITE_CAREER_AGENT_CLIENT_MODE: 'upstream',
+      VITE_CAREER_AGENT_API_BASE_URL: 'http://localhost:4000',
+      VITE_CAREER_AGENT_USER_ID: '42',
+      VITE_CAREER_AGENT_SKIP_AUTH: 'true',
+    }));
+
+    const session = await client.login({ identifier: 'ignored', password: '' });
+
+    expect(session.user.id).toBe('42');
+    expect(session.accessToken).toBeNull();
+    expect(session.refreshToken).toBeNull();
   });
 });

@@ -26,6 +26,8 @@ export type BundledSkillDefinition = {
   hooks?: HooksSettings
   context?: 'inline' | 'fork'
   agent?: string
+  /** Existing application-owned directory containing this skill's resources. */
+  resourceRoot?: string
   /**
    * Additional reference files to extract to disk on first invocation.
    * Keys are relative paths (forward slashes, no `..`), values are content.
@@ -53,7 +55,7 @@ const bundledSkills: Command[] = []
 export function registerBundledSkill(definition: BundledSkillDefinition): void {
   const { files } = definition
 
-  let skillRoot: string | undefined
+  let skillRoot: string | undefined = definition.resourceRoot
   let getPromptForCommand = definition.getPromptForCommand
 
   if (files && Object.keys(files).length > 0) {

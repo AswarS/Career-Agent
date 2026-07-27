@@ -1,5 +1,12 @@
 import { dirname, isAbsolute, sep } from 'path'
 import { logEvent } from 'src/services/analytics/index.js'
+import { getNativeAutoMemoryToolPathError } from '../../memdir/autoMemoryIndex.js'
+import { checkNativeAutoMemorySecrets } from '../../memdir/autoMemorySecretGuard.js'
+import { commitNativeAutoMemoryTopicWrite } from '../../memdir/autoMemoryWriteLock.js'
+import {
+  commitConversationMemorySessionUpdate,
+  getConversationMemoryToolPathError,
+} from '../../Network/memory/conversationMemoryStorage.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js'
 import { diagnosticTracker } from '../../services/diagnosticTracking.js'
 import { clearDeliveredDiagnosticsForFile } from '../../services/lsp/LSPDiagnosticRegistry.js'
@@ -139,6 +146,30 @@ export const FileEditTool = buildTool({
     // Use expandPath for consistent path normalization (especially on Windows
     // where "/" vs "\" can cause readFileState lookup mismatches)
     const fullFilePath = expandPath(file_path)
+
+    const conversationMemoryPathError =
+      getConversationMemoryToolPathError(fullFilePath)
+    if (conversationMemoryPathError) {
+      return {
+        result: false,
+        behavior: 'ask',
+        message: conversationMemoryPathError,
+        errorCode: 0,
+      }
+    }
+
+    const managedPathError = getNativeAutoMemoryToolPathError(fullFilePath)
+    if (managedPathError) {
+      return { result: false, message: managedPathError, errorCode: 0 }
+    }
+
+    const autoMemorySecretError = checkNativeAutoMemorySecrets(
+      fullFilePath,
+      new_string,
+    )
+    if (autoMemorySecretError) {
+      return { result: false, message: autoMemorySecretError, errorCode: 0 }
+    }
 
     // Reject edits to team memory files that introduce secrets
     const secretError = checkTeamMemSecrets(fullFilePath, new_string)
@@ -439,56 +470,70 @@ export const FileEditTool = buildTool({
       )
     }
 
-    // 2. Load current state and confirm no changes since last read
-    // Please avoid async operations between here and writing to disk to preserve atomicity
-    const {
-      content: originalFileContents,
-      fileExists,
-      encoding,
-      lineEndings: endings,
-    } = readFileForEdit(absoluteFilePath)
+    const { originalFileContents, actualOldString, patch, updatedFile } =
+      await commitNativeAutoMemoryTopicWrite(absoluteFilePath, () => {
+        // Keep the staleness check and topic edit synchronous. Native memory
+        // holds its per-user directory lock until the index is rebuilt.
+        const {
+          content: originalFileContents,
+          fileExists,
+          encoding,
+          lineEndings: endings,
+        } = readFileForEdit(absoluteFilePath)
 
-    if (fileExists) {
-      const lastWriteTime = getFileModificationTime(absoluteFilePath)
-      const lastRead = readFileState.get(absoluteFilePath)
-      if (!lastRead || lastWriteTime > lastRead.timestamp) {
-        // Timestamp indicates modification, but on Windows timestamps can change
-        // without content changes (cloud sync, antivirus, etc.). For full reads,
-        // compare content as a fallback to avoid false positives.
-        const isFullRead =
-          lastRead &&
-          lastRead.offset === undefined &&
-          lastRead.limit === undefined
-        const contentUnchanged =
-          isFullRead && originalFileContents === lastRead.content
-        if (!contentUnchanged) {
-          throw new Error(FILE_UNEXPECTEDLY_MODIFIED_ERROR)
+        if (fileExists) {
+          const lastWriteTime = getFileModificationTime(absoluteFilePath)
+          const lastRead = readFileState.get(absoluteFilePath)
+          if (!lastRead || lastWriteTime > lastRead.timestamp) {
+            const isFullRead =
+              lastRead &&
+              lastRead.offset === undefined &&
+              lastRead.limit === undefined
+            const contentUnchanged =
+              isFullRead && originalFileContents === lastRead.content
+            if (!contentUnchanged) {
+              throw new Error(FILE_UNEXPECTEDLY_MODIFIED_ERROR)
+            }
+          }
         }
-      }
-    }
 
-    // 3. Use findActualString to handle quote normalization
-    const actualOldString =
-      findActualString(originalFileContents, old_string) || old_string
+        const actualOldString =
+          findActualString(originalFileContents, old_string) || old_string
+        const actualNewString = preserveQuoteStyle(
+          old_string,
+          actualOldString,
+          new_string,
+        )
+        const { patch, updatedFile } = getPatchForEdit({
+          filePath: absoluteFilePath,
+          fileContents: originalFileContents,
+          oldString: actualOldString,
+          newString: actualNewString,
+          replaceAll: replace_all,
+        })
 
-    // Preserve curly quotes in new_string when the file uses them
-    const actualNewString = preserveQuoteStyle(
-      old_string,
-      actualOldString,
-      new_string,
+        const finalContentSecretError = checkNativeAutoMemorySecrets(
+          absoluteFilePath,
+          updatedFile,
+        )
+        if (finalContentSecretError) {
+          throw new Error(finalContentSecretError)
+        }
+
+        const conversationMemoryContentError =
+          getConversationMemoryToolPathError(absoluteFilePath, updatedFile)
+        if (conversationMemoryContentError) {
+          throw new Error(conversationMemoryContentError)
+        }
+
+        writeTextContent(absoluteFilePath, updatedFile, encoding, endings)
+        return { originalFileContents, actualOldString, patch, updatedFile }
+      })
+
+    await commitConversationMemorySessionUpdate(
+      absoluteFilePath,
+      updatedFile,
     )
-
-    // 4. Generate patch
-    const { patch, updatedFile } = getPatchForEdit({
-      filePath: absoluteFilePath,
-      fileContents: originalFileContents,
-      oldString: actualOldString,
-      newString: actualNewString,
-      replaceAll: replace_all,
-    })
-
-    // 5. Write to disk
-    writeTextContent(absoluteFilePath, updatedFile, encoding, endings)
 
     // Notify LSP servers about file modification (didChange) and save (didSave)
     const lspManager = getLspServerManager()

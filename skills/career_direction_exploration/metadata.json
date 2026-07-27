@@ -1,0 +1,93 @@
+{
+  "original_metadata": {
+    "skill_id": "career_direction_exploration",
+    "name": "职业方向探索",
+    "type": "career_exploration_and_positioning",
+    "kag_role": "skill_action",
+    "description": "根据用户画像、偏好和市场信息推荐多个可探索职业方向。",
+    "inputs": [
+      "user_profile_resource",
+      "user_intent_constraint_resource",
+      "market_trend_resource optional"
+    ],
+    "outputs": [
+      "recommended_directions",
+      "fit_scores",
+      "entry_barriers",
+      "risk_warnings",
+      "priority_direction"
+    ],
+    "preconditions": [
+      "用户已提出相关职业发展请求，或上一步 action 已产生可用上下文"
+    ],
+    "postconditions": [
+      "产生可进入下一步 action 的 state_update 或 intermediate_artifact"
+    ],
+    "possible_next_skills": [
+      "role_cognition_analysis",
+      "target_role_positioning",
+      "career_path_simulation"
+    ],
+    "required_context_types": [
+      "user_profile_resource",
+      "user_intent_constraint_resource",
+      "market_trend_resource"
+    ],
+    "allowed_tools": [
+      "WebSearchTool",
+      "AskUserQuestionTool"
+    ],
+    "recommended_verifiers": [
+      "profile_consistency_check",
+      "evidence_support_check"
+    ]
+  },
+  "compiled_metadata": {
+    "skill_id": "career_direction_exploration",
+    "claude_skill_name": "career_direction_exploration",
+    "display_name": "职业方向探索",
+    "type": "career_exploration_and_positioning",
+    "kag_role": "skill_action",
+    "summary": "Recommends multiple career directions using profile fit, constraints, and market evidence.",
+    "minimum_required_inputs": [
+      "user_profile_resource",
+      "user_intent_constraint_resource"
+    ],
+    "optional_inputs": [
+      "market_trend_resource"
+    ],
+    "required_context_types": [
+      "user_profile_resource",
+      "user_intent_constraint_resource",
+      "market_trend_resource"
+    ],
+    "allowed_tools": [
+      "WebSearchTool",
+      "AskUserQuestionTool"
+    ],
+    "recommended_verifiers": [
+      "profile_consistency_check",
+      "evidence_support_check"
+    ],
+    "trigger_examples": [
+      "I am unsure which career direction fits me.",
+      "Given my background and constraints, what roles should I explore?",
+      "Compare several career directions before I commit."
+    ],
+    "negative_trigger_examples": [
+      "Rewrite my resume for data analyst jobs.",
+      "Explain what a product manager does day to day.",
+      "Simulate my 5-year path after choosing two roles."
+    ],
+    "handoff_conditions": {
+      "role_cognition_analysis": "Use when the user selects one direction and wants role reality, tasks, tools, and misconceptions.",
+      "target_role_positioning": "Use when several candidate roles have been identified and the user needs a primary target.",
+      "career_path_simulation": "Use when the user wants to compare long-term outcomes across directions."
+    },
+    "output_artifact_type": "career_direction_recommendation",
+    "risk_level": "medium",
+    "requires_current_information": true,
+    "requires_user_profile": true,
+    "requires_external_evidence": true
+  }
+}

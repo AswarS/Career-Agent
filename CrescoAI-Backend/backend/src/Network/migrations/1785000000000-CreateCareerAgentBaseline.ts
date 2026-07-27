@@ -1,6 +1,20 @@
 import type { MigrationInterface, QueryRunner } from "typeorm";
 
 const infrastructureTables = new Set(["migrations", "typeorm_metadata"]);
+// These tables are created by the upstream Profile V2 and conversation
+// migrations, whose historical timestamps predate this baseline migration.
+// They do not indicate a partially initialized legacy Career database.
+const preBaselineTables = new Set([
+  "user_profiles",
+  "profile_states",
+  "profile_revisions",
+  "profile_memory_items",
+  "profile_projection_jobs",
+  "profile_change_proposals",
+  "profile_memory_confidence_rollback",
+  "profile_memory_index_rollback",
+  "conversation_cleanup_tasks",
+]);
 const legacyRequiredColumns: Record<string, string[]> = {
   users: ["id", "profileJson", "tokenVersion", "createdAt", "updatedAt"],
   artifacts: ["id", "userId", "type", "createdAt"],
@@ -77,7 +91,10 @@ export class CreateCareerAgentBaseline1785000000000 implements MigrationInterfac
     `)) as Array<{ name: string }>;
     const applicationTables = tables
       .map(({ name }) => name)
-      .filter((name) => !infrastructureTables.has(name));
+      .filter(
+        (name) =>
+          !infrastructureTables.has(name) && !preBaselineTables.has(name),
+      );
 
     if (applicationTables.length > 0 && !applicationTables.includes("users")) {
       throw new Error(

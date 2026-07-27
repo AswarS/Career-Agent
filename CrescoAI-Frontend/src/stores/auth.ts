@@ -50,8 +50,10 @@ export const useAuthStore = defineStore('auth', {
 
         try {
           if (runtimeConfig.skipAuth) {
-            const storedSession = readStoredAuthSession() ?? await authClient.login({ identifier: 'dev@local', password: 'skip-auth' });
-            this.setSession(storedSession);
+            // Always replace a stale authenticated session so upstream requests do not
+            // accidentally keep sending an expired token while auth is disabled.
+            const localSession = await authClient.login({ identifier: runtimeConfig.userId, password: '' });
+            this.setSession(localSession);
             this.status = 'ready';
             this.initialized = true;
             return;

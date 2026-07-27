@@ -6,10 +6,19 @@ export const CAREER_AGENT_API_ROUTE_PATTERNS = {
   thread: `${CAREER_AGENT_API_BASE_PATH}/threads/:threadId`,
   threadMessages: `${CAREER_AGENT_API_BASE_PATH}/threads/:threadId/messages`,
   threadMessagesStream: `${CAREER_AGENT_API_BASE_PATH}/threads/:threadId/messages/stream`,
+  threadToolResponse: `${CAREER_AGENT_API_BASE_PATH}/threads/:threadId/tool-responses/:toolUseId`,
   threadFiles: `${CAREER_AGENT_API_BASE_PATH}/threads/:threadId/files`,
   threadFile: `${CAREER_AGENT_API_BASE_PATH}/threads/:threadId/files/:fileName`,
   profile: `${CAREER_AGENT_API_BASE_PATH}/profile`,
   profileSuggestions: `${CAREER_AGENT_API_BASE_PATH}/profile/suggestions`,
+  profileBase: `${CAREER_AGENT_API_BASE_PATH}/profile/base`,
+  profileState: `${CAREER_AGENT_API_BASE_PATH}/profile/state`,
+  profileMemories: `${CAREER_AGENT_API_BASE_PATH}/profile/memories`,
+  profileMemory: `${CAREER_AGENT_API_BASE_PATH}/profile/memories/:memoryId`,
+  profileMemoryByIndex: `${CAREER_AGENT_API_BASE_PATH}/profile/memories/by-index/:profileIndex`,
+  profileProposals: `${CAREER_AGENT_API_BASE_PATH}/profile/proposals`,
+  profileProposalAction: `${CAREER_AGENT_API_BASE_PATH}/profile/proposals/:proposalId/:action`,
+  profileHistory: `${CAREER_AGENT_API_BASE_PATH}/profile/history`,
   listArtifacts: `${CAREER_AGENT_API_BASE_PATH}/artifacts`,
   artifact: `${CAREER_AGENT_API_BASE_PATH}/artifacts/:artifactId`,
   refreshArtifact: `${CAREER_AGENT_API_BASE_PATH}/artifacts/:artifactId/refresh`,
@@ -52,6 +61,11 @@ export const CAREER_AGENT_API_ROUTE_DESCRIPTORS = [
   },
   {
     method: 'POST',
+    path: CAREER_AGENT_API_ROUTE_PATTERNS.threadToolResponse,
+    purpose: '提交 AskUserQuestion 的答案并恢复当前 agent。',
+  },
+  {
+    method: 'POST',
     path: CAREER_AGENT_API_ROUTE_PATTERNS.threadFiles,
     purpose: '向当前会话直传单个文件，并返回发送消息可引用的 asset id。',
   },
@@ -74,6 +88,26 @@ export const CAREER_AGENT_API_ROUTE_DESCRIPTORS = [
     method: 'GET',
     path: CAREER_AGENT_API_ROUTE_PATTERNS.profileSuggestions,
     purpose: '加载与对话上下文关联的非破坏式画像建议。',
+  },
+  {
+    method: 'GET/PATCH',
+    path: CAREER_AGENT_API_ROUTE_PATTERNS.profileBase,
+    purpose: '读取或按版本更新当前认证用户的基础 Profile V2。',
+  },
+  {
+    method: 'GET/POST',
+    path: CAREER_AGENT_API_ROUTE_PATTERNS.profileMemories,
+    purpose: '查询或按 L1-L3 新增当前认证用户的 Profile Memory。',
+  },
+  {
+    method: 'PUT',
+    path: CAREER_AGENT_API_ROUTE_PATTERNS.profileMemoryByIndex,
+    purpose: '按公开 profileIndex 替换当前认证用户的一条活动 Profile Memory。',
+  },
+  {
+    method: 'GET',
+    path: CAREER_AGENT_API_ROUTE_PATTERNS.profileProposals,
+    purpose: '加载需要用户确认的 Profile 变更提案。',
   },
   {
     method: 'GET',
@@ -131,6 +165,11 @@ export const CAREER_AGENT_API_ROUTES = {
   streamThreadMessage(threadId: string) {
     return CAREER_AGENT_API_ROUTE_PATTERNS.threadMessagesStream.replace(':threadId', encodeURIComponent(threadId));
   },
+  threadToolResponse(threadId: string, toolUseId: string) {
+    return CAREER_AGENT_API_ROUTE_PATTERNS.threadToolResponse
+      .replace(':threadId', encodeURIComponent(threadId))
+      .replace(':toolUseId', encodeURIComponent(toolUseId));
+  },
   threadFiles(threadId: string) {
     return CAREER_AGENT_API_ROUTE_PATTERNS.threadFiles.replace(':threadId', encodeURIComponent(threadId));
   },
@@ -144,6 +183,32 @@ export const CAREER_AGENT_API_ROUTES = {
   },
   profileSuggestions() {
     return CAREER_AGENT_API_ROUTE_PATTERNS.profileSuggestions;
+  },
+  profileBase() {
+    return CAREER_AGENT_API_ROUTE_PATTERNS.profileBase;
+  },
+  profileState() {
+    return CAREER_AGENT_API_ROUTE_PATTERNS.profileState;
+  },
+  profileMemories() {
+    return CAREER_AGENT_API_ROUTE_PATTERNS.profileMemories;
+  },
+  profileMemory(memoryId: string) {
+    return CAREER_AGENT_API_ROUTE_PATTERNS.profileMemory.replace(':memoryId', encodeURIComponent(memoryId));
+  },
+  profileMemoryByIndex(profileIndex: string) {
+    return CAREER_AGENT_API_ROUTE_PATTERNS.profileMemoryByIndex.replace(':profileIndex', encodeURIComponent(profileIndex));
+  },
+  profileProposals() {
+    return CAREER_AGENT_API_ROUTE_PATTERNS.profileProposals;
+  },
+  profileProposalAction(proposalId: string, action: 'accept' | 'reject') {
+    return CAREER_AGENT_API_ROUTE_PATTERNS.profileProposalAction
+      .replace(':proposalId', encodeURIComponent(proposalId))
+      .replace(':action', action);
+  },
+  profileHistory() {
+    return CAREER_AGENT_API_ROUTE_PATTERNS.profileHistory;
   },
   listArtifacts() {
     return CAREER_AGENT_API_ROUTE_PATTERNS.listArtifacts;

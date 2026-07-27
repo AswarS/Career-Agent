@@ -1,6 +1,13 @@
 import { dirname, sep } from 'path'
 import { logEvent } from 'src/services/analytics/index.js'
 import { z } from 'zod/v4'
+import { getNativeAutoMemoryToolPathError } from '../../memdir/autoMemoryIndex.js'
+import { checkNativeAutoMemorySecrets } from '../../memdir/autoMemorySecretGuard.js'
+import { commitNativeAutoMemoryTopicWrite } from '../../memdir/autoMemoryWriteLock.js'
+import {
+  commitConversationMemorySessionUpdate,
+  getConversationMemoryToolPathError,
+} from '../../Network/memory/conversationMemoryStorage.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js'
 import { diagnosticTracker } from '../../services/diagnosticTracking.js'
 import { clearDeliveredDiagnosticsForFile } from '../../services/lsp/LSPDiagnosticRegistry.js'
@@ -153,6 +160,31 @@ export const FileWriteTool = buildTool({
   async validateInput({ file_path, content }, toolUseContext: ToolUseContext) {
     const fullFilePath = expandPath(file_path)
 
+    const conversationMemoryPathError = getConversationMemoryToolPathError(
+      fullFilePath,
+      content,
+    )
+    if (conversationMemoryPathError) {
+      return {
+        result: false,
+        message: conversationMemoryPathError,
+        errorCode: 0,
+      }
+    }
+
+    const managedPathError = getNativeAutoMemoryToolPathError(fullFilePath)
+    if (managedPathError) {
+      return { result: false, message: managedPathError, errorCode: 0 }
+    }
+
+    const autoMemorySecretError = checkNativeAutoMemorySecrets(
+      fullFilePath,
+      content,
+    )
+    if (autoMemorySecretError) {
+      return { result: false, message: autoMemorySecretError, errorCode: 0 }
+    }
+
     // Reject writes to team memory files that contain secrets
     const secretError = checkTeamMemSecrets(fullFilePath, content)
     if (secretError) {
@@ -263,46 +295,44 @@ export const FileWriteTool = buildTool({
       )
     }
 
-    // Load current state and confirm no changes since last read.
-    // Please avoid async operations between here and writing to disk to preserve atomicity.
-    let meta: ReturnType<typeof readFileSyncWithMetadata> | null
-    try {
-      meta = readFileSyncWithMetadata(fullFilePath)
-    } catch (e) {
-      if (isENOENT(e)) {
-        meta = null
-      } else {
-        throw e
-      }
-    }
-
-    if (meta !== null) {
-      const lastWriteTime = getFileModificationTime(fullFilePath)
-      const lastRead = readFileState.get(fullFilePath)
-      if (!lastRead || lastWriteTime > lastRead.timestamp) {
-        // Timestamp indicates modification, but on Windows timestamps can change
-        // without content changes (cloud sync, antivirus, etc.). For full reads,
-        // compare content as a fallback to avoid false positives.
-        const isFullRead =
-          lastRead &&
-          lastRead.offset === undefined &&
-          lastRead.limit === undefined
-        // meta.content is CRLF-normalized — matches readFileState's normalized form.
-        if (!isFullRead || meta.content !== lastRead.content) {
-          throw new Error(FILE_UNEXPECTEDLY_MODIFIED_ERROR)
+    const oldContent = await commitNativeAutoMemoryTopicWrite(
+      fullFilePath,
+      () => {
+        // Keep the staleness check and topic write synchronous. Native memory
+        // holds its per-user directory lock until the index is rebuilt.
+        let meta: ReturnType<typeof readFileSyncWithMetadata> | null
+        try {
+          meta = readFileSyncWithMetadata(fullFilePath)
+        } catch (e) {
+          if (isENOENT(e)) {
+            meta = null
+          } else {
+            throw e
+          }
         }
-      }
-    }
 
-    const enc = meta?.encoding ?? 'utf8'
-    const oldContent = meta?.content ?? null
+        if (meta !== null) {
+          const lastWriteTime = getFileModificationTime(fullFilePath)
+          const lastRead = readFileState.get(fullFilePath)
+          if (!lastRead || lastWriteTime > lastRead.timestamp) {
+            const isFullRead =
+              lastRead &&
+              lastRead.offset === undefined &&
+              lastRead.limit === undefined
+            if (!isFullRead || meta.content !== lastRead.content) {
+              throw new Error(FILE_UNEXPECTEDLY_MODIFIED_ERROR)
+            }
+          }
+        }
 
-    // Write is a full content replacement — the model sent explicit line endings
-    // in `content` and meant them. Do not rewrite them. Previously we preserved
-    // the old file's line endings (or sampled the repo via ripgrep for new
-    // files), which silently corrupted e.g. bash scripts with \r on Linux when
-    // overwriting a CRLF file or when binaries in cwd poisoned the repo sample.
-    writeTextContent(fullFilePath, content, enc, 'LF')
+        const enc = meta?.encoding ?? 'utf8'
+        const oldContent = meta?.content ?? null
+        writeTextContent(fullFilePath, content, enc, 'LF')
+        return oldContent
+      },
+    )
+
+    await commitConversationMemorySessionUpdate(fullFilePath, content)
 
     // Notify LSP servers about file modification (didChange) and save (didSave)
     const lspManager = getLspServerManager()

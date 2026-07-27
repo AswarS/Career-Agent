@@ -110,7 +110,10 @@ export const AskUserQuestionTool: Tool<InputSchema, Output> = buildTool({
   name: ASK_USER_QUESTION_TOOL_NAME,
   searchHint: 'prompt the user with a multiple-choice question',
   maxResultSizeChars: 100_000,
-  shouldDefer: true,
+  // DeepSeek's ToolSearch flow returns a tool_reference but does not load the
+  // referenced schema into the next turn.  Asking the user is a core
+  // conversational action, so keep its schema available from the first turn.
+  alwaysLoad: true,
   async description() {
     return DESCRIPTION;
   },
@@ -238,7 +241,7 @@ export const AskUserQuestionTool: Tool<InputSchema, Output> = buildTool({
     }).join(', ');
     return {
       type: 'tool_result',
-      content: `User has answered your questions: ${answersText}. You can now continue with the user's answers in mind.`,
+      content: `User has answered your questions: ${answersText}. You can now continue with the user's answers in mind.\n[CrescoAI AskUserQuestion response]\n${JSON.stringify({ answers, annotations })}`,
       tool_use_id: toolUseID
     };
   }

@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  OnModuleInit,
   UnsupportedMediaTypeException,
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
@@ -18,22 +19,41 @@ import {
   sanitizeServerPhysicalPaths,
   sanitizeServerPhysicalPathsInValue,
 } from '../../utils/publicOutputSanitizer.js';
-import { fileURLToPath } from 'node:url';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 import { AgentService } from '../agent/agent.service';
+import type { AgentAskQuestion } from '../agent/agent.runtime.js';
 import { SkillService } from '../skill/skill.service';
 import type { SkillHandlerResult, SkillProgressEvent } from '../skill/skill.registry';
 import { ArtifactService } from '../artifact/artifact.service';
 import { ProfileService } from '../profile/profile.service';
+import { ConversationTranscriptProjectionService } from './transcript-projection.service.js';
+import {
+  createSkillLoadedBlock,
+  normalizeCanonicalMessageBlocks,
+  THINKING_BLOCK_TITLE,
+} from './canonical-message-blocks.js';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { SendMultimodalMessageDto } from './dto/send-multimodal-message.dto';
+import { RespondToToolDto } from './dto/respond-to-tool.dto';
 import { ConversationEntity } from './entities/conversation.entity';
+import { ConversationCleanupTaskEntity } from './entities/conversation-cleanup-task.entity';
 import { MessageEntity } from './entities/message.entity';
 import { ResourceEntity } from '../resource/entities/resource.entity';
 import { ArtifactEntity } from '../artifact/entities/artifact.entity';
 import { GeneratedAppEntity } from '../generated-app/entities/generated-app.entity';
 import { UserEntity } from '../user/entities/user.entity';
 import { execFileNoThrow } from '../../../utils/execFileNoThrow.js';
+import {
+  findNetworkTranscriptFile,
+  getNetworkConversationMemoryDir,
+  networkRootDir,
+  userDataRootDir,
+} from '../../utils/networkTranscriptStorage.js';
+import { deleteConversationMemorySession } from '../../memory/conversationMemoryLifecycle.js';
+import {
+  markConversationMemorySessionDeleting,
+  unmarkConversationMemorySessionDeleting,
+} from '../../memory/conversationMemoryLock.js';
 
 declare global {
   namespace Express {
@@ -76,6 +96,25 @@ export interface MessageMedia {
   createdAt?: string;
 }
 
+export type MessageBlockType = 'text' | 'status' | 'tool_call' | 'tool_result' | 'skill' | 'artifact' | 'ask_question';
+
+export interface MessageBlock {
+  id: string;
+  type: MessageBlockType;
+  text?: string;
+  title?: string;
+  name?: string | null;
+  status?: string | null;
+  toolUseId?: string | null;
+  isError?: boolean;
+  questions?: AgentAskQuestion[];
+  answers?: Record<string, string>;
+  media?: MessageMedia[];
+  files?: MessageMedia[];
+  actions?: MessageAction[];
+  raw?: Record<string, unknown> | null;
+}
+
 export interface ConversationMessage {
   id: string;
   thread_id: string;
@@ -96,6 +135,17 @@ export interface ConversationMessage {
   attachments?: MessageMedia[];
   client_request_id?: string;
   clientRequestId?: string;
+  uuid?: string;
+  parent_uuid?: string | null;
+  parentUuid?: string | null;
+  session_id?: string;
+  sessionId?: string;
+  model?: string;
+  usage?: Record<string, unknown>;
+  stop_reason?: string | null;
+  stopReason?: string | null;
+  blocks?: MessageBlock[];
+  raw?: Record<string, unknown>;
   created_at: string;
   createdAt: string;
 }
@@ -149,6 +199,23 @@ export type ConversationStreamEvent =
       delta: string;
     }
   | {
+      type: 'message.block.delta';
+      message_id: string;
+      messageId: string;
+      block_id: string;
+      blockId: string;
+      block_type: MessageBlockType;
+      blockType: MessageBlockType;
+      delta?: string;
+      block?: MessageBlock;
+    }
+  | {
+      type: 'message.block.completed';
+      message_id: string;
+      messageId: string;
+      block: MessageBlock;
+    }
+  | {
       type: 'artifact.created';
       message_id: string;
       messageId: string;
@@ -170,6 +237,7 @@ export type ConversationStreamEvent =
       think?: string;
       media?: MessageMedia[];
       actions?: MessageAction[];
+      blocks?: MessageBlock[];
       raw?: Record<string, unknown>;
     }
   | {
@@ -196,8 +264,6 @@ interface RuntimeJsonlEvent {
   };
 }
 
-const networkRootDir = fileURLToPath(new URL('../../', import.meta.url));
-const userDataRootDir = join(networkRootDir, 'user');
 const conversationFilesRootDir = join(networkRootDir, 'files');
 const maxUploadBytes = 20 * 1024 * 1024;
 const manifestFileName = '_manifest.json';
@@ -235,11 +301,9 @@ type SkillStreamRoute =
   | { kind: 'list' }
   | {
       kind: 'invoke';
-      source: 'skill' | 'skill:auto';
+      source: 'skill';
       skillName: string;
       args: string;
-      routerReason?: string;
-      autoSkillRouteId?: string;
     };
 
 interface StreamMessageIds {
@@ -380,7 +444,7 @@ const supportedMediaKinds = new Set<MessageMediaKind>([
 ]);
 
 @Injectable()
-export class ConversationService {
+export class ConversationService implements OnModuleInit {
   constructor(
     @InjectDataSource()
     private readonly dataSource: DataSource,
@@ -388,17 +452,30 @@ export class ConversationService {
     private readonly conversationRepo: Repository<ConversationEntity>,
     @InjectRepository(ResourceEntity)
     private readonly messageResourceRepo: Repository<ResourceEntity>,
+    @InjectRepository(ConversationCleanupTaskEntity)
+    private readonly cleanupTaskRepo: Repository<ConversationCleanupTaskEntity>,
     @InjectRepository(UserEntity)
     private readonly userRepo: Repository<UserEntity>,
     private readonly agentService: AgentService,
     private readonly skillService: SkillService,
     private readonly artifactService: ArtifactService,
     private readonly profileService: ProfileService,
+    private readonly transcriptProjection: ConversationTranscriptProjectionService,
   ) {}
 
-  async createConversation(dto: CreateConversationDto, requestUserId?: number) {
+  async onModuleInit(): Promise<void> {
+    try {
+      await this.retryPendingConversationCleanupTasks();
+    } catch (error) {
+      console.error('[ConversationService] cleanup task recovery failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  async createConversation(dto: CreateConversationDto, requestUserId: number) {
     const now = new Date();
-    const userId = requestUserId ?? dto.userId ?? 1;
+    const userId = requestUserId;
     const agentConversation = await this.agentService.createConversation({
       userId: String(userId),
       title: dto.title,
@@ -444,31 +521,68 @@ export class ConversationService {
     }
 
     const conversation = await this.getConversationByIdentifier(conversationId, requestUserId);
-
-    await this.dataSource.transaction(async (manager) => {
-      await manager.delete(MessageEntity, {
-        userId: conversation.userId,
-        conversationId: conversation.id,
-      });
-      await manager.delete(ResourceEntity, {
-        userId: conversation.userId,
-        conversationId: conversation.id,
-      });
-      await manager.delete(ArtifactEntity, {
-        userId: conversation.userId,
-        conversationId: conversation.id,
-      });
-      await manager.delete(GeneratedAppEntity, {
-        userId: conversation.userId,
-        conversationId: conversation.id,
-      });
-      await manager.delete(ConversationEntity, {
-        cid: conversation.cid,
-        userId: conversation.userId,
-      });
+    const memoryRoot = getNetworkConversationMemoryDir(conversation.userId);
+    const now = new Date();
+    const cleanupTask = this.cleanupTaskRepo.create({
+      id: randomUUID(),
+      userId: conversation.userId,
+      conversationId: conversation.id,
+      status: 'pending',
+      attempts: 0,
+      lastError: null,
+      createdAt: now,
+      updatedAt: now,
+      completedAt: null,
     });
 
-    await this.cleanupConversationFiles(conversation);
+    markConversationMemorySessionDeleting(memoryRoot, conversation.id);
+    try {
+      await this.agentService.disposeConversationRuntime(
+        String(conversation.userId),
+        conversation.id,
+      );
+    } catch (error) {
+      unmarkConversationMemorySessionDeleting(memoryRoot, conversation.id);
+      throw error;
+    }
+
+    try {
+      await this.dataSource.transaction(async (manager) => {
+        await manager.save(ConversationCleanupTaskEntity, cleanupTask);
+        await manager.delete(MessageEntity, {
+          userId: conversation.userId,
+          conversationId: conversation.id,
+        });
+        await manager.delete(ResourceEntity, {
+          userId: conversation.userId,
+          conversationId: conversation.id,
+        });
+        await manager.delete(ArtifactEntity, {
+          userId: conversation.userId,
+          conversationId: conversation.id,
+        });
+        await manager.delete(GeneratedAppEntity, {
+          userId: conversation.userId,
+          conversationId: conversation.id,
+        });
+        await manager.delete(ConversationEntity, {
+          cid: conversation.cid,
+          userId: conversation.userId,
+        });
+      });
+    } catch (error) {
+      unmarkConversationMemorySessionDeleting(memoryRoot, conversation.id);
+      this.agentService.restoreConversationRuntimeAfterFailedDeletion(
+        String(conversation.userId),
+        conversation.id,
+      );
+      throw error;
+    }
+
+    await Promise.all([
+      this.cleanupConversationFiles(conversation),
+      this.processConversationMemoryCleanupTask(cleanupTask),
+    ]);
   }
 
   async uploadConversationFile(
@@ -582,61 +696,6 @@ export class ConversationService {
       attachments = await this.resolveImplicitAttachments(conversation, dto.content);
     }
 
-    const createSkillCommand = this.parseCreateSkillCommand(dto.content);
-    if (createSkillCommand) {
-      const created = await this.skillService.createCustomSkill(
-        conversation.userId,
-        createSkillCommand.name,
-        createSkillCommand.description,
-        createSkillCommand.content,
-        createSkillCommand.category,
-        createSkillCommand.arguments,
-      );
-
-      const reply =
-        `Skill \`/${created.name}\` created successfully.\n\n` +
-        `You can now invoke it with \`/${created.name}\`.`;
-
-      const userMessageId = `msg_user_skill_${randomUUID().replace(/-/g, '')}`;
-      const assistantMessageId = `msg_assistant_skill_${randomUUID().replace(/-/g, '')}`;
-      const now = new Date();
-      const sessionFilePath = await this.findOrCreateRuntimeSessionFile(
-        conversation.id,
-        conversation.userId,
-      );
-
-      await appendFile(
-        sessionFilePath,
-        `${JSON.stringify({ type: 'user', message: { id: userMessageId, role: 'user', content: dto.content }, uuid: randomUUID(), timestamp: now.toISOString(), sessionId: conversation.id })}\n`,
-        'utf8',
-      );
-      await appendFile(
-        sessionFilePath,
-        `${JSON.stringify({ type: 'assistant', message: { id: assistantMessageId, role: 'assistant', content: this.createAssistantContentBlocks(reply) }, uuid: randomUUID(), timestamp: new Date(now.getTime() + 100).toISOString(), sessionId: conversation.id })}\n`,
-        'utf8',
-      );
-      await this.linkUploadedResourcesToMessage(
-        conversation.userId,
-        conversation.id,
-        userMessageId,
-        attachments,
-      );
-      await this.touchConversation(conversation, dto.content);
-
-      return {
-        accepted: true,
-        status: 'done',
-        conversation_id: conversation.id,
-        conversationId: conversation.id,
-        message_id: userMessageId,
-        messageId: userMessageId,
-        assistant_message_id: assistantMessageId,
-        assistantMessageId: assistantMessageId,
-        reply,
-        raw: { source: 'skill:create', skillName: created.name },
-      };
-    }
-
     const skillInvocation = this.skillService.parseSkillInvocation(dto.content);
     if (skillInvocation && skillInvocation.skillName === 'skills') {
       const skills = await this.skillService.listSkills(conversation.userId);
@@ -704,213 +763,8 @@ export class ConversationService {
         assistant_message_id: assistantMessageId,
         assistantMessageId: assistantMessageId,
         reply,
+        blocks: this.createBlocksFromReplyAndArtifacts(reply),
         raw: { source: 'skill-list', skillCount: skills.length },
-      };
-    }
-
-    if (skillInvocation && await this.skillService.skillExists(skillInvocation.skillName, conversation.userId)) {
-      const skillContext = await this.skillService.buildExecutionContext(
-        conversation.userId,
-        conversation.id,
-      );
-      const skillResult = await this.skillService.invokeSkill(
-        skillInvocation.skillName,
-        skillInvocation.args,
-        { ...dto.context, ...skillContext },
-      );
-
-      const userMessageId = `msg_user_skill_${randomUUID()}`;
-      const assistantMessageId = `msg_assistant_skill_${randomUUID()}`;
-      const now = new Date();
-      const userEventUuid = randomUUID();
-      const replyEventUuid = randomUUID();
-      const sessionFilePath = await this.findOrCreateRuntimeSessionFile(conversation.id, conversation.userId);
-
-      await appendFile(
-        sessionFilePath,
-        `${JSON.stringify({ type: 'user', message: { id: userMessageId, role: 'user', content: dto.content }, uuid: userEventUuid, timestamp: now.toISOString(), sessionId: conversation.id })}\n`,
-        'utf8',
-      );
-
-      // For skill results with output files (e.g. games), show a concise description
-      // and tuck the full AI reply into a collapsible "thinking" block.
-      const hasOutputFiles = Boolean(skillResult.outputFiles?.length);
-      const visibleReply = sanitizeServerPhysicalPaths(hasOutputFiles
-        ? (skillResult.outputFiles![0].title ?? '应用已生成，请点击「打开应用」查看。')
-        : skillResult.reply);
-      const thinkingContent = hasOutputFiles
-        ? sanitizeServerPhysicalPaths(skillResult.reply)
-        : undefined;
-
-      const assistantContentBlocks = this.createAssistantContentBlocks(
-        visibleReply,
-        thinkingContent,
-      );
-
-      await appendFile(
-        sessionFilePath,
-        `${JSON.stringify({ type: 'assistant', message: { id: assistantMessageId, role: 'assistant', content: assistantContentBlocks }, uuid: replyEventUuid, timestamp: new Date(now.getTime() + 500).toISOString(), sessionId: conversation.id })}\n`,
-        'utf8',
-      );
-
-      let responseMedia: MessageMedia[] = [];
-      let responseActions: MessageAction[] = [];
-      if (skillResult.outputFiles?.length) {
-        skillLogger.info('ConversationService', 'Skill outputFiles:', skillResult.outputFiles);
-        const media = await this.skillOutputFilesToMedia(skillResult.outputFiles, conversation.userId);
-        skillLogger.info('ConversationService', 'Mapped media:', media.map(m => ({ id: m.id, kind: m.kind, url: m.url })));
-        const persisted = await this.persistAssistantGeneratedResources(
-          conversation.userId,
-          conversation.id,
-          assistantMessageId,
-          media,
-        );
-        responseMedia = persisted.media;
-        responseActions = persisted.actions;
-        await this.replaceMessageResourceMappings(conversation.userId, conversation.id, assistantMessageId, persisted.media);
-        await this.mergeAssistantMessageActions(sessionFilePath, assistantMessageId, persisted.actions);
-      } else {
-        skillLogger.warn('ConversationService', 'No outputFiles returned from skill');
-      }
-
-      await this.linkUploadedResourcesToMessage(
-        conversation.userId,
-        conversation.id,
-        userMessageId,
-        attachments,
-      );
-      await this.touchConversation(conversation, dto.content);
-
-      return {
-        accepted: true,
-        status: 'done',
-        conversation_id: conversation.id,
-        conversationId: conversation.id,
-        message_id: userMessageId,
-        messageId: userMessageId,
-        assistant_message_id: assistantMessageId,
-        assistantMessageId: assistantMessageId,
-        reply: visibleReply,
-        reasoning: thinkingContent,
-        think: thinkingContent,
-        media: responseMedia,
-        actions: responseActions,
-        raw: sanitizeServerPhysicalPathsInValue({
-          source: 'skill',
-          skillName: skillInvocation.skillName,
-          ...skillResult.metadata,
-        }),
-      };
-    }
-
-    // Auto skill routing: user does not need to type `/skill`.
-    // Let model decide whether a suitable skill should be used.
-    const autoRoute = await this.skillService.autoSelectSkill(
-      dto.content,
-      conversation.userId,
-      conversation.id,
-    );
-    console.log(
-      `[ConversationService] autoSkill routeId=${autoRoute.routeId} useSkill=${autoRoute.useSkill} skillName=${autoRoute.skillName ?? 'none'} reason=${autoRoute.reason ?? 'n/a'} userId=${conversation.userId} conversationId=${conversation.id}`,
-    );
-    if (autoRoute.useSkill && autoRoute.skillName) {
-      const skillContext = await this.skillService.buildExecutionContext(
-        conversation.userId,
-        conversation.id,
-      );
-      const skillResult = await this.skillService.invokeSkill(
-        autoRoute.skillName,
-        autoRoute.args ?? dto.content,
-        {
-          ...dto.context,
-          ...skillContext,
-          autoSkillRouteId: autoRoute.routeId,
-        },
-      );
-
-      const userMessageId = `msg_user_skill_${randomUUID()}`;
-      const assistantMessageId = `msg_assistant_skill_${randomUUID()}`;
-      const now = new Date();
-      const userEventUuid = randomUUID();
-      const replyEventUuid = randomUUID();
-      const sessionFilePath = await this.findOrCreateRuntimeSessionFile(conversation.id, conversation.userId);
-
-      await appendFile(
-        sessionFilePath,
-        `${JSON.stringify({ type: 'user', message: { id: userMessageId, role: 'user', content: dto.content }, uuid: userEventUuid, timestamp: now.toISOString(), sessionId: conversation.id })}\n`,
-        'utf8',
-      );
-
-      // For skill results with output files (e.g. games), show a concise description
-      // and tuck the full AI reply into a collapsible "thinking" block.
-      const hasOutputFiles = Boolean(skillResult.outputFiles?.length);
-      const visibleReply = sanitizeServerPhysicalPaths(hasOutputFiles
-        ? (skillResult.outputFiles![0].title ?? '应用已生成，请点击「打开应用」查看。')
-        : skillResult.reply);
-      const thinkingContent = hasOutputFiles
-        ? sanitizeServerPhysicalPaths(skillResult.reply)
-        : undefined;
-
-      const assistantContentBlocks = this.createAssistantContentBlocks(
-        visibleReply,
-        thinkingContent,
-      );
-
-      await appendFile(
-        sessionFilePath,
-        `${JSON.stringify({ type: 'assistant', message: { id: assistantMessageId, role: 'assistant', content: assistantContentBlocks }, uuid: replyEventUuid, timestamp: new Date(now.getTime() + 500).toISOString(), sessionId: conversation.id })}\n`,
-        'utf8',
-      );
-
-      let responseMedia: MessageMedia[] = [];
-      let responseActions: MessageAction[] = [];
-      if (skillResult.outputFiles?.length) {
-        skillLogger.info('ConversationService', 'Skill outputFiles:', skillResult.outputFiles);
-        const media = await this.skillOutputFilesToMedia(skillResult.outputFiles, conversation.userId);
-        skillLogger.info('ConversationService', 'Mapped media:', media.map(m => ({ id: m.id, kind: m.kind, url: m.url })));
-        const persisted = await this.persistAssistantGeneratedResources(
-          conversation.userId,
-          conversation.id,
-          assistantMessageId,
-          media,
-        );
-        responseMedia = persisted.media;
-        responseActions = persisted.actions;
-        await this.replaceMessageResourceMappings(conversation.userId, conversation.id, assistantMessageId, persisted.media);
-        await this.mergeAssistantMessageActions(sessionFilePath, assistantMessageId, persisted.actions);
-
-      } else {
-        skillLogger.warn('ConversationService', 'No outputFiles returned from skill');
-      }
-
-      await this.linkUploadedResourcesToMessage(
-        conversation.userId,
-        conversation.id,
-        userMessageId,
-        attachments,
-      );
-      await this.touchConversation(conversation, dto.content);
-
-      return {
-        accepted: true,
-        status: 'done',
-        conversation_id: conversation.id,
-        conversationId: conversation.id,
-        message_id: userMessageId,
-        messageId: userMessageId,
-        assistant_message_id: assistantMessageId,
-        assistantMessageId: assistantMessageId,
-        reply: visibleReply,
-        reasoning: thinkingContent,
-        think: thinkingContent,
-        media: responseMedia,
-        actions: responseActions,
-        raw: sanitizeServerPhysicalPathsInValue({
-          source: 'skill:auto',
-          skillName: autoRoute.skillName,
-          routerReason: autoRoute.reason,
-          ...skillResult.metadata,
-        }),
       };
     }
 
@@ -995,8 +849,41 @@ export class ConversationService {
         : undefined,
       media: persistedAssistantResources.media,
       actions: persistedAssistantResources.actions,
+      blocks: normalizeCanonicalMessageBlocks(
+        this.appendArtifactBlockToMessageBlocks(
+          (agentResponse.blocks ?? []) as MessageBlock[],
+          persistedAssistantResources.media,
+          persistedAssistantResources.actions,
+        ),
+        { authoritativeText: agentResponse.reply },
+      ) as MessageBlock[] | undefined,
       raw: sanitizeServerPhysicalPathsInValue(agentResponse.raw),
     };
+  }
+
+  async respondToInteractiveTool(
+    conversationId: string,
+    toolUseId: string,
+    dto: RespondToToolDto,
+    requestUserId?: number,
+  ) {
+    const conversation = await this.getConversationByIdentifier(conversationId, requestUserId);
+    const accepted = await this.agentService.respondToInteractiveTool(
+      conversation.id,
+      String(conversation.userId),
+      toolUseId,
+      {
+        approved: dto.approved,
+        answers: this.normalizeToolAnswers(dto.answers),
+        annotations: this.normalizeToolAnnotations(dto.annotations),
+      },
+    );
+
+    if (!accepted) {
+      throw new NotFoundException('This question is no longer waiting for a response');
+    }
+
+    return { accepted: true };
   }
 
   async *sendMessageStream(
@@ -1090,6 +977,33 @@ export class ConversationService {
         continue;
       }
 
+      if (event.type === 'message.block.delta') {
+        yield {
+          type: 'message.block.delta',
+          message_id: event.messageId,
+          messageId: event.messageId,
+          block_id: event.blockId,
+          blockId: event.blockId,
+          block_type: event.blockType,
+          blockType: event.blockType,
+          delta: event.delta ? sanitizeServerPhysicalPaths(event.delta) : undefined,
+          block: event.block
+            ? sanitizeServerPhysicalPathsInValue(event.block) as MessageBlock
+            : undefined,
+        };
+        continue;
+      }
+
+      if (event.type === 'message.block.completed') {
+        yield {
+          type: 'message.block.completed',
+          message_id: event.messageId,
+          messageId: event.messageId,
+          block: sanitizeServerPhysicalPathsInValue(event.block) as MessageBlock,
+        };
+        continue;
+      }
+
       if (event.type === 'error') {
         yield {
           type: 'error',
@@ -1147,6 +1061,22 @@ export class ConversationService {
           },
         );
 
+        const completedBlocksSource = event.blocks
+          ? this.appendArtifactBlockToMessageBlocks(
+              event.blocks as MessageBlock[],
+              persistedAssistantResources.media,
+              persistedAssistantResources.actions,
+            )
+          : this.createBlocksFromReplyAndArtifacts(
+              event.reply,
+              undefined,
+              persistedAssistantResources.media,
+              persistedAssistantResources.actions,
+            );
+        const completedBlocks = normalizeCanonicalMessageBlocks(completedBlocksSource, {
+          authoritativeText: event.reply,
+        }) as MessageBlock[] | undefined;
+
         yield {
           type: 'message.completed',
           accepted: event.accepted,
@@ -1166,54 +1096,20 @@ export class ConversationService {
             : undefined,
           media: persistedAssistantResources.media.length ? persistedAssistantResources.media : undefined,
           actions: persistedAssistantResources.actions.length ? persistedAssistantResources.actions : undefined,
+          blocks: sanitizeServerPhysicalPathsInValue(completedBlocks) as MessageBlock[] | undefined,
           raw: sanitizeServerPhysicalPathsInValue(event.raw),
         };
       }
     }
   }
 
-  private async resolveSkillStreamRoute(
-    conversation: ConversationEntity,
+  private resolveSkillStreamRoute(
+    _conversation: ConversationEntity,
     dto: SendMultimodalMessageDto,
-  ): Promise<SkillStreamRoute | null> {
-    const createSkillCommand = this.parseCreateSkillCommand(dto.content);
-    if (createSkillCommand) {
-      return { kind: 'create', command: createSkillCommand };
-    }
-
+  ): SkillStreamRoute | null {
     const skillInvocation = this.skillService.parseSkillInvocation(dto.content);
-    if (skillInvocation) {
-      if (skillInvocation.skillName === 'skills') {
-        return { kind: 'list' };
-      }
-      if (await this.skillService.skillExists(skillInvocation.skillName, conversation.userId)) {
-        return {
-          kind: 'invoke',
-          source: 'skill',
-          skillName: skillInvocation.skillName,
-          args: skillInvocation.args,
-        };
-      }
-    }
-
-    const autoRoute = await this.skillService.autoSelectSkill(
-      dto.content,
-      conversation.userId,
-      conversation.id,
-    );
-    console.log(
-      `[ConversationService] autoSkill routeId=${autoRoute.routeId} useSkill=${autoRoute.useSkill} skillName=${autoRoute.skillName ?? 'none'} reason=${autoRoute.reason ?? 'n/a'} userId=${conversation.userId} conversationId=${conversation.id}`,
-    );
-
-    if (autoRoute.useSkill && autoRoute.skillName) {
-      return {
-        kind: 'invoke',
-        source: 'skill:auto',
-        skillName: autoRoute.skillName,
-        args: autoRoute.args ?? dto.content,
-        routerReason: autoRoute.reason,
-        autoSkillRouteId: autoRoute.routeId,
-      };
+    if (skillInvocation?.skillName === 'skills') {
+      return { kind: 'list' };
     }
 
     return null;
@@ -1260,6 +1156,10 @@ export class ConversationService {
     await this.linkUploadedResourcesToMessage(conversation.userId, conversation.id, ids.userMessageId, attachments);
 
     yield this.createMessageCreatedStreamEvent(conversation.id, ids, now.toISOString());
+    yield this.createBlockCompletedStreamEvent(
+      ids.assistantMessageId,
+      this.createStatusMessageBlock('status-0', processTrace),
+    );
     yield* this.streamReasoningDeltaEvents(ids.assistantMessageId, `${processTrace}\n`);
 
     const created = await this.skillService.createCustomSkill(
@@ -1282,7 +1182,7 @@ export class ConversationService {
       this.createAssistantContentBlocks(reply, processTrace),
       new Date(now.getTime() + 500),
     );
-    yield* this.streamReplyDeltaEvents(ids.assistantMessageId, reply);
+    yield* this.streamTextBlockDeltaEvents(ids.assistantMessageId, reply);
 
     await this.touchConversation(conversation, dto.content);
 
@@ -1306,6 +1206,10 @@ export class ConversationService {
     await this.linkUploadedResourcesToMessage(conversation.userId, conversation.id, ids.userMessageId, attachments);
 
     yield this.createMessageCreatedStreamEvent(conversation.id, ids, now.toISOString());
+    yield this.createBlockCompletedStreamEvent(
+      ids.assistantMessageId,
+      this.createStatusMessageBlock('status-0', processTrace),
+    );
     yield* this.streamReasoningDeltaEvents(ids.assistantMessageId, `${processTrace}\n`);
 
     const skills = await this.skillService.listSkills(conversation.userId);
@@ -1318,7 +1222,7 @@ export class ConversationService {
       this.createAssistantContentBlocks(reply, processTrace),
       new Date(now.getTime() + 500),
     );
-    yield* this.streamReplyDeltaEvents(ids.assistantMessageId, reply);
+    yield* this.streamTextBlockDeltaEvents(ids.assistantMessageId, reply);
 
     await this.touchConversation(conversation, dto.content);
 
@@ -1335,34 +1239,30 @@ export class ConversationService {
     route: Extract<SkillStreamRoute, { kind: 'invoke' }>,
     abortSignal?: AbortSignal,
   ): AsyncGenerator<ConversationStreamEvent> {
-    const ids = this.createStreamMessageIds(route.source === 'skill:auto' ? 'skill_auto' : 'skill');
+    const ids = this.createStreamMessageIds('skill');
     const now = new Date();
     const sessionFilePath = await this.findOrCreateRuntimeSessionFile(conversation.id, conversation.userId);
-    const routeTrace = this.formatSkillRouteTrace(route);
 
     await this.appendRuntimeUserMessage(sessionFilePath, conversation.id, ids.userMessageId, dto.content, now);
     await this.linkUploadedResourcesToMessage(conversation.userId, conversation.id, ids.userMessageId, attachments);
 
     yield this.createMessageCreatedStreamEvent(conversation.id, ids, now.toISOString());
-    yield* this.streamReasoningDeltaEvents(ids.assistantMessageId, `${routeTrace}\n`);
+    yield this.createBlockCompletedStreamEvent(
+      ids.assistantMessageId,
+      createSkillLoadedBlock<MessageBlock>(route.skillName),
+    );
 
     const skillContext = await this.skillService.buildExecutionContext(
       conversation.userId,
       conversation.id,
     );
     const progressQueue = new SkillProgressQueue();
-    const streamedReasoningParts: string[] = [];
-    let streamedReply = false;
-    const streamReplyAsReasoning = route.skillName === 'develop-web-game';
     const skillOutcomePromise = this.skillService.invokeSkill(
       route.skillName,
       route.args,
       {
         ...dto.context,
         ...skillContext,
-        ...(route.autoSkillRouteId
-          ? { autoSkillRouteId: route.autoSkillRouteId }
-          : {}),
         abortSignal,
         onProgress: (event: SkillProgressEvent) => progressQueue.push(event),
       },
@@ -1380,24 +1280,6 @@ export class ConversationService {
       if (!delta) {
         continue;
       }
-
-      if (progress.type === 'reasoning.delta' || streamReplyAsReasoning) {
-        streamedReasoningParts.push(delta);
-        yield {
-          type: 'reasoning.delta',
-          message_id: ids.assistantMessageId,
-          messageId: ids.assistantMessageId,
-          delta,
-        };
-      } else {
-        streamedReply = true;
-        yield {
-          type: 'reply.delta',
-          message_id: ids.assistantMessageId,
-          messageId: ids.assistantMessageId,
-          delta,
-        };
-      }
     }
 
     const skillOutcome = await skillOutcomePromise;
@@ -1409,11 +1291,7 @@ export class ConversationService {
     }
 
     const skillResult = skillOutcome.result;
-    const presentation = this.buildSkillReplyPresentation(
-      skillResult,
-      routeTrace,
-      streamedReasoningParts.join('\n'),
-    );
+    const presentation = this.buildSkillReplyPresentation(skillResult, route.skillName);
 
     await this.appendRuntimeAssistantMessage(
       sessionFilePath,
@@ -1441,20 +1319,21 @@ export class ConversationService {
       };
     }
 
-    if (!streamedReply || streamReplyAsReasoning) {
-      yield* this.streamReplyDeltaEvents(ids.assistantMessageId, presentation.visibleReply);
-    }
+    yield* this.streamTextBlockDeltaEvents(ids.assistantMessageId, presentation.visibleReply);
 
     await this.touchConversation(conversation, dto.content);
 
     yield this.createMessageCompletedStreamEvent(conversation.id, ids, presentation.visibleReply, {
-      reasoning: presentation.processTrace,
       media: persisted.media.length ? persisted.media : undefined,
       actions: persisted.actions.length ? persisted.actions : undefined,
+      blocks: this.appendArtifactBlockToMessageBlocks(
+        presentation.messageBlocks,
+        persisted.media,
+        persisted.actions,
+      ),
       raw: {
         source: route.source,
         skillName: route.skillName,
-        ...(route.source === 'skill:auto' ? { routerReason: route.routerReason } : {}),
         ...skillResult.metadata,
       },
     });
@@ -1558,9 +1437,20 @@ export class ConversationService {
       reasoning?: string;
       media?: MessageMedia[];
       actions?: MessageAction[];
+      blocks?: MessageBlock[];
       raw?: Record<string, unknown>;
     } = {},
   ): ConversationStreamEvent {
+    const sourceBlocks = options.blocks ?? this.createBlocksFromReplyAndArtifacts(
+      reply,
+      options.reasoning,
+      options.media,
+      options.actions,
+    );
+    const blocks = normalizeCanonicalMessageBlocks(sourceBlocks, {
+      authoritativeText: reply,
+    }) as MessageBlock[] | undefined;
+
     return {
       type: 'message.completed',
       accepted: true,
@@ -1580,8 +1470,138 @@ export class ConversationService {
         : undefined,
       media: options.media,
       actions: options.actions,
+      blocks,
       raw: sanitizeServerPhysicalPathsInValue(options.raw),
     };
+  }
+
+  private createBlocksFromReplyAndArtifacts(
+    reply: string,
+    statusText?: string,
+    media: MessageMedia[] = [],
+    actions: MessageAction[] = [],
+  ): MessageBlock[] {
+    const blocks: MessageBlock[] = [];
+    const sanitizedStatus = statusText ? sanitizeServerPhysicalPaths(statusText).trim() : '';
+    const sanitizedReply = sanitizeServerPhysicalPaths(reply).trim();
+
+    if (sanitizedStatus) {
+      blocks.push({
+        id: 'status-0',
+        type: 'status',
+        title: THINKING_BLOCK_TITLE,
+        text: sanitizedStatus,
+      });
+    }
+
+    if (sanitizedReply) {
+      blocks.push({
+        id: 'text-0',
+        type: 'text',
+        text: sanitizedReply,
+      });
+    }
+
+    return this.appendArtifactBlockToMessageBlocks(blocks, media, actions);
+  }
+
+  private appendArtifactBlockToMessageBlocks(
+    blocks: MessageBlock[],
+    media: MessageMedia[] = [],
+    actions: MessageAction[] = [],
+  ): MessageBlock[] {
+    const nextBlocks = [...(blocks ?? [])];
+    if (!media.length && !actions.length) {
+      return nextBlocks;
+    }
+
+    const existingArtifactIndex = nextBlocks.findIndex((block) => block.type === 'artifact');
+    const artifactBlock: MessageBlock = {
+      id: 'artifact-0',
+      type: 'artifact',
+      title: '生成内容',
+      text: media.length ? '已生成可打开的内容。' : undefined,
+      media,
+      actions,
+    };
+
+    if (existingArtifactIndex >= 0) {
+      nextBlocks[existingArtifactIndex] = {
+        ...nextBlocks[existingArtifactIndex],
+        media: [
+          ...(nextBlocks[existingArtifactIndex].media ?? []),
+          ...media,
+        ],
+        actions: this.mergeMessageActions(
+          nextBlocks[existingArtifactIndex].actions,
+          actions,
+        ),
+      };
+      return nextBlocks;
+    }
+
+    nextBlocks.push(artifactBlock);
+    return nextBlocks;
+  }
+
+  private createBlockCompletedStreamEvent(
+    messageId: string,
+    block: MessageBlock,
+  ): ConversationStreamEvent {
+    return {
+      type: 'message.block.completed',
+      message_id: messageId,
+      messageId,
+      block: sanitizeServerPhysicalPathsInValue(block) as MessageBlock,
+    };
+  }
+
+  private createStatusMessageBlock(id: string, text: string): MessageBlock {
+    return {
+      id,
+      type: 'status',
+      title: THINKING_BLOCK_TITLE,
+      text: sanitizeServerPhysicalPaths(text),
+    };
+  }
+
+  private createSkillMessageBlock(
+    skillName: string,
+    status: string,
+    text?: string,
+  ): MessageBlock {
+    return {
+      id: `skill-${skillName}`,
+      type: 'skill',
+      title: `Skill · /${skillName}`,
+      name: skillName,
+      status,
+      text: text ? sanitizeServerPhysicalPaths(text) : undefined,
+    };
+  }
+
+  private *streamTextBlockDeltaEvents(
+    messageId: string,
+    text?: string,
+    blockId = 'text-0',
+  ): Generator<ConversationStreamEvent> {
+    for (const delta of this.chunkStreamText(text)) {
+      yield {
+        type: 'message.block.delta',
+        message_id: messageId,
+        messageId,
+        block_id: blockId,
+        blockId,
+        block_type: 'text',
+        blockType: 'text',
+        delta,
+        block: {
+          id: blockId,
+          type: 'text',
+          text: '',
+        },
+      };
+    }
   }
 
   private *streamReasoningDeltaEvents(
@@ -1591,20 +1611,6 @@ export class ConversationService {
     for (const delta of this.chunkStreamText(text)) {
       yield {
         type: 'reasoning.delta',
-        message_id: messageId,
-        messageId,
-        delta,
-      };
-    }
-  }
-
-  private *streamReplyDeltaEvents(
-    messageId: string,
-    text?: string,
-  ): Generator<ConversationStreamEvent> {
-    for (const delta of this.chunkStreamText(text)) {
-      yield {
-        type: 'reply.delta',
         message_id: messageId,
         messageId,
         delta,
@@ -1626,11 +1632,6 @@ export class ConversationService {
   }
 
   private formatSkillRouteTrace(route: Extract<SkillStreamRoute, { kind: 'invoke' }>) {
-    if (route.source === 'skill:auto') {
-      const reason = route.routerReason ? ` Router reason: ${route.routerReason}.` : '';
-      return `Auto skill selected: /${route.skillName}.${reason}`;
-    }
-
     return `Skill command selected: /${route.skillName}.`;
   }
 
@@ -1670,24 +1671,23 @@ export class ConversationService {
 
   private buildSkillReplyPresentation(
     skillResult: SkillHandlerResult,
-    routeTrace: string,
-    streamedReasoning = '',
+    skillName: string,
   ) {
     const hasOutputFiles = Boolean(skillResult.outputFiles?.length);
     const visibleReply = sanitizeServerPhysicalPaths(hasOutputFiles
       ? (skillResult.outputFiles![0].title ?? 'Application generated. Use the open action to view it.')
       : skillResult.reply);
-    const generatedTrace = hasOutputFiles && !streamedReasoning
-      ? sanitizeServerPhysicalPaths(skillResult.reply)
-      : undefined;
-    const processTrace = sanitizeServerPhysicalPaths(
-      [routeTrace, streamedReasoning, generatedTrace].filter(Boolean).join('\n\n'),
-    ) || undefined;
 
     return {
       visibleReply,
-      processTrace,
-      assistantContentBlocks: this.createAssistantContentBlocks(visibleReply, processTrace),
+      messageBlocks: this.createBlocksFromReplyAndArtifacts(
+        visibleReply,
+        `Skill ${skillName} loaded`,
+      ),
+      assistantContentBlocks: this.createAssistantContentBlocks(
+        visibleReply,
+        `Skill ${skillName} loaded`,
+      ),
     };
   }
 
@@ -1760,6 +1760,46 @@ export class ConversationService {
     }
 
     throw new NotFoundException(`Conversation ${identifier} not found`);
+  }
+
+  private normalizeToolAnswers(value: unknown): Record<string, string> | undefined {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return undefined;
+    }
+
+    const answers = Object.entries(value)
+      .filter((entry): entry is [string, string] => typeof entry[0] === 'string' && typeof entry[1] === 'string')
+      .slice(0, 4)
+      .map(([question, answer]) => [question.trim().slice(0, 4_000), answer.trim().slice(0, 4_000)] as const)
+      .filter(([question, answer]) => Boolean(question && answer));
+
+    return answers.length ? Object.fromEntries(answers) : undefined;
+  }
+
+  private normalizeToolAnnotations(
+    value: unknown,
+  ): Record<string, { preview?: string; notes?: string }> | undefined {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return undefined;
+    }
+
+    const annotations: Array<[string, { preview?: string; notes?: string }]> = [];
+    for (const [question, annotation] of Object.entries(value).slice(0, 4)) {
+      if (!annotation || typeof annotation !== 'object' || Array.isArray(annotation)) {
+        continue;
+      }
+      const record = annotation as Record<string, unknown>;
+      const preview = typeof record.preview === 'string' ? record.preview.trim().slice(0, 20_000) : undefined;
+      const notes = typeof record.notes === 'string' ? record.notes.trim().slice(0, 4_000) : undefined;
+      if (question.trim() && (preview || notes)) {
+        annotations.push([question.trim().slice(0, 4_000), {
+          ...(preview ? { preview } : {}),
+          ...(notes ? { notes } : {}),
+        }]);
+      }
+    }
+
+    return annotations.length ? Object.fromEntries(annotations) : undefined;
   }
 
   private toThreadSummary(conversation: ConversationEntity) {
@@ -1997,6 +2037,60 @@ export class ConversationService {
     ]);
   }
 
+  private async retryPendingConversationCleanupTasks(): Promise<void> {
+    const tasks = await this.cleanupTaskRepo.find({
+      where: {
+        status: In(['pending', 'running', 'failed']),
+      },
+      order: { createdAt: 'ASC' },
+      take: 100,
+    });
+    for (const task of tasks) {
+      if (task.attempts >= 10) continue;
+      try {
+        await this.processConversationMemoryCleanupTask(task);
+      } catch (error) {
+        console.error('[ConversationService] cleanup task retry failed', {
+          cleanupTaskId: task.id,
+          conversationId: task.conversationId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  }
+
+  private async processConversationMemoryCleanupTask(
+    task: ConversationCleanupTaskEntity,
+  ): Promise<void> {
+    const attempt = task.attempts + 1;
+    await this.cleanupTaskRepo.update(task.id, {
+      status: 'running',
+      attempts: attempt,
+      lastError: null,
+      updatedAt: new Date(),
+    });
+    try {
+      await deleteConversationMemorySession(task.userId, task.conversationId);
+      const completedAt = new Date();
+      await this.cleanupTaskRepo.update(task.id, {
+        status: 'completed',
+        attempts: attempt,
+        lastError: null,
+        updatedAt: completedAt,
+        completedAt,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await this.cleanupTaskRepo.update(task.id, {
+        status: 'failed',
+        attempts: attempt,
+        lastError: message.slice(0, 4000),
+        updatedAt: new Date(),
+      });
+      throw error;
+    }
+  }
+
   private async removeRuntimeSessionFile(conversation: ConversationEntity) {
     let sessionFilePath: string;
 
@@ -2076,41 +2170,24 @@ export class ConversationService {
     } catch {
       return [];
     }
-    const rawContent = await readFile(sessionFilePath, 'utf8');
-    const lines = rawContent
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean);
-
-    const messageOrder: string[] = [];
-    const messageMap = new Map<string, ConversationMessage>();
     const mediaByMessageId = await this.getMessageResourceMappings(sessionId, userId);
+    const publicMediaByMessageId = new Map<string, MessageMedia[]>();
 
-    for (const line of lines) {
-      const event = JSON.parse(line) as RuntimeJsonlEvent;
-      this.consumeRuntimeEvent(event, sessionId, messageMap, messageOrder);
+    for (const [messageId, media] of mediaByMessageId) {
+      publicMediaByMessageId.set(
+        messageId,
+        media.map((item) => this.toPublicMessageMedia(item)),
+      );
     }
 
-    return messageOrder
-      .map((id) => {
-        const message = messageMap.get(id);
-        if (!message) {
-          return null;
-        }
-        const media = mediaByMessageId.get(id) ?? [];
-        const reasoning = this.normalizeReasoningText(message.reasoning ?? message.think);
-        return {
-          ...message,
-          content: message.role === 'assistant'
-            ? sanitizeServerPhysicalPaths(message.content)
-            : message.content,
-          reasoning: reasoning ?? undefined,
-          think: reasoning ?? undefined,
-          media: media.length ? media.map((item) => this.toPublicMessageMedia(item)) : undefined,
-          attachments: media.length ? media.map((item) => this.toPublicMessageMedia(item)) : undefined,
-        };
-      })
-      .filter(Boolean) as ConversationMessage[];
+    return this.transcriptProjection.projectTranscriptFile({
+      filePath: sessionFilePath,
+      sessionId,
+      mediaByMessageId: publicMediaByMessageId,
+      conversationMemoryDir: userId === undefined
+        ? undefined
+        : getNetworkConversationMemoryDir(userId),
+    });
   }
 
   private consumeRuntimeEvent(
@@ -2160,43 +2237,6 @@ export class ConversationService {
         role: 'user',
         kind: 'markdown',
         content,
-        created_at: createdAt,
-        createdAt,
-      };
-    }
-
-    if (Array.isArray(content)) {
-      if (content.some((item) => this.isToolResultContentBlock(item))) {
-        return null;
-      }
-
-      const textParts = content
-        .map((item) => {
-          if (typeof item !== 'object' || item === null) {
-            return null;
-          }
-          const typedItem = item as Record<string, unknown>;
-          return typedItem.type === 'text' && typeof typedItem.text === 'string'
-            ? typedItem.text
-            : null;
-        })
-        .filter((item): item is string => Boolean(item));
-
-      if (!textParts.length) {
-        return null;
-      }
-
-      return {
-        id:
-          event.message?.id ??
-          event.uuid ??
-          event.promptId ??
-          `user-${randomUUID()}`,
-        thread_id: sessionId,
-        threadId: sessionId,
-        role: 'user',
-        kind: 'markdown',
-        content: textParts.join('\n'),
         created_at: createdAt,
         createdAt,
       };
@@ -2406,9 +2446,11 @@ export class ConversationService {
     return (
       blockType === 'tool_result' ||
       blockType.endsWith('_tool_result') ||
-      block.content !== undefined ||
+      typeof block.tool_use_id === 'string' ||
+      typeof block.toolUseId === 'string' ||
       block.result !== undefined ||
-      block.output !== undefined
+      block.output !== undefined ||
+      block.error !== undefined
     );
   }
 
@@ -2548,40 +2590,14 @@ export class ConversationService {
   }
 
   private async findOrCreateRuntimeSessionFile(sessionId: string, userId?: number, readOnly = false) {
-    if (userId !== undefined) {
-      const directPath = join(userDataRootDir, String(userId), `${sessionId}.jsonl`);
-      try {
-        await stat(directPath);
-        return directPath;
-      } catch {
-        // Fall through to legacy scan
+    try {
+      return await findNetworkTranscriptFile(sessionId, userId, { readOnly });
+    } catch (error) {
+      if (readOnly) {
+        throw new NotFoundException(`Runtime session ${sessionId} not found`);
       }
+      throw error;
     }
-
-    const { readdir } = await import('node:fs/promises');
-    const userDirs = await readdir(userDataRootDir, { withFileTypes: true });
-
-    for (const dir of userDirs) {
-      if (!dir.isDirectory()) continue;
-      const candidate = join(userDataRootDir, dir.name, `${sessionId}.jsonl`);
-      try {
-        await stat(candidate);
-        return candidate;
-      } catch {
-        continue;
-      }
-    }
-
-    if (readOnly) {
-      throw new NotFoundException(`Runtime session ${sessionId} not found`);
-    }
-
-    // Session file doesn't exist — create it under the user's directory
-    const targetDir = join(userDataRootDir, String(userId ?? 1));
-    await mkdir(targetDir, { recursive: true });
-    const newPath = join(targetDir, `${sessionId}.jsonl`);
-    await writeFile(newPath, '', 'utf8');
-    return newPath;
   }
 
   private async ensureConversationFileManifest(

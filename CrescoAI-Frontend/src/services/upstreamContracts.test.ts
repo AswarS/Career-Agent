@@ -4,6 +4,7 @@ import {
   normalizeArtifactRecord,
   normalizeProfileSuggestion,
   sanitizeProfileRecord,
+  normalizeMessageStreamEvent,
   normalizeThreadMessage,
   normalizeThreadSummary,
 } from './upstreamContracts';
@@ -575,6 +576,184 @@ describe('normalizeThreadMessage', () => {
       agentName: '助手',
       createdAt: new Date(1776645161000).toISOString(),
     });
+  });
+
+  it('preserves CC transcript metadata from projected backend messages', () => {
+    const message = normalizeThreadMessage({
+      id: 'msg-assistant-1',
+      uuid: 'uuid-assistant-1',
+      parent_uuid: 'uuid-user-1',
+      session_id: 'session-1',
+      thread_id: 'session-1',
+      role: 'assistant',
+      kind: 'markdown',
+      content: 'Done.',
+      reasoning: '[工具调用]\n正在调用工具。',
+      model: 'claude-test',
+      usage: { input_tokens: 7, output_tokens: 11 },
+      stop_reason: 'end_turn',
+      blocks: [{ type: 'text', text: 'Done.' }],
+      raw: { source: 'cc-transcript' },
+      created_at: '2026-04-26T10:06:00.000Z',
+    }, 'fallback-thread');
+
+    expect(message).toMatchObject({
+      id: 'msg-assistant-1',
+      uuid: 'uuid-assistant-1',
+      parentUuid: 'uuid-user-1',
+      sessionId: 'session-1',
+      model: 'claude-test',
+      usage: { input_tokens: 7, output_tokens: 11 },
+      stopReason: 'end_turn',
+      raw: { source: 'cc-transcript' },
+    });
+    expect(message.blocks).toEqual([{ id: 'text-0', type: 'text', text: 'Done.' }]);
+  });
+
+  it('normalizes stream block events into frontend block events', () => {
+    const deltaEvent = normalizeMessageStreamEvent({
+      type: 'message.block.delta',
+      conversation_id: 'session-1',
+      message_id: 'msg-assistant-1',
+      block_id: 'text-0',
+      block_type: 'text',
+      delta: 'Done.',
+      block: { id: 'text-0', type: 'text' },
+    }, 'session-1');
+    const completedEvent = normalizeMessageStreamEvent({
+      type: 'message.block.completed',
+      conversation_id: 'session-1',
+      message_id: 'msg-assistant-1',
+      block: {
+        id: 'tool-result-read',
+        type: 'tool_result',
+        title: '工具返回 · Read',
+        name: 'Read',
+        text: '读取完成。',
+      },
+    }, 'session-1');
+
+    expect(deltaEvent).toEqual({
+      type: 'message.block.delta',
+      messageId: 'msg-assistant-1',
+      blockId: 'text-0',
+      blockType: 'text',
+      delta: 'Done.',
+      block: { id: 'text-0', type: 'text' },
+    });
+    expect(completedEvent).toEqual({
+      type: 'message.block.completed',
+      messageId: 'msg-assistant-1',
+      block: {
+        id: 'tool-result-read',
+        type: 'tool_result',
+        title: '工具返回 · Read',
+        name: 'Read',
+        text: '读取完成。',
+      },
+    });
+  });
+
+  it('normalizes AskUserQuestion blocks into a safe interactive question payload', () => {
+    const event = normalizeMessageStreamEvent({
+      type: 'message.block.completed',
+      conversation_id: 'session-1',
+      message_id: 'msg-assistant-1',
+      block: {
+        id: 'ask-question-tool-1',
+        type: 'ask_question',
+        title: '需要你的选择',
+        name: 'AskUserQuestion',
+        toolUseId: 'tool-1',
+        status: 'pending',
+        questions: [{
+          header: '职业方向',
+          question: '你希望优先探索哪条职业路径？',
+          multiSelect: false,
+          options: [
+            { label: '产品经理', description: '探索产品规划与协作。' },
+            { label: '数据分析', description: '探索数据驱动决策。', preview: 'SQL + Python' },
+          ],
+        }],
+      },
+    }, 'session-1');
+
+    expect(event).toEqual({
+      type: 'message.block.completed',
+      messageId: 'msg-assistant-1',
+      block: {
+        id: 'ask-question-tool-1',
+        type: 'ask_question',
+        title: '需要你的选择',
+        name: 'AskUserQuestion',
+        toolUseId: 'tool-1',
+        status: 'pending',
+        questions: [{
+          header: '职业方向',
+          question: '你希望优先探索哪条职业路径？',
+          multiSelect: false,
+          options: [
+            { label: '产品经理', description: '探索产品规划与协作。' },
+            { label: '数据分析', description: '探索数据驱动决策。', preview: 'SQL + Python' },
+          ],
+        }],
+      },
+    });
+  });
+
+  it('keeps AskUserQuestion answers on the matching tool result for history rendering', () => {
+    const event = normalizeMessageStreamEvent({
+      type: 'message.block.completed',
+      conversation_id: 'session-1',
+      message_id: 'msg-assistant-1',
+      block: {
+        id: 'tool-result-1',
+        type: 'tool_result',
+        toolUseId: 'tool-1',
+        answers: {
+          '你希望优先探索哪条职业路径？': '产品经理',
+          '目前最担心什么？': '已跳过',
+        },
+      },
+    }, 'session-1');
+
+    expect(event).toMatchObject({
+      type: 'message.block.completed',
+      block: {
+        id: 'tool-result-1',
+        type: 'tool_result',
+        toolUseId: 'tool-1',
+        answers: {
+          '你希望优先探索哪条职业路径？': '产品经理',
+          '目前最担心什么？': '已跳过',
+        },
+      },
+    });
+  });
+
+  it('normalizes stream completion metadata without forcing absent reasoning to null', () => {
+    const event = normalizeMessageStreamEvent({
+      type: 'message.completed',
+      conversation_id: 'session-1',
+      message_id: 'uuid-user-1',
+      assistant_message_id: 'msg-assistant-1',
+      reply: 'Done.',
+      raw: {
+        model: 'claude-test',
+        usage: { input_tokens: 3, output_tokens: 5 },
+      },
+    }, 'session-1');
+
+    expect(event).toMatchObject({
+      type: 'message.completed',
+      threadId: 'session-1',
+      messageId: 'uuid-user-1',
+      assistantMessageId: 'msg-assistant-1',
+      reply: 'Done.',
+      model: 'claude-test',
+      usage: { input_tokens: 3, output_tokens: 5 },
+    });
+    expect(event && 'reasoning' in event).toBe(false);
   });
 
   it('preserves numeric zero agent ids from upstream payloads', () => {

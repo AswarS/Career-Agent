@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { appendFile, mkdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import {
+  appendNetworkTranscriptEvent,
+  ensureNetworkTranscriptFile,
+} from '../../utils/networkTranscriptStorage.js';
 
 export interface AgentCreateConversationInput {
   userId: string;
@@ -9,6 +10,7 @@ export interface AgentCreateConversationInput {
   preview?: string;
   apiKey?: string;
   baseUrl?: string;
+  provider?: string;
   model?: string;
 }
 
@@ -28,6 +30,19 @@ export interface AgentAttachmentInput {
   mimeType?: string;
 }
 
+export interface AgentAskQuestionOption {
+  label: string;
+  description: string;
+  preview?: string;
+}
+
+export interface AgentAskQuestion {
+  question: string;
+  header: string;
+  options: AgentAskQuestionOption[];
+  multiSelect: boolean;
+}
+
 export interface AgentSendMessageInput {
   conversationId: string;
   userId: string;
@@ -43,6 +58,7 @@ export interface AgentSendMessageInput {
   /** Per-message override, falls back to conversation-level config */
   apiKey?: string;
   baseUrl?: string;
+  provider?: string;
   model?: string;
 }
 
@@ -55,6 +71,21 @@ export interface GeneratedFile {
   sizeBytes?: number;
 }
 
+export type AgentMessageBlockType = 'text' | 'status' | 'tool_call' | 'tool_result' | 'skill' | 'artifact' | 'ask_question';
+
+export interface AgentMessageBlock {
+  id: string;
+  type: AgentMessageBlockType;
+  text?: string;
+  title?: string;
+  name?: string | null;
+  status?: string | null;
+  toolUseId?: string | null;
+  isError?: boolean;
+  questions?: AgentAskQuestion[];
+  raw?: Record<string, unknown> | null;
+}
+
 export interface AgentSendMessageResult {
   accepted: boolean;
   status: 'queued' | 'processing' | 'done' | 'failed';
@@ -65,6 +96,7 @@ export interface AgentSendMessageResult {
   reasoning?: string;
   file?: AgentAttachmentInput | AgentAttachmentInput[];
   generatedFiles?: GeneratedFile[];
+  blocks?: AgentMessageBlock[];
   raw?: Record<string, unknown>;
 }
 
@@ -87,6 +119,19 @@ export type AgentStreamEvent =
       delta: string;
     }
   | {
+      type: 'message.block.delta';
+      messageId: string;
+      blockId: string;
+      blockType: AgentMessageBlockType;
+      delta?: string;
+      block?: AgentMessageBlock;
+    }
+  | {
+      type: 'message.block.completed';
+      messageId: string;
+      block: AgentMessageBlock;
+    }
+  | {
       type: 'message.completed';
       accepted: boolean;
       status: AgentSendMessageResult['status'];
@@ -97,6 +142,7 @@ export type AgentStreamEvent =
       reasoning?: string;
       file?: AgentAttachmentInput | AgentAttachmentInput[];
       generatedFiles?: GeneratedFile[];
+      blocks?: AgentMessageBlock[];
       raw?: Record<string, unknown>;
     }
   | {
@@ -107,9 +153,6 @@ export type AgentStreamEvent =
       message: string;
       code?: string;
     };
-
-const networkRootDir = fileURLToPath(new URL('../../', import.meta.url));
-const userDataRootDir = join(networkRootDir, 'user');
 
 export async function createConversation(
   input: AgentCreateConversationInput,
@@ -132,18 +175,7 @@ export async function createConversation(
 export { ensureRuntimeSessionFile, appendRuntimeEvent }
 
 async function ensureRuntimeSessionFile(userId: string, conversationId: string) {
-  const userDir = join(userDataRootDir, userId);
-  const sessionFilePath = join(userDir, `${conversationId}.jsonl`);
-
-  await mkdir(userDir, { recursive: true });
-
-  try {
-    await writeFile(sessionFilePath, '', { flag: 'wx' });
-  } catch (error) {
-    if (!isExistingFileError(error)) {
-      throw error;
-    }
-  }
+  await ensureNetworkTranscriptFile(userId, conversationId);
 }
 
 async function appendRuntimeEvent(
@@ -151,15 +183,5 @@ async function appendRuntimeEvent(
   conversationId: string,
   payload: Record<string, unknown>,
 ) {
-  const sessionFilePath = join(userDataRootDir, userId, `${conversationId}.jsonl`);
-  await appendFile(sessionFilePath, `${JSON.stringify(payload)}\n`, 'utf8');
-}
-
-function isExistingFileError(error: unknown) {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    error.code === 'EEXIST'
-  );
+  await appendNetworkTranscriptEvent(userId, conversationId, payload);
 }

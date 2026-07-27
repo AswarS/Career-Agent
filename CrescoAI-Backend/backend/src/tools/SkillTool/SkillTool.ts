@@ -60,6 +60,7 @@ import { resolveSkillModelOverride } from '../../utils/model/model.js'
 import { recordSkillUsage } from '../../utils/suggestions/skillUsageTracking.js'
 import { createAgentId } from '../../utils/uuid.js'
 import { runAgent } from '../AgentTool/runAgent.js'
+import { registerSessionSkillReadOnlyRoot } from '../../server/SessionContext.js'
 import {
   getToolUseIDFromParentMessage,
   tagMessagesWithToolUseID,
@@ -615,6 +616,10 @@ export const SkillTool: Tool<InputSchema, Output, Progress> = buildTool({
     const commands = await getAllCommands(context)
     const command = findCommand(commandName, commands)
 
+    if (command?.type === 'prompt' && command.skillRoot) {
+      await registerSessionSkillReadOnlyRoot(command.skillRoot)
+    }
+
     // Track skill usage for ranking
     recordSkillUsage(commandName)
 
@@ -1071,6 +1076,7 @@ async function executeRemoteSkill(
   // substitution (matches loadSkillsDir.ts) so the model can resolve relative
   // refs like ./schemas/foo.json against the cache dir.
   const skillDir = dirname(skillPath)
+  await registerSessionSkillReadOnlyRoot(skillDir)
   const normalizedDir =
     process.platform === 'win32' ? skillDir.replace(/\\/g, '/') : skillDir
   let finalContent = `Base directory for this skill: ${normalizedDir}\n\n${bodyContent}`

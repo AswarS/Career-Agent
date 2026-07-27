@@ -25,6 +25,10 @@ import { getSessionContext } from '../../server/SessionContext.js'
 import { getOauthConfig } from '../../constants/oauth.js'
 import { isDebugToStdErr, logForDebugging } from '../../utils/debug.js'
 import {
+  createOpenAICompatibilityFetch,
+  isOpenAICompatibleProvider,
+} from './openAICompatibility.js'
+import {
   getAWSRegion,
   getVertexRegionForModel,
   isEnvTruthy,
@@ -113,6 +117,17 @@ export async function getAnthropicClient({
     const resolvedBaseUrl = sessionCtx.config.baseUrl
       ?? process.env.ANTHROPIC_BASE_URL
       ?? undefined
+    const openAICompatible = isOpenAICompatibleProvider(
+      sessionCtx.config.provider,
+    )
+    const resolvedFetch =
+      openAICompatible && resolvedBaseUrl
+        ? createOpenAICompatibilityFetch({
+            apiKey: resolvedApiKey,
+            baseUrl: resolvedBaseUrl,
+            fetchImpl: fetchOverride ?? globalThis.fetch,
+          })
+        : fetchOverride
     console.log(`[API Client] session mode: apiKey=${resolvedApiKey ? '***' + resolvedApiKey.slice(-6) : 'NONE'}, baseURL=${resolvedBaseUrl ?? 'NONE'}, sessionApiKey=${sessionCtx.config.apiKey ? 'SET' : 'NONE'}, sessionBaseUrl=${sessionCtx.config.baseUrl ?? 'NONE'}`)
     const client = new Anthropic({
       apiKey: resolvedApiKey,
@@ -123,7 +138,7 @@ export async function getAnthropicClient({
         'User-Agent': getUserAgent(),
         'X-Claude-Code-Session-Id': getSessionId(),
       },
-      ...(fetchOverride ? { fetch: fetchOverride } : {}),
+      ...(resolvedFetch ? { fetch: resolvedFetch } : {}),
     })
     sessionCtx.anthropicClient = client
     return client

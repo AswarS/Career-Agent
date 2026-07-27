@@ -61,10 +61,11 @@ export function normalizeAuthSession(input: UpstreamAuthSession, fallbackIdentif
     ?? user.userId
     ?? user.user_id
     ?? user.id
-    ?? username
-    ?? email
-    ?? '1',
-  );
+    ?? '',
+  ).trim();
+  if (!id) {
+    throw new Error('Authentication response is missing the user identity.');
+  }
   const displayName = String(user.displayName ?? user.display_name ?? user.name ?? username ?? fallbackName ?? '用户').trim();
 
   return {
@@ -157,6 +158,40 @@ function createMockAuthClient(): AuthClient {
   };
 }
 
+function createSkipAuthClient(config: RuntimeConfig): AuthClient {
+  const createSession = (): AuthSession => ({
+    user: {
+      id: config.userId,
+      email: null,
+      username: 'local-dev',
+      displayName: '本地用户',
+    },
+    accessToken: null,
+    refreshToken: null,
+    tokenType: 'Bearer',
+    expiresAt: null,
+    expiresIn: null,
+  });
+
+  return {
+    async getSession() {
+      return createSession();
+    },
+    async refreshSession() {
+      return createSession();
+    },
+    async login() {
+      return createSession();
+    },
+    async register() {
+      return createSession();
+    },
+    async logout() {
+      writeStoredAuthSession(null);
+    },
+  };
+}
+
 function formatAuthError(error: unknown, fallbackMessage: string) {
   if (axios.isAxiosError(error)) {
     const responseData = error.response?.data;
@@ -203,7 +238,7 @@ function createUpstreamAuthClient(config: RuntimeConfig, httpClient?: AxiosInsta
       try {
         const storedSession = readStoredAuthSession();
         const response = await client.get<UpstreamAuthSession>(CAREER_AGENT_API_ROUTES.authSession());
-        const normalizedSession = normalizeAuthSession(response.data);
+        const normalizedSession = normalizeAuthSession(response.data, storedSession?.user.id);
         return mergeAuthSessionWithStored(normalizedSession, storedSession);
       } catch (error) {
         if (axios.isAxiosError(error) && (error.response?.status === 401 || error.response?.status === 404)) {
@@ -225,7 +260,10 @@ function createUpstreamAuthClient(config: RuntimeConfig, httpClient?: AxiosInsta
         const response = await client.post<UpstreamAuthSession>(CAREER_AGENT_API_ROUTES.authRefresh(), {
           refresh_token: refreshToken,
         });
-        return mergeAuthSessionWithStored(normalizeAuthSession(response.data), storedSession);
+        return mergeAuthSessionWithStored(
+          normalizeAuthSession(response.data, storedSession.user.id),
+          storedSession,
+        );
       } catch (error) {
         if (axios.isAxiosError(error) && error.response?.status === 401) {
           return null;
@@ -265,8 +303,10 @@ function createUpstreamAuthClient(config: RuntimeConfig, httpClient?: AxiosInsta
 }
 
 export function createAuthClient(config: RuntimeConfig = runtimeConfig): AuthClient {
-  if (config.clientMode === 'upstream' && !config.skipAuth) {
-    return createUpstreamAuthClient(config);
+  if (config.clientMode === 'upstream') {
+    return config.skipAuth
+      ? createSkipAuthClient(config)
+      : createUpstreamAuthClient(config);
   }
 
   return createMockAuthClient();

@@ -42,12 +42,14 @@ export interface SkillExecutionContext {
   llmConfig?: {
     apiKey?: string;
     baseUrl?: string;
+    provider?: string;
     model?: string;
   };
   runUnifiedPrompt?: (input: {
     content: string;
     apiKey?: string;
     baseUrl?: string;
+    provider?: string;
     model?: string;
     userId?: number;
     conversationId?: string;

@@ -1,8 +1,5 @@
 import { randomUUID } from 'crypto'
-import type {
-  SDKPartialAssistantMessage,
-  StdoutMessage,
-} from 'src/entrypoints/sdk/controlTypes.js'
+import type { StdoutMessage } from 'src/entrypoints/sdk/controlTypes.js'
 import { decodeJwtExpiry } from '../../bridge/jwtUtils.js'
 import { logForDebugging } from '../../utils/debug.js'
 import { logForDiagnosticsNoPII } from '../../utils/diagLogs.js'
@@ -79,9 +76,9 @@ type ClientEvent = {
 }
 
 /**
- * Structural subset of a stream_event carrying a text_delta. Not a narrowing
- * of SDKPartialAssistantMessage — RawMessageStreamEvent's delta is a union and
- * narrowing through two levels defeats the discriminant.
+ * Structural subset of a stream_event carrying a text_delta. Raw stream events
+ * arrive through the SDK stdout envelope as loose records, so this file keeps a
+ * local shape that only models the fields needed for buffering/coalescing.
  */
 type CoalescedStreamEvent = {
   type: 'stream_event'
@@ -93,6 +90,13 @@ type CoalescedStreamEvent = {
     index: number
     delta: { type: 'text_delta'; text: string }
   }
+}
+
+type BufferedStreamEvent = EventPayload & {
+  type: 'stream_event'
+  session_id: string
+  parent_tool_use_id: string | null
+  event: Record<string, unknown>
 }
 
 /**
@@ -124,6 +128,32 @@ function scopeKey(m: {
   return `${m.session_id}:${m.parent_tool_use_id ?? ''}`
 }
 
+function toBufferedStreamEvent(message: StdoutMessage): BufferedStreamEvent | null {
+  if (message.type !== 'stream_event') {
+    return null
+  }
+
+  const record = message as Record<string, unknown>
+  const event = record.event
+  if (
+    typeof record.session_id !== 'string' ||
+    (record.parent_tool_use_id !== null && typeof record.parent_tool_use_id !== 'string') ||
+    typeof event !== 'object' ||
+    event === null
+  ) {
+    return null
+  }
+
+  return {
+    ...record,
+    type: 'stream_event',
+    uuid: typeof record.uuid === 'string' ? record.uuid : randomUUID(),
+    session_id: record.session_id,
+    parent_tool_use_id: record.parent_tool_use_id,
+    event: event as Record<string, unknown>,
+  } as BufferedStreamEvent
+}
+
 /**
  * Accumulate text_delta stream_events into full-so-far snapshots per content
  * block. Each flush emits ONE event per touched block containing the FULL
@@ -131,7 +161,9 @@ function scopeKey(m: {
  * mid-stream receives a self-contained snapshot, not a fragment.
  *
  * Non-text-delta events pass through unchanged. message_start records the
- * active message ID for the scope; content_block_delta appends chunks;
+ * active message ID for the scope; content_block_start seeds text content
+ * because some providers put the first characters there; content_block_delta
+ * appends chunks;
  * the snapshot event reuses the first text_delta UUID seen for that block in
  * this flush so server-side idempotency remains stable across retries.
  *
@@ -139,7 +171,7 @@ function scopeKey(m: {
  * (reliable), not here on stop events (abort/error paths skip those).
  */
 export function accumulateStreamEvents(
-  buffer: SDKPartialAssistantMessage[],
+  buffer: BufferedStreamEvent[],
   state: StreamAccumulatorState,
 ): EventPayload[] {
   const out: EventPayload[] = []
@@ -148,18 +180,77 @@ export function accumulateStreamEvents(
   // rewrite the same entry instead of emitting one event per delta.
   const touched = new Map<string[], CoalescedStreamEvent>()
   for (const msg of buffer) {
-    switch (msg.event.type) {
+    const event = msg.event
+    switch (event.type) {
       case 'message_start': {
-        const id = msg.event.message.id
+        const message = event.message as Record<string, unknown> | undefined
+        const id = typeof message?.id === 'string' ? message.id : null
+        if (!id) {
+          out.push(msg)
+          break
+        }
         const prevId = state.scopeToMessage.get(scopeKey(msg))
         if (prevId) state.byMessage.delete(prevId)
         state.scopeToMessage.set(scopeKey(msg), id)
-        state.byMessage.set(id, [])
+        const blocks: string[][] = []
+        const initialContent = Array.isArray(message?.content)
+          ? message.content
+          : []
+        for (const [index, block] of initialContent.entries()) {
+          if (
+            typeof block === 'object' &&
+            block !== null &&
+            (block as Record<string, unknown>).type === 'text' &&
+            typeof (block as Record<string, unknown>).text === 'string' &&
+            (block as Record<string, unknown>).text
+          ) {
+            blocks[index] = [(block as Record<string, unknown>).text as string]
+          }
+        }
+        state.byMessage.set(id, blocks)
+        out.push(msg)
+        break
+      }
+      case 'content_block_start': {
+        const contentBlock = event.content_block as Record<string, unknown> | undefined
+        if (contentBlock?.type !== 'text') {
+          out.push(msg)
+          break
+        }
+
+        const initialText = typeof contentBlock.text === 'string' ? contentBlock.text : ''
+        const blockIndex = typeof event.index === 'number' ? event.index : null
+        if (blockIndex === null) {
+          out.push(msg)
+          break
+        }
+        const messageId = state.scopeToMessage.get(scopeKey(msg))
+        const blocks = messageId ? state.byMessage.get(messageId) : undefined
+        if (blocks) {
+          const chunks = (blocks[blockIndex] ??= [])
+          if (initialText) {
+            const seededText = chunks.join('')
+            if (!seededText) {
+              chunks.push(initialText)
+            } else if (initialText.startsWith(seededText)) {
+              chunks.splice(0, chunks.length, initialText)
+            } else if (!seededText.startsWith(initialText)) {
+              chunks.push(initialText)
+            }
+          }
+        }
         out.push(msg)
         break
       }
       case 'content_block_delta': {
-        if (msg.event.delta.type !== 'text_delta') {
+        const delta = event.delta as Record<string, unknown> | undefined
+        if (delta?.type !== 'text_delta') {
+          out.push(msg)
+          break
+        }
+        const deltaText = typeof delta.text === 'string' ? delta.text : null
+        const blockIndex = typeof event.index === 'number' ? event.index : null
+        if (deltaText === null || blockIndex === null) {
           out.push(msg)
           break
         }
@@ -173,8 +264,8 @@ export function accumulateStreamEvents(
           out.push(msg)
           break
         }
-        const chunks = (blocks[msg.event.index] ??= [])
-        chunks.push(msg.event.delta.text)
+        const chunks = (blocks[blockIndex] ??= [])
+        chunks.push(deltaText)
         const existing = touched.get(chunks)
         if (existing) {
           existing.event.delta.text = chunks.join('')
@@ -187,7 +278,7 @@ export function accumulateStreamEvents(
           parent_tool_use_id: msg.parent_tool_use_id,
           event: {
             type: 'content_block_delta',
-            index: msg.event.index,
+            index: blockIndex,
             delta: { type: 'text_delta', text: chunks.join('') },
           },
         }
@@ -224,6 +315,10 @@ export function clearStreamAccumulatorForMessage(
 
 type RequestResult = { ok: true } | { ok: false; retryAfterMs?: number }
 
+function getRetryAfterMs(result: RequestResult): number | undefined {
+  return 'retryAfterMs' in result ? result.retryAfterMs : undefined
+}
+
 type WorkerEvent = {
   payload: EventPayload
   is_compaction?: boolean
@@ -251,6 +346,40 @@ type WorkerStateResponse = {
   }
 }
 
+type CompletedAssistantMessage = {
+  session_id: string
+  parent_tool_use_id: string | null
+  message: { id: string }
+}
+
+function toCompletedAssistantMessage(
+  message: StdoutMessage,
+): CompletedAssistantMessage | null {
+  if (message.type !== 'assistant') {
+    return null
+  }
+
+  const record = message as Record<string, unknown>
+  const assistantMessage = record.message as Record<string, unknown> | undefined
+  if (
+    typeof record.session_id !== 'string' ||
+    (record.parent_tool_use_id !== null && typeof record.parent_tool_use_id !== 'string') ||
+    typeof assistantMessage?.id !== 'string'
+  ) {
+    return null
+  }
+
+  const parentToolUseId: string | null = record.parent_tool_use_id === null
+    ? null
+    : record.parent_tool_use_id as string
+
+  return {
+    session_id: record.session_id,
+    parent_tool_use_id: parentToolUseId,
+    message: { id: assistantMessage.id },
+  }
+}
+
 /**
  * Manages the worker lifecycle protocol with CCR v2:
  * - Epoch management: reads worker_epoch from CLAUDE_CODE_WORKER_EPOCH env var
@@ -275,7 +404,7 @@ export class CCRClient {
   // stream_event delay buffer — accumulates content deltas for up to
   // STREAM_EVENT_FLUSH_INTERVAL_MS before enqueueing (reduces POST count
   // and enables text_delta coalescing). Mirrors HybridTransport's pattern.
-  private streamEventBuffer: SDKPartialAssistantMessage[] = []
+  private streamEventBuffer: BufferedStreamEvent[] = []
   private streamEventTimer: ReturnType<typeof setTimeout> | null = null
   // Full-so-far text accumulator. Persists across flushes so each emitted
   // text_delta event carries the complete text from the start of the block —
@@ -375,7 +504,7 @@ export class CCRClient {
         if (!result.ok) {
           throw new RetryableError(
             'client event POST failed',
-            result.retryAfterMs,
+            getRetryAfterMs(result),
           )
         }
       },
@@ -398,7 +527,7 @@ export class CCRClient {
         if (!result.ok) {
           throw new RetryableError(
             'internal event POST failed',
-            result.retryAfterMs,
+            getRetryAfterMs(result),
           )
         }
       },
@@ -427,7 +556,7 @@ export class CCRClient {
           'delivery batch',
         )
         if (!result.ok) {
-          throw new RetryableError('delivery POST failed', result.retryAfterMs)
+          throw new RetryableError('delivery POST failed', getRetryAfterMs(result))
         }
       },
       baseDelayMs: 500,
@@ -734,7 +863,13 @@ export class CCRClient {
    */
   async writeEvent(message: StdoutMessage): Promise<void> {
     if (message.type === 'stream_event') {
-      this.streamEventBuffer.push(message)
+      const bufferedEvent = toBufferedStreamEvent(message)
+      if (!bufferedEvent) {
+        await this.flushStreamEventBuffer()
+        await this.eventUploader.enqueue(this.toClientEvent(message))
+        return
+      }
+      this.streamEventBuffer.push(bufferedEvent)
       if (!this.streamEventTimer) {
         this.streamEventTimer = setTimeout(
           () => void this.flushStreamEventBuffer(),
@@ -745,7 +880,10 @@ export class CCRClient {
     }
     await this.flushStreamEventBuffer()
     if (message.type === 'assistant') {
-      clearStreamAccumulatorForMessage(this.streamTextAccumulator, message)
+      const completedAssistant = toCompletedAssistantMessage(message)
+      if (completedAssistant) {
+        clearStreamAccumulatorForMessage(this.streamTextAccumulator, completedAssistant)
+      }
     }
     await this.eventUploader.enqueue(this.toClientEvent(message))
   }

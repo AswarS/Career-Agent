@@ -3,14 +3,25 @@ import { matchesMobileLayoutViewport } from '../app/responsive';
 import { runtimeConfig } from '../config/runtime';
 import { createCareerAgentClient } from '../services/createCareerAgentClient';
 import { MessageStreamUnavailableError } from '../services/careerAgentClient';
+import {
+  createSkillLoadedBlock,
+  extractSkillName,
+  extractSkillNameFromBlock,
+  isInternalSkillBlock,
+  normalizeMessageBlocks,
+  THINKING_BLOCK_TITLE,
+} from '../modules/conversation/messageBlockNormalization';
 import { shouldSimulateArtifactRefreshLifecycle } from './artifactRefreshPolicy';
 import type {
   ArtifactRecord,
   ArtifactStatus,
   ArtifactViewMode,
+  AskQuestionResponse,
   DraftMessageSubmission,
   LoadState,
   MessageAction,
+  MessageBlock,
+  MessageBlockType,
   MessageFileAttachment,
   MessageMedia,
   ProfileRecord,
@@ -26,6 +37,9 @@ const simulateArtifactRefreshLifecycle = shouldSimulateArtifactRefreshLifecycle(
 let initializePromise: Promise<void> | null = null;
 let threadLoadRequestToken = 0;
 let artifactRefreshRequestToken = 0;
+const INTERACTIVE_TOOL_HISTORY_POLL_INTERVAL_MS = 750;
+const INTERACTIVE_TOOL_HISTORY_POLL_ATTEMPTS = 120;
+const INTERACTIVE_TOOL_STREAM_SETTLE_INTERVAL_MS = 100;
 
 function createMessageId(prefix: string) {
   const randomValue = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -120,6 +134,93 @@ function mergeThreadMessages(
   ];
 }
 
+/**
+ * Transcript projection can briefly lag the terminal SSE event after an
+ * interactive tool resumes. Do not replace a fully rendered live reply with
+ * that older, partial projection during the post-stream refresh.
+ */
+export function preserveCompletedLiveReplies(
+  currentMessages: ThreadMessage[],
+  refreshedMessages: ThreadMessage[],
+): ThreadMessage[] {
+  const currentById = new Map(currentMessages.map((message) => [message.id, message]));
+
+  return refreshedMessages.map((refreshedMessage) => {
+    const currentMessage = currentById.get(refreshedMessage.id);
+    if (
+      !currentMessage
+      || currentMessage.role !== 'assistant'
+      || currentMessage.streaming
+    ) {
+      return refreshedMessage;
+    }
+
+    const liveReply = deriveMessageContentFromBlocks(currentMessage.blocks, currentMessage.content).trim();
+    const refreshedReply = deriveMessageContentFromBlocks(
+      refreshedMessage.blocks,
+      refreshedMessage.content,
+    ).trim();
+    if (!liveReply || refreshedReply) {
+      return refreshedMessage;
+    }
+
+    return {
+      ...refreshedMessage,
+      content: liveReply,
+      reasoning: refreshedMessage.reasoning ?? currentMessage.reasoning,
+      blocks: reconcileCompletedReplyBlock(
+        refreshedMessage.blocks,
+        currentMessage.blocks,
+        liveReply,
+      ),
+      raw: refreshedMessage.raw ?? currentMessage.raw,
+      streaming: false,
+    };
+  });
+}
+
+export function hasCompletedInteractiveToolReply(
+  messages: ThreadMessage[],
+  toolUseId: string,
+) {
+  const questionIndex = messages.findIndex((message) => (
+    message.role === 'assistant'
+    && message.blocks?.some((block) => (
+      block.type === 'ask_question' && block.toolUseId === toolUseId
+    ))
+  ));
+  if (questionIndex < 0) {
+    return false;
+  }
+
+  const questionMessage = messages[questionIndex]!;
+  const questionBlockIndex = questionMessage.blocks?.findIndex((block) => (
+    block.type === 'ask_question' && block.toolUseId === toolUseId
+  )) ?? -1;
+  const isTerminalAssistantMessage = (message: ThreadMessage) => (
+    message.role === 'assistant'
+    && message.stopReason !== 'tool_use'
+  );
+
+  // The first terminal stream event may contain an interim "Assistant is
+  // thinking..." reply alongside the question.  It is not a continuation of
+  // the tool call, so only text blocks that follow the question are terminal.
+  if (isTerminalAssistantMessage(questionMessage)
+    && questionBlockIndex >= 0
+    && questionMessage.blocks?.slice(questionBlockIndex + 1).some((block) => (
+    block.type === 'text' && Boolean(block.text?.trim())
+  ))) {
+    return true;
+  }
+
+  // Some transcript projections keep the continuation as a later assistant
+  // record instead of merging it into the question message.
+  return messages.slice(questionIndex + 1).some((message) => (
+    isTerminalAssistantMessage(message)
+    && Boolean(deriveMessageContentFromBlocks(message.blocks, message.content).trim())
+  ));
+}
+
 function normalizeInlineText(value: string) {
   return value.replace(/\s+/g, ' ').trim();
 }
@@ -182,6 +283,92 @@ function mergeById<T extends { id: string }>(existing: T[] | undefined, incoming
 
 function appendText(existing: string | null | undefined, delta: string) {
   return `${existing ?? ''}${delta}`;
+}
+
+function deriveMessageContentFromBlocks(blocks: MessageBlock[] | undefined, fallback = '') {
+  const textBlocks = (blocks ?? []).filter((block) => block.type === 'text');
+  const text = textBlocks[textBlocks.length - 1]?.text?.trim();
+  return text || fallback;
+}
+
+function reconcileCompletedReplyBlock(
+  existingBlocks: MessageBlock[] | undefined,
+  completedBlocks: MessageBlock[] | undefined,
+  reply: string,
+) {
+  const mergedBlocks = [...(existingBlocks ?? [])];
+  for (const block of completedBlocks ?? []) {
+    const existingIndex = mergedBlocks.findIndex((candidate) => candidate.id === block.id);
+    if (existingIndex < 0) {
+      mergedBlocks.push(block);
+    } else {
+      mergedBlocks[existingIndex] = block.type === 'artifact'
+        ? mergeMessageBlock(mergedBlocks[existingIndex], block)
+        : { ...mergedBlocks[existingIndex], ...block };
+    }
+  }
+  return normalizeMessageBlocks(mergedBlocks, { authoritativeText: reply });
+}
+
+function mergeMessageBlock(existing: MessageBlock | undefined, incoming: MessageBlock): MessageBlock {
+  if (!existing) {
+    return incoming;
+  }
+
+  return {
+    ...existing,
+    ...incoming,
+    text: incoming.text !== undefined ? incoming.text : existing.text,
+    media: mergeById(existing.media, incoming.media),
+    files: mergeById(existing.files, incoming.files),
+    actions: mergeById(existing.actions, incoming.actions),
+  };
+}
+
+function upsertMessageBlock(
+  blocks: MessageBlock[] | undefined,
+  incoming: MessageBlock,
+) {
+  const nextBlocks = [...(blocks ?? [])];
+  const index = nextBlocks.findIndex((block) => block.id === incoming.id);
+  if (index < 0) {
+    nextBlocks.push(incoming);
+    return nextBlocks;
+  }
+
+  nextBlocks[index] = mergeMessageBlock(nextBlocks[index], incoming);
+  return nextBlocks;
+}
+
+function appendMessageBlockDelta(
+  blocks: MessageBlock[] | undefined,
+  input: {
+    blockId: string;
+    blockType: MessageBlockType;
+    delta?: string;
+    block?: MessageBlock;
+  },
+) {
+  const baseBlock: MessageBlock = input.block ?? {
+    id: input.blockId,
+    type: input.blockType,
+  };
+  const nextBlocks = [...(blocks ?? [])];
+  const index = nextBlocks.findIndex((block) => block.id === input.blockId);
+  if (index < 0) {
+    nextBlocks.push({
+      ...baseBlock,
+      text: input.delta ? appendText(baseBlock.text, input.delta) : baseBlock.text,
+    });
+    return nextBlocks;
+  }
+
+  const existing = nextBlocks[index];
+  nextBlocks[index] = mergeMessageBlock(existing, {
+    ...baseBlock,
+    text: input.delta ? appendText(existing.text, input.delta) : baseBlock.text,
+  });
+  return nextBlocks;
 }
 
 function createUploadedFileMedia(uploadedFiles: UploadedConversationFile[]): MessageMedia[] {
@@ -768,6 +955,11 @@ export const useWorkspaceStore = defineStore('workspace', {
         error: unknown,
       ) => {
         this.messageSubmitStatusByThread[targetThreadId] = 'error';
+        this.messages = this.messages.map((message) => (
+          message.threadId === targetThreadId && message.role === 'assistant' && message.streaming
+            ? { ...message, streaming: false }
+            : message
+        ));
         const rawMessage = error instanceof Error ? error.message : 'Unknown message sending error';
         const stageMessage = stage === 'upload'
           ? '附件上传失败'
@@ -815,6 +1007,11 @@ export const useWorkspaceStore = defineStore('workspace', {
       const messageContent = content || '（已添加附件）';
       const refreshThreadMessages = async () => {
         const nextMessages = await client.getThreadMessages(targetThreadId);
+        const reconciledMessages = preserveCompletedLiveReplies(this.messages, nextMessages);
+
+        revokeLocalMessageResources(this.transientMessagesByThread[targetThreadId] ?? []);
+        delete this.transientMessagesByThread[targetThreadId];
+        this.messageSubmitStatusByThread[targetThreadId] = 'ready';
 
         revokeLocalMessageResources(this.transientMessagesByThread[targetThreadId] ?? []);
         delete this.transientMessagesByThread[targetThreadId];
@@ -825,7 +1022,7 @@ export const useWorkspaceStore = defineStore('workspace', {
         }
 
         revokeLocalMessageResources(this.messages);
-        this.messages = nextMessages;
+        this.messages = reconciledMessages;
         this.messagesStatus = 'ready';
         return true;
       };
@@ -860,6 +1057,8 @@ export const useWorkspaceStore = defineStore('workspace', {
           kind: 'markdown',
           content: '',
           reasoning: null,
+          blocks: [],
+          streaming: true,
           createdAt,
         });
 
@@ -873,6 +1072,12 @@ export const useWorkspaceStore = defineStore('workspace', {
           media?: MessageMedia[];
           files?: MessageFileAttachment[];
           actions?: MessageAction[];
+          model?: string | null;
+          usage?: Record<string, unknown> | null;
+          stopReason?: string | null;
+          blocks?: MessageBlock[];
+          raw?: Record<string, unknown> | null;
+          streaming?: boolean;
           createdAt?: string;
         },
       ) => {
@@ -886,60 +1091,228 @@ export const useWorkspaceStore = defineStore('workspace', {
           media: mergeById(existingMessage.media, payload.media),
           files: mergeById(existingMessage.files, payload.files),
           actions: mergeById(existingMessage.actions, payload.actions),
+          model: payload.model !== undefined ? payload.model : existingMessage.model,
+          usage: payload.usage !== undefined ? payload.usage : existingMessage.usage,
+          stopReason: payload.stopReason !== undefined ? payload.stopReason : existingMessage.stopReason,
+          blocks: payload.blocks !== undefined
+            ? normalizeMessageBlocks(payload.blocks)
+            : normalizeMessageBlocks(existingMessage.blocks),
+          raw: payload.raw !== undefined ? payload.raw : existingMessage.raw,
+          streaming: payload.streaming !== undefined ? payload.streaming : existingMessage.streaming,
+        };
+      };
+      const mergePendingUserMessage = (serverUserMessageId: string, createdAt?: string) => {
+        if (!serverUserMessageId) {
+          return;
+        }
+
+        const pendingIndex = this.messages.findIndex((message) => message.id === pendingMessageId);
+        if (pendingIndex < 0) {
+          return;
+        }
+
+        const uploadedMedia = createUploadedFileMedia(uploadedFiles);
+        const uploadedAttachments = createUploadedFileAttachments(uploadedFiles);
+        this.messages[pendingIndex] = {
+          ...this.messages[pendingIndex],
+          id: serverUserMessageId,
+          createdAt: createdAt ?? this.messages[pendingIndex].createdAt,
+          media: uploadedMedia.length ? uploadedMedia : this.messages[pendingIndex].media,
+          files: uploadedAttachments.length ? uploadedAttachments : this.messages[pendingIndex].files,
+        };
+      };
+      const structuredTextMessageIds = new Set<string>();
+      const legacyReplyMessageIds = new Set<string>();
+      const showSkillLoaded = (
+        messageId: string,
+        skillName: string,
+        sourceBlockId?: string,
+        clearReasoning = false,
+      ) => {
+        const index = ensureAssistantMessage(messageId);
+        const retainedBlocks = (this.messages[index].blocks ?? []).filter((block) => {
+          if (block.id === sourceBlockId) return false;
+          if (sourceBlockId === 'legacy-text-0' && block.type === 'text') return false;
+          if (clearReasoning && block.type === 'status' && block.title === THINKING_BLOCK_TITLE) {
+            return false;
+          }
+          return true;
+        });
+        const blocks = normalizeMessageBlocks([
+          ...retainedBlocks,
+          createSkillLoadedBlock(skillName),
+        ]);
+        this.messages[index] = {
+          ...this.messages[index],
+          blocks,
+          content: deriveMessageContentFromBlocks(blocks, ''),
+          reasoning: clearReasoning ? null : this.messages[index].reasoning,
         };
       };
       const applyStreamEvent = (event: ThreadMessageStreamEvent) => {
         if (event.type === 'message.created') {
-          const pendingIndex = this.messages.findIndex((message) => message.id === pendingMessageId);
-          if (pendingIndex >= 0) {
-            const uploadedMedia = createUploadedFileMedia(uploadedFiles);
-            const uploadedAttachments = createUploadedFileAttachments(uploadedFiles);
-            this.messages[pendingIndex] = {
-              ...this.messages[pendingIndex],
-              id: event.messageId,
-              createdAt: event.createdAt,
-              media: uploadedMedia.length ? uploadedMedia : this.messages[pendingIndex].media,
-              files: uploadedAttachments.length ? uploadedAttachments : this.messages[pendingIndex].files,
-            };
-          }
+          mergePendingUserMessage(event.messageId, event.createdAt);
           ensureAssistantMessage(event.assistantMessageId, event.createdAt);
           return;
         }
 
         if (event.type === 'reasoning.delta') {
+          const skillName = extractSkillName(event.delta);
+          if (skillName) {
+            showSkillLoaded(event.messageId, skillName, 'legacy-status-0', true);
+            return;
+          }
           const index = ensureAssistantMessage(event.messageId);
+          if ((this.messages[index].blocks?.length ?? 0) > 0) {
+            return;
+          }
+          const blocks = appendMessageBlockDelta(this.messages[index].blocks, {
+            blockId: 'legacy-status-0',
+            blockType: 'status',
+            delta: event.delta,
+            block: {
+              id: 'legacy-status-0',
+              type: 'status',
+              title: THINKING_BLOCK_TITLE,
+              text: '',
+            },
+          });
           this.messages[index] = {
             ...this.messages[index],
+            blocks,
             reasoning: appendText(this.messages[index].reasoning, event.delta),
           };
           return;
         }
 
         if (event.type === 'reply.delta') {
+          const skillName = extractSkillName(event.delta);
+          if (skillName) {
+            showSkillLoaded(event.messageId, skillName, 'legacy-text-0');
+            return;
+          }
           const index = ensureAssistantMessage(event.messageId);
+          if (structuredTextMessageIds.has(event.messageId)) {
+            return;
+          }
+          legacyReplyMessageIds.add(event.messageId);
+          const blocks = appendMessageBlockDelta(this.messages[index].blocks, {
+            blockId: 'legacy-text-0',
+            blockType: 'text',
+            delta: event.delta,
+            block: {
+              id: 'legacy-text-0',
+              type: 'text',
+              text: '',
+            },
+          });
           this.messages[index] = {
             ...this.messages[index],
+            blocks,
             content: appendText(this.messages[index].content, event.delta),
           };
           return;
         }
 
+        if (event.type === 'message.block.delta') {
+          const skillName = extractSkillNameFromBlock(event.block)
+            ?? extractSkillName(event.delta);
+          if (skillName) {
+            showSkillLoaded(event.messageId, skillName, event.blockId);
+            return;
+          }
+          if (event.blockType === 'skill' || isInternalSkillBlock(event.block)) {
+            return;
+          }
+          const index = ensureAssistantMessage(event.messageId);
+          const isFirstStructuredTextDelta = event.blockType === 'text'
+            && !structuredTextMessageIds.has(event.messageId);
+          if (event.blockType === 'text') {
+            structuredTextMessageIds.add(event.messageId);
+          }
+          const existingBlocks = isFirstStructuredTextDelta && legacyReplyMessageIds.has(event.messageId)
+            ? this.messages[index].blocks?.filter((block) => block.id !== 'legacy-text-0')
+            : this.messages[index].blocks;
+          const blocks = appendMessageBlockDelta(existingBlocks, {
+            blockId: event.blockId,
+            blockType: event.blockType,
+            delta: event.delta,
+            block: event.block,
+          });
+          this.messages[index] = {
+            ...this.messages[index],
+            blocks,
+            content: deriveMessageContentFromBlocks(
+              blocks,
+              isFirstStructuredTextDelta && legacyReplyMessageIds.has(event.messageId)
+                ? ''
+                : this.messages[index].content,
+            ),
+          };
+          return;
+        }
+
+        if (event.type === 'message.block.completed') {
+          const skillName = extractSkillNameFromBlock(event.block);
+          if (skillName) {
+            showSkillLoaded(event.messageId, skillName, event.block.id);
+            return;
+          }
+          if (isInternalSkillBlock(event.block)) {
+            return;
+          }
+          const index = ensureAssistantMessage(event.messageId);
+          const blocks = upsertMessageBlock(this.messages[index].blocks, event.block);
+          this.messages[index] = {
+            ...this.messages[index],
+            blocks,
+            content: deriveMessageContentFromBlocks(blocks, this.messages[index].content),
+          };
+          return;
+        }
+
         if (event.type === 'artifact.created') {
+          const artifactBlock: MessageBlock = {
+            id: 'artifact-0',
+            type: 'artifact',
+            title: '生成内容',
+            text: event.media?.length ? '已生成可打开的内容。' : undefined,
+            media: event.media,
+            files: event.files,
+            actions: event.actions,
+          };
+          const index = ensureAssistantMessage(event.messageId);
+          const blocks = upsertMessageBlock(this.messages[index].blocks, artifactBlock);
           mergeAssistantPayload(event.messageId, {
             media: event.media,
             files: event.files,
             actions: event.actions,
+            blocks,
           });
           return;
         }
 
         if (event.type === 'message.completed') {
+          mergePendingUserMessage(event.messageId);
+          const existingBlocks = this.messages.find(
+            (message) => message.id === event.assistantMessageId,
+          )?.blocks;
           mergeAssistantPayload(event.assistantMessageId, {
             content: event.reply,
-            reasoning: event.reasoning,
+            reasoning: event.reasoning ?? undefined,
             media: event.media,
             files: event.files,
             actions: event.actions,
+            model: event.model,
+            usage: event.usage,
+            stopReason: event.stopReason,
+            blocks: reconcileCompletedReplyBlock(
+              existingBlocks,
+              event.blocks,
+              event.reply,
+            ),
+            raw: event.raw,
+            streaming: false,
           });
           return;
         }
@@ -1063,6 +1436,67 @@ export const useWorkspaceStore = defineStore('workspace', {
       this.messages = nextMessages;
       this.messagesStatus = 'ready';
       this.messageSubmitStatusByThread[targetThreadId] = 'ready';
+    },
+    async respondToInteractiveTool(
+      threadId: string,
+      toolUseId: string,
+      response: AskQuestionResponse,
+    ) {
+      if (!client.respondToInteractiveTool) {
+        throw new Error('当前服务不支持交互式问题。');
+      }
+
+      await client.respondToInteractiveTool(threadId, toolUseId, response);
+      void this.recoverInteractiveToolReply(threadId, toolUseId);
+    },
+    async recoverInteractiveToolReply(threadId: string, toolUseId: string) {
+      for (let attempt = 0; attempt < INTERACTIVE_TOOL_HISTORY_POLL_ATTEMPTS; attempt += 1) {
+        await new Promise<void>((resolve) => {
+          setTimeout(resolve, INTERACTIVE_TOOL_HISTORY_POLL_INTERVAL_MS);
+        });
+
+        let history: ThreadMessage[];
+        try {
+          history = await client.getThreadMessages(threadId);
+        } catch {
+          continue;
+        }
+
+        if (!hasCompletedInteractiveToolReply(history, toolUseId)) {
+          continue;
+        }
+
+        if (this.activeThreadId !== threadId) {
+          return;
+        }
+
+        // The original message stream performs one last history refresh when
+        // it closes after a tool response.  Wait for that refresh before
+        // applying the recovered terminal history, otherwise it can overwrite
+        // the final reply with the interim tool-use placeholder.
+        while (this.messageSubmitStatusByThread[threadId] === 'loading') {
+          await new Promise<void>((resolve) => {
+            setTimeout(resolve, INTERACTIVE_TOOL_STREAM_SETTLE_INTERVAL_MS);
+          });
+        }
+
+        try {
+          history = await client.getThreadMessages(threadId);
+        } catch {
+          continue;
+        }
+
+        if (!hasCompletedInteractiveToolReply(history, toolUseId)) {
+          continue;
+        }
+
+        const transientMessages = this.transientMessagesByThread[threadId] ?? [];
+        const refreshedMessages = mergeThreadMessages(history, transientMessages);
+        this.messages = preserveCompletedLiveReplies(this.messages, refreshedMessages);
+        this.messagesStatus = 'ready';
+        this.messageSubmitStatusByThread[threadId] = 'ready';
+        return;
+      }
     },
     closeArtifact() {
       this.artifactPaneOpen = false;

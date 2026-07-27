@@ -4,7 +4,17 @@ import {
   type CareerAgentClient,
 } from './careerAgentClient';
 import { CAREER_AGENT_API_ROUTES } from './careerAgentApiRoutes';
-import type { DraftMessageAttachment, ProfileRecord } from '../types/entities';
+import type { AskQuestionResponse, DraftMessageAttachment, ProfileRecord } from '../types/entities';
+import type {
+  BaseProfilePatch,
+  BaseProfileRecord,
+  ProfileChangeProposalRecord,
+  ProfileMemoryRecord,
+  ProfileRevisionRecord,
+  ProfileStateRecord,
+  CreateProfileMemoryInput,
+  ReplaceProfileMemoryInput,
+} from '../modules/profile/profileV2Types';
 import { rememberUploadedAssetPresentation } from './uploadedAssetPresentationCache';
 import type {
   UpstreamArtifactRecord,
@@ -372,6 +382,15 @@ export function createUpstreamCareerAgentClient(
 
       return normalizeSendThreadMessageResult(payload);
     },
+    async respondToInteractiveTool(threadId: string, toolUseId: string, response: AskQuestionResponse) {
+      await requestJson<{ accepted: boolean }>(
+        CAREER_AGENT_API_ROUTES.threadToolResponse(threadId, toolUseId),
+        {
+          method: 'POST',
+          data: response,
+        },
+      );
+    },
     async *streamMessage(threadId, input, streamOptions) {
       const path = CAREER_AGENT_API_ROUTES.streamThreadMessage(threadId);
       const token = readStoredAuthToken();
@@ -435,6 +454,59 @@ export function createUpstreamCareerAgentClient(
       );
 
       return (payload ?? []).map(normalizeProfileSuggestion);
+    },
+    async getBaseProfile() {
+      return requestJson<BaseProfileRecord>(CAREER_AGENT_API_ROUTES.profileBase());
+    },
+    async updateBaseProfile(patch: BaseProfilePatch, expectedVersion: number) {
+      return requestJson<BaseProfileRecord>(CAREER_AGENT_API_ROUTES.profileBase(), {
+        method: 'PATCH',
+        data: { ...patch, expectedVersion },
+      });
+    },
+    async listProfileMemories(filters: Record<string, string> = {}) {
+      return requestJson<ProfileMemoryRecord[]>(CAREER_AGENT_API_ROUTES.profileMemories(), {
+        params: filters,
+      });
+    },
+    async getProfileState() {
+      return requestJson<ProfileStateRecord>(CAREER_AGENT_API_ROUTES.profileState());
+    },
+    async createProfileMemory(input: CreateProfileMemoryInput, expectedVersion: number) {
+      return requestJson<ProfileMemoryRecord>(CAREER_AGENT_API_ROUTES.profileMemories(), {
+        method: 'POST',
+        data: { ...input, expectedVersion },
+      });
+    },
+    async replaceProfileMemory(profileIndex: string, input: ReplaceProfileMemoryInput, expectedVersion: number) {
+      return requestJson<ProfileMemoryRecord>(CAREER_AGENT_API_ROUTES.profileMemoryByIndex(profileIndex), {
+        method: 'PUT',
+        data: { ...input, expectedVersion },
+      });
+    },
+    async updateProfileMemory(id: string, patch: Partial<ProfileMemoryRecord>, expectedVersion: number) {
+      return requestJson<ProfileMemoryRecord>(CAREER_AGENT_API_ROUTES.profileMemory(id), {
+        method: 'PATCH',
+        data: { ...patch, expectedVersion },
+      });
+    },
+    async deleteProfileMemory(id: string, expectedVersion: number) {
+      await requestJson<unknown>(CAREER_AGENT_API_ROUTES.profileMemory(id), {
+        method: 'DELETE',
+        params: { expectedVersion },
+      });
+    },
+    async listProfileProposals() {
+      return requestJson<ProfileChangeProposalRecord[]>(CAREER_AGENT_API_ROUTES.profileProposals());
+    },
+    async resolveProfileProposal(id: string, action: 'accept' | 'reject') {
+      return requestJson<ProfileChangeProposalRecord>(
+        CAREER_AGENT_API_ROUTES.profileProposalAction(id, action),
+        { method: 'POST' },
+      );
+    },
+    async listProfileHistory() {
+      return requestJson<ProfileRevisionRecord[]>(CAREER_AGENT_API_ROUTES.profileHistory());
     },
     async listArtifacts() {
       const payload = await requestOptionalJson<UpstreamArtifactRecord[]>(

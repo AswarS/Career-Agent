@@ -46,9 +46,9 @@ function normalizeBaseUrl(value: string | undefined): string | null {
   return nextValue.replace(/\/+$/, '');
 }
 
-function normalizeUserId(value: string | undefined): string {
+function normalizeUserId(value: string | undefined, skipAuth: boolean): string {
   const nextValue = value?.trim();
-  return nextValue || '1';
+  return nextValue || (skipAuth ? '1' : '');
 }
 
 function normalizeBoolean(value: string | undefined): boolean {
@@ -114,12 +114,13 @@ function normalizeOptionalUrl(value: string | undefined): string | null {
 export function resolveRuntimeConfig(env: RuntimeEnvLike): RuntimeConfig {
   const clientMode = normalizeClientMode(env.VITE_CAREER_AGENT_CLIENT_MODE);
   const apiBaseUrl = normalizeBaseUrl(env.VITE_CAREER_AGENT_API_BASE_URL);
+  const skipAuth = normalizeBoolean(env.VITE_CAREER_AGENT_SKIP_AUTH);
 
   return {
     environmentName: env.MODE?.trim() || 'development',
     clientMode,
     apiBaseUrl,
-    userId: normalizeUserId(env.VITE_CAREER_AGENT_USER_ID),
+    userId: normalizeUserId(env.VITE_CAREER_AGENT_USER_ID, skipAuth),
     upstreamWithCredentials: normalizeBoolean(env.VITE_CAREER_AGENT_WITH_CREDENTIALS),
     artifactTransport: normalizeArtifactTransport(clientMode, env.VITE_CAREER_AGENT_ARTIFACT_TRANSPORT),
     voiceInputEnabled: normalizeBoolean(env.VITE_CAREER_AGENT_ENABLE_VOICE_INPUT),
@@ -128,7 +129,7 @@ export function resolveRuntimeConfig(env: RuntimeEnvLike): RuntimeConfig {
     htmlAppExampleUrl: normalizeOptionalUrl(env.VITE_CAREER_AGENT_HTML_APP_EXAMPLE_URL),
     nodeAppExampleUrl: normalizeOptionalUrl(env.VITE_CAREER_AGENT_NODE_APP_EXAMPLE_URL),
     upstreamConfigured: clientMode === 'upstream' && Boolean(apiBaseUrl),
-    skipAuth: normalizeBoolean(env.VITE_CAREER_AGENT_SKIP_AUTH),
+    skipAuth,
   };
 }
 

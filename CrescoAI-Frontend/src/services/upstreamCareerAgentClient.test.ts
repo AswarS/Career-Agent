@@ -150,7 +150,7 @@ describe('createUpstreamCareerAgentClient', () => {
     });
   });
 
-  it('creates a thread using the authenticated user identity', async () => {
+  it('creates a thread without trusting a client-supplied user id', async () => {
     const request = vi.fn(async (_config: AxiosRequestConfig) => ({
       data: {
         id: 2,
@@ -175,7 +175,9 @@ describe('createUpstreamCareerAgentClient', () => {
         title: '新对话',
       }),
     }));
-    expect(request.mock.calls[0]?.[0]?.data).not.toHaveProperty('userId');
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.not.objectContaining({ userId: expect.anything() }),
+    }));
     expect(thread.id).toBe('2');
   });
 
@@ -192,6 +194,29 @@ describe('createUpstreamCareerAgentClient', () => {
     expect(request).toHaveBeenCalledWith({
       url: '/api/career-agent/threads/12',
       method: 'DELETE',
+    });
+  });
+
+  it('submits interactive tool answers through the conversation-scoped endpoint', async () => {
+    const request = vi.fn(async () => ({ data: { accepted: true } }));
+    const client = createUpstreamCareerAgentClient({
+      baseUrl: 'https://agent.example.com',
+      userId: '1',
+      httpClient: createHttpClient(request),
+    });
+
+    await client.respondToInteractiveTool?.('thread-12', 'tool-12', {
+      approved: true,
+      answers: { '选择哪一个？': '推荐方案' },
+    });
+
+    expect(request).toHaveBeenCalledWith({
+      url: '/api/career-agent/threads/thread-12/tool-responses/tool-12',
+      method: 'POST',
+      data: {
+        approved: true,
+        answers: { '选择哪一个？': '推荐方案' },
+      },
     });
   });
 

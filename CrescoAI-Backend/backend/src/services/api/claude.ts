@@ -1941,6 +1941,12 @@ async function* queryModel(
       const STALL_THRESHOLD_MS = 30_000 // 30 seconds
       let totalStallTime = 0
       let stallCount = 0
+      const traceStreamPrefix = isEnvTruthy(
+        process.env.CAREER_AGENT_TRACE_STREAM_PREFIX,
+      )
+      const tracedTextDeltaBlocks = new Set<number>()
+      const prefixPreview = (value: string): string =>
+        JSON.stringify(value.slice(0, 80))
 
       for await (const part of stream) {
         resetStreamIdleTimer()
@@ -1986,6 +1992,22 @@ async function* queryModel(
             partialMessage = part.message
             ttftMs = Date.now() - start
             usage = updateUsage(usage, part.message?.usage)
+            for (const [index, initialBlock] of (
+              part.message?.content ?? []
+            ).entries()) {
+              if (initialBlock.type === 'text') {
+                contentBlocks[index] = initializeTextContentBlock(initialBlock)
+                if (traceStreamPrefix && initialBlock.text) {
+                  logForDebugging(
+                    `[StreamPrefix] message_start message=${part.message.id} index=${index} text=${prefixPreview(initialBlock.text)}`,
+                  )
+                }
+              } else if (initialBlock.type === 'thinking') {
+                contentBlocks[index] = initializeThinkingContentBlock(
+                  initialBlock,
+                )
+              }
+            }
             // Capture research from message_start if available (internal only).
             // Always overwrite with the latest value.
             if (
@@ -2021,16 +2043,31 @@ async function* queryModel(
                   })
                 }
                 break
-              case 'text':
-                contentBlocks[part.index] = initializeTextContentBlock(
+              case 'text': {
+                const seededBlock = contentBlocks[part.index]
+                const textBlock = initializeTextContentBlock(
                   part.content_block,
+                  seededBlock?.type === 'text' ? seededBlock.text : '',
                 )
+                contentBlocks[part.index] = textBlock
+                if (traceStreamPrefix) {
+                  logForDebugging(
+                    `[StreamPrefix] content_block_start message=${partialMessage?.id ?? 'unknown'} index=${part.index} text=${prefixPreview(textBlock.text)}`,
+                  )
+                }
                 break
-              case 'thinking':
+              }
+              case 'thinking': {
+                const seededBlock = contentBlocks[part.index]
                 contentBlocks[part.index] = initializeThinkingContentBlock(
                   part.content_block,
+                  seededBlock?.type === 'thinking' &&
+                  typeof seededBlock.thinking === 'string'
+                    ? seededBlock.thinking
+                    : '',
                 )
                 break
+              }
               default:
                 // even more awkwardly, the sdk mutates the contents of text blocks
                 // as it works. we want the blocks to be immutable, so that we can
@@ -2116,6 +2153,15 @@ async function* queryModel(
                         contentBlock.type as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
                     })
                     throw new Error('Content block is not a text block')
+                  }
+                  if (
+                    traceStreamPrefix &&
+                    !tracedTextDeltaBlocks.has(part.index)
+                  ) {
+                    tracedTextDeltaBlocks.add(part.index)
+                    logForDebugging(
+                      `[StreamPrefix] first_text_delta message=${partialMessage?.id ?? 'unknown'} index=${part.index} text=${prefixPreview(delta.text)}`,
+                    )
                   }
                   contentBlock.text += delta.text
                   break

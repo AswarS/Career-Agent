@@ -1,0 +1,91 @@
+{
+  "original_metadata": {
+    "skill_id": "industry_opportunity_analysis",
+    "name": "行业趋势与机会分析",
+    "type": "career_exploration_and_positioning",
+    "kag_role": "skill_action",
+    "description": "分析行业或岗位方向的发展趋势、机会点、风险点、适合人群和切入建议。",
+    "inputs": [
+      "market_trend_resource",
+      "user_profile_resource optional",
+      "target_industry optional"
+    ],
+    "outputs": [
+      "trend_summary",
+      "opportunities",
+      "risks",
+      "recommended_roles",
+      "entry_suggestions"
+    ],
+    "preconditions": [
+      "用户已提出相关职业发展请求，或上一步 action 已产生可用上下文"
+    ],
+    "postconditions": [
+      "产生可进入下一步 action 的 state_update 或 intermediate_artifact"
+    ],
+    "possible_next_skills": [
+      "target_role_positioning",
+      "career_risk_assessment",
+      "application_strategy_planning"
+    ],
+    "required_context_types": [
+      "market_trend_resource"
+    ],
+    "allowed_tools": [
+      "WebSearchTool",
+      "WebFetchTool",
+      "WebBrowserTool"
+    ],
+    "recommended_verifiers": [
+      "evidence_support_check",
+      "shortcut_risk_check"
+    ]
+  },
+  "compiled_metadata": {
+    "skill_id": "industry_opportunity_analysis",
+    "claude_skill_name": "industry_opportunity_analysis",
+    "display_name": "行业趋势与机会分析",
+    "type": "career_exploration_and_positioning",
+    "kag_role": "skill_action",
+    "summary": "Analyzes industry or role-area trends, opportunities, risks, suitable profiles, and entry suggestions.",
+    "minimum_required_inputs": [
+      "market_trend_resource"
+    ],
+    "optional_inputs": [
+      "user_profile_resource",
+      "target_industry"
+    ],
+    "required_context_types": [
+      "market_trend_resource"
+    ],
+    "allowed_tools": [
+      "WebSearchTool",
+      "WebFetchTool",
+      "WebBrowserTool"
+    ],
+    "recommended_verifiers": [
+      "evidence_support_check",
+      "shortcut_risk_check"
+    ],
+    "trigger_examples": [
+      "Analyze opportunities in the AI healthcare industry.",
+      "What are the trends, risks, and entry roles in fintech?",
+      "Is sustainability consulting a good direction now?"
+    ],
+    "negative_trigger_examples": [
+      "Choose my primary role from these options.",
+      "Explain daily tasks of a data analyst.",
+      "Create my job application strategy."
+    ],
+    "handoff_conditions": {
+      "target_role_positioning": "Use when the user wants to select target roles from the opportunity analysis.",
+      "career_risk_assessment": "Use when the user wants detailed risk evaluation for a career move.",
+      "application_strategy_planning": "Use when the user is ready to apply into the industry or roles."
+    },
+    "output_artifact_type": "industry_opportunity_report",
+    "risk_level": "medium",
+    "requires_current_information": true,
+    "requires_user_profile": false,
+    "requires_external_evidence": true
+  }
+}

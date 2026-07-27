@@ -355,7 +355,7 @@ onMounted(() => {
         <div class="section-heading">
           <div>
             <p class="eyebrow">Model API</p>
-            <h2>Anthropic 配置</h2>
+            <h2>Model API 配置</h2>
           </div>
           <span class="api-key-badge" :class="{ configured: primaryApiSetting?.hasApiKey }">
             {{ primaryApiSetting?.hasApiKey ? `已保存 ${primaryApiSetting.apiKeyHint ?? ''}` : '未保存 Key' }}
@@ -365,7 +365,11 @@ onMounted(() => {
         <form class="settings-form api-form" @submit.prevent="saveApiSetting">
           <label class="field-block">
             <span>Provider</span>
-            <input v-model="apiForm.provider" type="text" placeholder="anthropic" />
+            <select v-model="apiForm.provider">
+              <option value="anthropic">Anthropic Messages</option>
+              <option value="openai">OpenAI Chat Completions</option>
+              <option value="openrouter">OpenRouter (OpenAI compatible)</option>
+            </select>
           </label>
           <label class="field-block">
             <span>模型</span>
@@ -638,7 +642,8 @@ h2 {
   font-size: 0.82rem;
 }
 
-.field-block input {
+.field-block input,
+.field-block select {
   width: 100%;
   min-height: 42px;
   border: 1px solid var(--color-border);
@@ -648,7 +653,8 @@ h2 {
   padding: 0 13px;
 }
 
-.field-block input:focus {
+.field-block input:focus,
+.field-block select:focus {
   border-color: color-mix(in srgb, var(--color-primary) 44%, var(--color-border));
   outline: 3px solid var(--color-focus-ring);
 }

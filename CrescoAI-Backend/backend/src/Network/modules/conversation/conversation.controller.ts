@@ -22,6 +22,7 @@ import type { Request, Response } from 'express';
 import { ConversationService } from './conversation.service';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { SendMultimodalMessageDto } from './dto/send-multimodal-message.dto';
+import { RespondToToolDto } from './dto/respond-to-tool.dto';
 import { OwnershipGuard } from '../auth/ownership.guard';
 import type { AuthenticatedRequest } from '../auth/auth.types';
 
@@ -36,22 +37,10 @@ export class ConversationController {
 
   @Post()
   create(@Req() req: Request, @Body() dto: CreateConversationDto) {
-    return this.conversationService.createConversation(dto, req.userId);
-  }
-
-  @Get(':id')
-  getByUserId(@Req() req: AuthenticatedRequest, @Param('id') uid: string) {
-    const requestedUserId = Number(uid);
-    const currentUserId = req.userId;
-    if (!currentUserId) {
+    if (!req.userId) {
       throw new ForbiddenException('Missing user identity');
     }
-    const matchesLegacyId = Number.isInteger(requestedUserId) && requestedUserId === currentUserId;
-    const matchesPublicId = uid === req.user?.id;
-    if (!matchesLegacyId && !matchesPublicId) {
-      throw new ForbiddenException('You do not have access to this user conversations');
-    }
-    return this.conversationService.listConversations(currentUserId);
+    return this.conversationService.createConversation(dto, req.userId);
   }
 
   @Delete(':id')
@@ -146,6 +135,22 @@ export class ConversationController {
     @Body() dto: SendMultimodalMessageDto,
   ) {
     return this.conversationService.sendMessage(conversationId, dto, req.userId);
+  }
+
+  @Post(':id/tool-responses/:toolUseId')
+  @UseGuards(OwnershipGuard)
+  respondToInteractiveTool(
+    @Req() req: Request,
+    @Param('id') conversationId: string,
+    @Param('toolUseId') toolUseId: string,
+    @Body() dto: RespondToToolDto,
+  ) {
+    return this.conversationService.respondToInteractiveTool(
+      conversationId,
+      toolUseId,
+      dto,
+      req.userId,
+    );
   }
 
   @Post(':id/files')

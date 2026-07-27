@@ -69,9 +69,9 @@ export class SkillController {
     @Param('name') name: string,
     @Body() dto: InvokeSkillDto,
   ) {
-    return this.skillService.invokeSkill(name, dto.args ?? '', {
-      userId: req.userId,
+    return this.skillService.invokeSkillThroughCc(name, dto.args ?? '', {
       ...dto.context,
+      userId: req.userId,
     });
   }
 }

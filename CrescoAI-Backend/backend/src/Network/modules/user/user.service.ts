@@ -15,7 +15,14 @@ import { ResourceEntity } from '../resource/entities/resource.entity';
 import { GeneratedAppEntity } from '../generated-app/entities/generated-app.entity';
 import { IntegrationOutboxEntity } from '../integration/entities/integration-outbox.entity';
 import { CareerProfileVersionEntity } from '../profile/entities/career-profile-version.entity';
+import { BaseProfileEntity } from '../profile/entities/base-profile.entity';
+import { ProfileStateEntity } from '../profile/entities/profile-state.entity';
+import { ProfileMemoryItemEntity } from '../profile/entities/profile-memory-item.entity';
+import { ProfileChangeProposalEntity } from '../profile/entities/profile-change-proposal.entity';
+import { ProfileRevisionEntity } from '../profile/entities/profile-revision.entity';
+import { ProfileProjectionJobEntity } from '../profile/entities/profile-projection-job.entity';
 import { ProfileSuggestionEntity } from '../profile/entities/profile-suggestion.entity';
+import { networkRootDir } from '../../utils/networkTranscriptStorage';
 
 @Injectable()
 export class UserService {
@@ -81,8 +88,14 @@ export class UserService {
       await manager.delete(TeamEntity, { userId: targetUserId });
       await manager.delete(ResourceEntity, { userId: targetUserId });
       await manager.delete(GeneratedAppEntity, { userId: targetUserId });
-      await manager.delete(ProfileSuggestionEntity, { userId: targetUserId });
       await manager.delete(CareerProfileVersionEntity, { userId: targetUserId });
+      await manager.delete(ProfileProjectionJobEntity, { userId: targetUserId });
+      await manager.delete(ProfileRevisionEntity, { userId: targetUserId });
+      await manager.delete(ProfileChangeProposalEntity, { userId: targetUserId });
+      await manager.delete(ProfileSuggestionEntity, { userId: targetUserId });
+      await manager.delete(ProfileMemoryItemEntity, { userId: targetUserId });
+      await manager.delete(ProfileStateEntity, { userId: targetUserId });
+      await manager.delete(BaseProfileEntity, { userId: targetUserId });
       await manager.delete(UserEntity, { id: targetUserId });
     });
 
@@ -112,10 +125,9 @@ export class UserService {
   }
 
   private async cleanupUserFiles(userId: number) {
-    const networkRoot = join(process.cwd(), 'src', 'Network');
     const targets = [
-      join(networkRoot, 'user', String(userId)),
-      join(networkRoot, 'files', String(userId)),
+      join(networkRootDir, 'user', String(userId)),
+      join(networkRootDir, 'files', String(userId)),
     ];
 
     for (const target of targets) {

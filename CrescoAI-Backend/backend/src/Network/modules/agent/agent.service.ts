@@ -3,44 +3,77 @@ import {
   AgentAttachmentInput,
   AgentConversationMetadata,
   AgentCreateConversationInput,
+  AgentMessageBlock,
   AgentSendMessageInput,
   AgentSendMessageResult,
   AgentStreamEvent,
   type GeneratedFile,
   createConversation,
 } from './agent.runtime';
+import { extractAskUserQuestions } from './ask-user-question.js';
 import {
   runWithSessionContext,
   type SessionContext,
+  type ToolResponsePayload,
 } from '../../../server/SessionContext.js';
 import { createIsolatedState } from '../../../bootstrap/state.js';
 import { createQueryEngineForSession } from '../../../server/queryEngineFactory.js';
+import {
+  getNetworkSharedReadOnlyRoots,
+  getNetworkTrustedSkillCatalogRoots,
+} from '../../../server/networkFilesystemPolicy.js';
+import { NETWORK_READ_ONLY_FILE_TOOLS } from '../../../server/filesystemPolicyTypes.js';
 import { QueryEngine } from '../../../QueryEngine.js';
-import { appendFile, mkdir } from 'node:fs/promises';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { mkdir } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { SettingsService } from '../settings/settings.service';
 import { setSessionMultimodalConfig, removeSessionMultimodalConfig } from '../../../utils/multimodalConfig.js';
 import { discoverGeneratedFiles } from './generated-output-discovery.js';
 import { sanitizeServerPhysicalPaths } from '../../utils/publicOutputSanitizer.js';
-import { sideQuery } from '../../../utils/sideQuery.js';
-import { getDefaultMainLoopModel } from '../../../utils/model/model.js';
+import { getCommands } from '../../../commands.js';
+import { flushSessionStorage } from '../../../utils/sessionStorage.js';
+import {
+  appendNetworkTranscriptEvent,
+  ensureNetworkUserWorkspaceDir,
+  ensureNetworkTranscriptDir,
+  getNetworkAutoMemoryDir,
+  getNetworkConversationMemoryDir,
+  getNetworkConversationMemorySessionPath,
+  getNetworkTranscriptDir,
+  getNetworkUserFilesDir,
+  getNetworkUserWorkspaceDir,
+  networkRootDir,
+} from '../../utils/networkTranscriptStorage.js';
+import { prepareConversationMemoryTurn } from '../../memory/conversationMemoryRuntime.js';
+import {
+  isConversationMemoryMaintenanceMessage,
+  isInternalSdkMessage,
+  shouldSuppressConversationMemoryBlock,
+} from '../../memory/conversationMemoryVisibility.js';
+import {
+  createSkillLoadedBlock,
+  extractLoadedSkillNameFromText,
+  normalizeCanonicalMessageBlocks,
+  THINKING_BLOCK_TITLE,
+} from '../conversation/canonical-message-blocks.js';
+import { ProfileV2Service } from '../profile/profile-v2.service';
+import { ProfileMemoryService } from '../profile/profile-memory.service';
+import { ProfileProposalService } from '../profile/profile-proposal.service';
+import { createProfileTools } from '../profile/profile.tools';
+import { ProfileRecallService } from '../profile/profile-recall.service';
+import { loadAgentSessionHistory } from './agent-session-recovery.js';
 
 // ---------------------------------------------------------------------------
 // JSONL helpers
 // ---------------------------------------------------------------------------
-
-const networkRootDir = fileURLToPath(new URL('../../', import.meta.url));
-const userDataRootDir = join(networkRootDir, 'user');
 
 async function appendJsonlEvent(
   userId: string,
   conversationId: string,
   payload: Record<string, unknown>,
 ): Promise<void> {
-  const sessionFilePath = join(userDataRootDir, userId, `${conversationId}.jsonl`);
-  await appendFile(sessionFilePath, `${JSON.stringify(payload)}\n`, 'utf8');
+  await appendNetworkTranscriptEvent(userId, conversationId, payload);
 }
 
 function createAssistantProcessBlock(thinking: string): Record<string, unknown> {
@@ -86,9 +119,11 @@ function isToolResultProcessBlock(blockType: string, block: Record<string, unkno
   return (
     blockType === 'tool_result' ||
     blockType.endsWith('_tool_result') ||
-    block.content !== undefined ||
+    typeof block.tool_use_id === 'string' ||
+    typeof block.toolUseId === 'string' ||
     block.result !== undefined ||
-    block.output !== undefined
+    block.output !== undefined ||
+    block.error !== undefined
   );
 }
 
@@ -171,6 +206,47 @@ function stringifyToolResultValue(value: unknown): string {
   }
 }
 
+function extractLoadedSkillNameFromSdkMessage(value: unknown): string | null {
+  if (typeof value !== 'object' || value === null) return null;
+
+  const record = value as Record<string, unknown>;
+  const message = typeof record.message === 'object' && record.message !== null
+    ? record.message as Record<string, unknown>
+    : null;
+  if (!message) return null;
+
+  const content = message.content;
+  if (record.isMeta === true) {
+    return extractLoadedSkillNameFromText(stringifyToolResultValue(content));
+  }
+
+  for (const block of Array.isArray(content) ? content : []) {
+    if (typeof block !== 'object' || block === null) continue;
+    const typedBlock = block as Record<string, unknown>;
+    if (typedBlock.type !== 'tool_result') continue;
+    const skillName = extractLoadedSkillNameFromText(
+      stringifyToolResultValue(typedBlock.content),
+    );
+    if (skillName) return skillName;
+  }
+  return null;
+}
+
+function extractSkillNameFromToolUseBlock(value: unknown): string | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const block = value as Record<string, unknown>;
+  const blockType = typeof block.type === 'string' ? block.type : '';
+  const toolName = typeof block.name === 'string' ? block.name.trim().toLowerCase() : '';
+  if (!blockType.endsWith('tool_use')) return null;
+  if (toolName !== 'skill') return null;
+  const input = typeof block.input === 'object' && block.input !== null
+    ? block.input as Record<string, unknown>
+    : null;
+  return typeof input?.skill === 'string' && input.skill.trim()
+    ? input.skill.trim()
+    : null;
+}
+
 function redactSensitiveProcessText(input: string): string {
   let output = input;
   output = output.replace(/(Bearer\s+)[A-Za-z0-9._~+/=-]+/gi, '$1******');
@@ -195,6 +271,140 @@ function formatFilteredStructuredProcessBlock(blockType: string): string {
     '[过程事件]',
     '正在处理过程事件。',
   ].join('\n');
+}
+
+function readBlockString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function readToolUseId(block: Record<string, unknown>): string | null {
+  return readBlockString(block.id ?? block.tool_use_id ?? block.toolUseId);
+}
+
+function readToolName(block: Record<string, unknown>): string | null {
+  return readBlockString(block.name ?? block.tool_name ?? block.toolName);
+}
+
+function createTextAgentBlock(id: string, text = ''): AgentMessageBlock {
+  return {
+    id,
+    type: 'text',
+    text: sanitizeServerPhysicalPaths(text),
+  };
+}
+
+function createStatusAgentBlock(
+  id: string,
+  text: string,
+  title = THINKING_BLOCK_TITLE,
+): AgentMessageBlock {
+  return {
+    id,
+    type: 'status',
+    title,
+    text: sanitizeServerPhysicalPaths(text),
+  };
+}
+
+function createPublicAgentBlockFromContentBlock(
+  block: Record<string, unknown>,
+  index: number,
+): AgentMessageBlock | null {
+  const blockType = typeof block.type === 'string' ? block.type : '';
+
+  if (blockType === 'text') {
+    const text = readBlockString(block.text ?? block.content);
+    return text ? createTextAgentBlock(`text-${index}`, text) : null;
+  }
+
+  if (isToolResultProcessBlock(blockType, block)) {
+    const toolName = readToolName(block);
+    const toolUseId = readToolUseId(block);
+    const resultText = redactSensitiveProcessText(extractToolResultText(block)).trim();
+    return {
+      id: toolUseId ? `tool-result-${toolUseId}` : `tool-result-${index}`,
+      type: 'tool_result',
+      title: toolName ? `工具返回 · ${toolName}` : '工具返回',
+      name: toolName,
+      toolUseId,
+      text: resultText || (block.is_error === true || block.isError === true ? '工具返回错误。' : '工具已返回。'),
+      isError: block.is_error === true || block.isError === true,
+    };
+  }
+
+  if (isToolFacingProcessBlock(blockType, block)) {
+    const toolName = readToolName(block);
+    const toolUseId = readToolUseId(block);
+    const questions = extractAskUserQuestions(block);
+    if (questions) {
+      return {
+        id: toolUseId ? `ask-question-${toolUseId}` : `ask-question-${index}`,
+        type: 'ask_question',
+        title: '需要你的选择',
+        name: toolName,
+        toolUseId,
+        status: 'pending',
+        text: '请回答以下问题，以便继续。',
+        questions,
+      };
+    }
+    return {
+      id: toolUseId ? `tool-call-${toolUseId}` : `tool-call-${index}`,
+      type: 'tool_call',
+      title: toolName ? `工具调用 · ${toolName}` : '工具调用',
+      name: toolName,
+      toolUseId,
+      status: 'completed',
+      text: toolName ? `正在调用 ${toolName}。` : '正在调用工具。',
+    };
+  }
+
+  if (blockType === 'thinking' || blockType === 'reasoning') {
+    const text = readBlockString(block.thinking ?? block.reasoning ?? block.text ?? block.content);
+    return text ? createStatusAgentBlock(`status-${index}`, text) : null;
+  }
+
+  if (blockType === 'redacted_thinking') {
+    return createStatusAgentBlock(`status-${index}`, '思考内容已脱敏。');
+  }
+
+  const processText = formatAgentProcessBlock(block);
+  return processText ? createStatusAgentBlock(`status-${index}`, processText) : null;
+}
+
+function mergeAgentBlock(blocks: AgentMessageBlock[], block: AgentMessageBlock): AgentMessageBlock[] {
+  const index = blocks.findIndex((item) => item.id === block.id);
+  if (index < 0) {
+    return [...blocks, block];
+  }
+
+  const nextBlocks = [...blocks];
+  nextBlocks[index] = {
+    ...nextBlocks[index],
+    ...block,
+    text: block.text ?? nextBlocks[index]?.text,
+  };
+  return nextBlocks;
+}
+
+function appendTextToAgentBlock(
+  blocks: AgentMessageBlock[],
+  blockId: string,
+  delta: string,
+): AgentMessageBlock[] {
+  const index = blocks.findIndex((item) => item.id === blockId);
+  if (index < 0) {
+    return [...blocks, createTextAgentBlock(blockId, delta)];
+  }
+
+  const nextBlocks = [...blocks];
+  const existing = nextBlocks[index];
+  nextBlocks[index] = {
+    ...existing,
+    type: 'text',
+    text: `${existing?.text ?? ''}${sanitizeServerPhysicalPaths(delta)}`,
+  };
+  return nextBlocks;
 }
 
 class AsyncEventQueue<T> implements AsyncIterable<T> {
@@ -259,8 +469,30 @@ class AsyncEventQueue<T> implements AsyncIterable<T> {
 interface ConversationConfig {
   apiKey?: string;
   baseUrl?: string;
+  provider?: string;
   model?: string;
 }
+
+type QueryEngineInferenceResult =
+  | {
+      success: true;
+      userMessageId: string;
+      assistantMessageId: string;
+      reply: string;
+      thinking?: string;
+      blocks?: AgentMessageBlock[];
+      model?: string;
+      usage?: Record<string, unknown>;
+      durationMs?: number;
+      generatedFiles?: GeneratedFile[];
+      messageCreated?: boolean;
+    }
+  | {
+      success: false;
+      userMessageId?: string;
+      assistantMessageId?: string;
+      messageCreated?: boolean;
+    };
 
 @Injectable()
 export class AgentService {
@@ -270,68 +502,27 @@ export class AgentService {
   private queryEngines = new Map<string, QueryEngine>();
   /** Per-conversation SessionContext for ALS routing */
   private sessionContexts = new Map<string, SessionContext>();
+  /** Serializes first-use restoration after a process restart. */
+  private queryEngineInitializations = new Map<
+    string,
+    { userId: string; promise: Promise<QueryEngine> }
+  >();
+  private disposedConversationOwners = new Map<string, string>();
 
-  constructor(@Optional() private readonly settingsService?: SettingsService) {}
-
-  async runIsolatedNonStreamingPrompt(input: {
-    userId: string;
-    content: string;
-    apiKey?: string;
-    baseUrl?: string;
-    model?: string;
-    abortSignal?: AbortSignal;
-  }): Promise<{
-    success: boolean;
-    reply?: string;
-    model?: string;
-  }> {
-    const model = input.model?.trim() || getDefaultMainLoopModel();
-
-    return this.runInSessionContext({
-      userId: input.userId,
-      config: {
-        apiKey: input.apiKey,
-        baseUrl: input.baseUrl,
-        model,
-      },
-      callback: async () => {
-        const response = await sideQuery({
-          querySource: 'autoskill_router',
-          model,
-          messages: [{ role: 'user', content: input.content }],
-          max_tokens: 1024,
-          maxRetries: 2,
-          signal: input.abortSignal,
-          skipSystemPromptPrefix: true,
-          temperature: 0,
-          thinking: false,
-        });
-        const reply = sanitizeServerPhysicalPaths(
-          response.content
-            .filter((block) => block.type === 'text')
-            .map((block) => block.text)
-            .join('')
-            .trim(),
-        );
-
-        if (!reply) {
-          return { success: false, model: response.model };
-        }
-
-        return {
-          success: true,
-          reply,
-          model: response.model,
-        };
-      },
-    });
-  }
+  constructor(
+    @Optional() private readonly settingsService?: SettingsService,
+    @Optional() private readonly profileV2Service?: ProfileV2Service,
+    @Optional() private readonly profileMemoryService?: ProfileMemoryService,
+    @Optional() private readonly profileProposalService?: ProfileProposalService,
+    @Optional() private readonly profileRecallService?: ProfileRecallService,
+  ) {}
 
   async runIsolatedPrompt(input: {
     userId: string;
     content: string;
     apiKey?: string;
     baseUrl?: string;
+    provider?: string;
     model?: string;
     conversationId?: string;
     abortSignal?: AbortSignal;
@@ -355,12 +546,14 @@ export class AgentService {
       const config = {
         apiKey: input.apiKey,
         baseUrl: input.baseUrl,
+        provider: input.provider,
         model: input.model,
       };
       let result;
 
       if (input.onProgress || input.abortSignal) {
         const eventQueue = new AsyncEventQueue<AgentStreamEvent>();
+        const userMessageId = randomUUID();
         const inferencePromise = this.runStreamingInference({
           input: {
             conversationId: tempConversationId,
@@ -370,8 +563,8 @@ export class AgentService {
             abortSignal: input.abortSignal,
           },
           config,
-          userEventUuid: randomUUID(),
-          assistantMessageId: `msg_assistant_skill_${randomUUID().replace(/-/g, '')}`,
+          userMessageId,
+          fallbackAssistantMessageId: `msg_assistant_skill_${randomUUID().replace(/-/g, '')}`,
           startTime: Date.now(),
           eventQueue,
         });
@@ -409,7 +602,7 @@ export class AgentService {
   async runInSessionContext<T>(input: {
     userId: string;
     conversationId?: string;
-    config?: { apiKey?: string; baseUrl?: string; model?: string };
+    config?: { apiKey?: string; baseUrl?: string; provider?: string; model?: string };
     callback: (context: SessionContext) => Promise<T>;
   }): Promise<T> {
     const sessionId =
@@ -417,8 +610,9 @@ export class AgentService {
         ? input.conversationId
         : `skill-tool-${randomUUID()}`;
     const isTemporarySession = !input.conversationId || input.conversationId.trim().length === 0;
-    const userWorkspaceDir = join(userDataRootDir, String(input.userId));
-    await mkdir(userWorkspaceDir, { recursive: true });
+    const userWorkspaceDir = await ensureNetworkUserWorkspaceDir(input.userId);
+    await ensureNetworkTranscriptDir(input.userId);
+    this.assertCachedSessionOwner(sessionId, input.userId);
 
     let ctx = this.sessionContexts.get(sessionId);
     if (!ctx) {
@@ -429,6 +623,8 @@ export class AgentService {
         userWorkspaceDir,
       );
       this.sessionContexts.set(sessionId, ctx);
+    } else if (input.config) {
+      this.refreshCachedSessionConfig(sessionId, input.config);
     }
 
     if (this.settingsService) {
@@ -467,64 +663,136 @@ export class AgentService {
     input: AgentCreateConversationInput,
   ): Promise<AgentConversationMetadata> {
     const meta = await createConversation(input);
-    if (input.apiKey || input.baseUrl || input.model) {
+    this.disposedConversationOwners.delete(meta.conversationId);
+    if (input.apiKey || input.baseUrl || input.provider || input.model) {
       this.conversationConfigs.set(meta.conversationId, {
         apiKey: input.apiKey,
         baseUrl: input.baseUrl,
+        provider: input.provider,
         model: input.model,
       });
     }
     return meta;
   }
 
+  async disposeConversationRuntime(
+    userId: string,
+    conversationId: string,
+  ): Promise<void> {
+    this.assertCachedSessionOwner(conversationId, userId);
+    const pending = this.queryEngineInitializations.get(conversationId);
+    if (pending && pending.userId !== userId) {
+      throw new Error('Session ownership mismatch');
+    }
+
+    this.disposedConversationOwners.set(conversationId, userId);
+    const context = this.sessionContexts.get(conversationId);
+    try {
+      context?.abortController?.abort();
+    } catch {
+      // Best-effort abort; map cleanup still prevents runtime reuse.
+    }
+    if (context) {
+      for (const pendingResponse of context.pendingToolResponses.values()) {
+        clearTimeout(pendingResponse.timeout);
+        pendingResponse.resolve({ approved: false });
+      }
+      context.pendingToolResponses.clear();
+      await Promise.allSettled(
+        context.mcpClients.map((client) => client.close()),
+      );
+      for (const connection of context.wsConnections) {
+        try {
+          connection.close?.();
+        } catch {
+          // Best-effort close for runtime-owned websocket connections.
+        }
+      }
+      context.wsConnections.clear();
+    }
+    this.queryEngines.delete(conversationId);
+    this.sessionContexts.delete(conversationId);
+    this.conversationConfigs.delete(conversationId);
+    this.queryEngineInitializations.delete(conversationId);
+    removeSessionMultimodalConfig(conversationId);
+  }
+
+  restoreConversationRuntimeAfterFailedDeletion(
+    userId: string,
+    conversationId: string,
+  ): void {
+    const disposedOwner = this.disposedConversationOwners.get(conversationId);
+    if (disposedOwner && disposedOwner !== userId) {
+      throw new Error('Session ownership mismatch');
+    }
+    if (disposedOwner === userId) {
+      this.disposedConversationOwners.delete(conversationId);
+    }
+  }
+
+  /** Resolve an interactive tool invocation for the active conversation session. */
+  async respondToInteractiveTool(
+    conversationId: string,
+    userId: string,
+    toolUseId: string,
+    payload: ToolResponsePayload,
+  ): Promise<boolean> {
+    this.assertCachedSessionOwner(conversationId, userId);
+    const context = this.sessionContexts.get(conversationId);
+    const pending = context?.pendingToolResponses.get(toolUseId);
+    if (!pending) {
+      return false;
+    }
+
+    pending.resolve(payload);
+    return true;
+  }
+
   async sendMessage(input: AgentSendMessageInput): Promise<AgentSendMessageResult> {
     const { conversationId, userId, content, clientRequestId } = input;
     const userVisibleContent = input.userVisibleContent ?? content;
-    const userMessageId = input.userMessageId ?? `msg_user_${randomUUID().replace(/-/g, '')}`;
-    const assistantMessageId = input.assistantMessageId ?? `msg_assistant_${randomUUID().replace(/-/g, '')}`;
+    const userMessageId = input.userMessageId ?? randomUUID();
+    const fallbackAssistantMessageId = input.assistantMessageId ?? `msg_assistant_${randomUUID().replace(/-/g, '')}`;
     const now = new Date();
 
-    // 1. Write user message event to JSONL
-    const userEventUuid = randomUUID();
-    await appendJsonlEvent(userId, conversationId, {
-      parentUuid: null,
-      isSidechain: false,
-      promptId: clientRequestId ?? randomUUID(),
-      type: 'user',
-      message: {
-        id: userMessageId,
-        role: 'user',
-        content: userVisibleContent,
-      },
-      uuid: userEventUuid,
-      timestamp: now.toISOString(),
-      sessionId: conversationId,
-    });
-
-    // 2. Merge config: message-level override > conversation-level config > user-level settings
+    // 1. Merge config: message-level override > conversation-level config > user-level settings
     const convCfg = this.conversationConfigs.get(conversationId);
     let userSettings: ConversationConfig = {};
     if (this.settingsService) {
       const saved = await this.settingsService.getApiSettings(Number(userId));
       if (saved) {
-        userSettings = { apiKey: saved.apiKey ?? undefined, baseUrl: saved.baseUrl ?? undefined, model: saved.model ?? undefined };
+        userSettings = {
+          apiKey: saved.apiKey ?? undefined,
+          baseUrl: saved.baseUrl ?? undefined,
+          provider: saved.provider ?? undefined,
+          model: saved.model ?? undefined,
+        };
       }
     }
     const mergedConfig: ConversationConfig = {
       apiKey: input.apiKey ?? convCfg?.apiKey ?? userSettings.apiKey,
       baseUrl: input.baseUrl ?? convCfg?.baseUrl ?? userSettings.baseUrl,
+      provider: input.provider ?? convCfg?.provider ?? userSettings.provider,
       model: input.model ?? convCfg?.model ?? userSettings.model,
     };
 
     if (!mergedConfig.apiKey?.trim()) {
-      const errorReply = 'API key is required. Please save an Anthropic API key in Settings before sending messages.';
+      const errorReply = 'API key is required. Please save a model API key in Settings before sending messages.';
       const replyUuid = randomUUID();
+      const assistantParentUuid = await this.appendManualUserMessage({
+        userId,
+        conversationId,
+        userMessageId,
+        content: userVisibleContent,
+        clientRequestId,
+        timestamp: now,
+      });
       await appendJsonlEvent(userId, conversationId, {
-        parentUuid: userEventUuid,
+        parentUuid: assistantParentUuid,
         isSidechain: false,
         type: 'assistant',
         message: {
-          id: assistantMessageId,
+          id: fallbackAssistantMessageId,
           type: 'message',
           role: 'assistant',
           model: mergedConfig.model ?? 'unknown',
@@ -537,79 +805,40 @@ export class AgentService {
         timestamp: new Date(now.getTime() + 100).toISOString(),
         sessionId: conversationId,
       });
+      this.invalidateConversationRuntime(conversationId);
       return {
         accepted: false,
         status: 'failed',
         conversationId,
         userMessageId,
-        assistantMessageId,
+        assistantMessageId: fallbackAssistantMessageId,
         reply: errorReply,
+        blocks: [createTextAgentBlock('text-0', errorReply)],
         raw: { error: 'API_KEY_REQUIRED' },
       };
     }
 
-    // 3. Run inference via QueryEngine
+    // 2. Run inference via QueryEngine. QueryEngine is the CC-native
+    // transcript writer; Network keeps resource/artifact mappings around it.
     const qeResult = await this.runQueryEngineInference(
       conversationId,
       userId,
       content,
       mergedConfig,
       input.attachments ?? [],
+      userMessageId,
     );
 
     if (qeResult.success) {
-      // Write assistant thinking event
-      const thinkingUuid = randomUUID();
-      const thinkingTimestamp = new Date(now.getTime() + 100).toISOString();
-      await appendJsonlEvent(userId, conversationId, {
-        parentUuid: userEventUuid,
-        isSidechain: false,
-        type: 'assistant',
-        message: {
-          id: assistantMessageId,
-          type: 'message',
-          role: 'assistant',
-          model: qeResult.model ?? 'unknown',
-          content: [createAssistantProcessBlock(qeResult.thinking ?? '')],
-          stop_reason: null,
-          stop_sequence: null,
-          usage: qeResult.usage ?? { input_tokens: 0, output_tokens: 0 },
-        },
-        uuid: thinkingUuid,
-        timestamp: thinkingTimestamp,
-        sessionId: conversationId,
-      });
-
-      // Write assistant text reply event
-      const replyUuid = randomUUID();
-      const replyTimestamp = new Date(now.getTime() + 500 + (qeResult.durationMs ?? 0)).toISOString();
-      await appendJsonlEvent(userId, conversationId, {
-        parentUuid: thinkingUuid,
-        isSidechain: false,
-        type: 'assistant',
-        message: {
-          id: assistantMessageId,
-          type: 'message',
-          role: 'assistant',
-          model: qeResult.model ?? 'unknown',
-          content: [createAssistantFinalBlock(qeResult.reply)],
-          stop_reason: 'end_turn',
-          stop_sequence: null,
-          usage: qeResult.usage ?? { input_tokens: 0, output_tokens: 0 },
-        },
-        uuid: replyUuid,
-        timestamp: replyTimestamp,
-        sessionId: conversationId,
-      });
-
       return {
         accepted: true,
         status: 'done',
         conversationId,
-        userMessageId,
-        assistantMessageId,
+        userMessageId: qeResult.userMessageId,
+        assistantMessageId: qeResult.assistantMessageId,
         reply: qeResult.reply,
         reasoning: qeResult.thinking,
+        blocks: qeResult.blocks,
         generatedFiles: qeResult.generatedFiles,
         raw: {
           model: qeResult.model,
@@ -619,19 +848,29 @@ export class AgentService {
       };
     }
 
-    // 4. Fallback to stub if QueryEngine unavailable
+    // 3. Fallback to a local stub if QueryEngine is unavailable before a
+    // complete assistant response is recorded.
     const stubReply = sanitizeServerPhysicalPaths(`Stub agent reply: ${userVisibleContent}`);
     const thinkingUuid = randomUUID();
     const replyUuid = randomUUID();
     const thinkingTimestamp = new Date(now.getTime() + 300).toISOString();
     const replyTimestamp = new Date(now.getTime() + 700).toISOString();
 
+    const assistantParentUuid = await this.appendManualUserMessage({
+      userId,
+      conversationId,
+      userMessageId,
+      content: userVisibleContent,
+      clientRequestId,
+      timestamp: now,
+    });
+
     await appendJsonlEvent(userId, conversationId, {
-      parentUuid: userEventUuid,
+      parentUuid: assistantParentUuid,
       isSidechain: false,
       type: 'assistant',
       message: {
-        id: assistantMessageId,
+        id: fallbackAssistantMessageId,
         type: 'message',
         role: 'assistant',
         model: 'stub-agent',
@@ -650,7 +889,7 @@ export class AgentService {
       isSidechain: false,
       type: 'assistant',
       message: {
-        id: assistantMessageId,
+        id: fallbackAssistantMessageId,
         type: 'message',
         role: 'assistant',
         model: 'stub-agent',
@@ -663,15 +902,20 @@ export class AgentService {
       timestamp: replyTimestamp,
       sessionId: conversationId,
     });
+    this.invalidateConversationRuntime(conversationId);
 
     return {
       accepted: true,
       status: 'done',
       conversationId,
       userMessageId,
-      assistantMessageId,
+      assistantMessageId: fallbackAssistantMessageId,
       reply: stubReply,
       reasoning: sanitizeServerPhysicalPaths(`Preparing a response for: ${userVisibleContent}`),
+      blocks: [
+        createStatusAgentBlock('status-0', `Preparing a response for: ${userVisibleContent}`),
+        createTextAgentBlock('text-0', stubReply),
+      ],
       raw: {
         kind: input.kind ?? 'markdown',
         attachmentCount: input.attachments?.length ?? 0,
@@ -684,33 +928,9 @@ export class AgentService {
   async *sendMessageStream(input: AgentSendMessageInput): AsyncGenerator<AgentStreamEvent> {
     const { conversationId, userId, content, clientRequestId } = input;
     const userVisibleContent = input.userVisibleContent ?? content;
-    const userMessageId = input.userMessageId ?? `msg_user_${randomUUID().replace(/-/g, '')}`;
-    const assistantMessageId = input.assistantMessageId ?? `msg_assistant_${randomUUID().replace(/-/g, '')}`;
+    const userMessageId = input.userMessageId ?? randomUUID();
+    const fallbackAssistantMessageId = input.assistantMessageId ?? `msg_assistant_${randomUUID().replace(/-/g, '')}`;
     const now = new Date();
-    const userEventUuid = randomUUID();
-
-    await appendJsonlEvent(userId, conversationId, {
-      parentUuid: null,
-      isSidechain: false,
-      promptId: clientRequestId ?? randomUUID(),
-      type: 'user',
-      message: {
-        id: userMessageId,
-        role: 'user',
-        content: userVisibleContent,
-      },
-      uuid: userEventUuid,
-      timestamp: now.toISOString(),
-      sessionId: conversationId,
-    });
-
-    yield {
-      type: 'message.created',
-      conversationId,
-      userMessageId,
-      assistantMessageId,
-      createdAt: now.toISOString(),
-    };
 
     const convCfg = this.conversationConfigs.get(conversationId);
     let userSettings: ConversationConfig = {};
@@ -720,6 +940,7 @@ export class AgentService {
         userSettings = {
           apiKey: saved.apiKey ?? undefined,
           baseUrl: saved.baseUrl ?? undefined,
+          provider: saved.provider ?? undefined,
           model: saved.model ?? undefined,
         };
       }
@@ -727,18 +948,27 @@ export class AgentService {
     const mergedConfig: ConversationConfig = {
       apiKey: input.apiKey ?? convCfg?.apiKey ?? userSettings.apiKey,
       baseUrl: input.baseUrl ?? convCfg?.baseUrl ?? userSettings.baseUrl,
+      provider: input.provider ?? convCfg?.provider ?? userSettings.provider,
       model: input.model ?? convCfg?.model ?? userSettings.model,
     };
 
     if (!mergedConfig.apiKey?.trim()) {
-      const errorReply = 'API key is required. Please save an Anthropic API key in Settings before sending messages.';
+      const errorReply = 'API key is required. Please save a model API key in Settings before sending messages.';
       const replyUuid = randomUUID();
+      const assistantParentUuid = await this.appendManualUserMessage({
+        userId,
+        conversationId,
+        userMessageId,
+        content: userVisibleContent,
+        clientRequestId,
+        timestamp: now,
+      });
       await appendJsonlEvent(userId, conversationId, {
-        parentUuid: userEventUuid,
+        parentUuid: assistantParentUuid,
         isSidechain: false,
         type: 'assistant',
         message: {
-          id: assistantMessageId,
+          id: fallbackAssistantMessageId,
           type: 'message',
           role: 'assistant',
           model: mergedConfig.model ?? 'unknown',
@@ -751,16 +981,32 @@ export class AgentService {
         timestamp: new Date(now.getTime() + 100).toISOString(),
         sessionId: conversationId,
       });
+      this.invalidateConversationRuntime(conversationId);
 
-      yield { type: 'reply.delta', messageId: assistantMessageId, delta: errorReply };
+      yield {
+        type: 'message.created',
+        conversationId,
+        userMessageId,
+        assistantMessageId: fallbackAssistantMessageId,
+        createdAt: now.toISOString(),
+      };
+      yield {
+        type: 'message.block.delta',
+        messageId: fallbackAssistantMessageId,
+        blockId: 'text-0',
+        blockType: 'text',
+        delta: errorReply,
+        block: createTextAgentBlock('text-0'),
+      };
       yield {
         type: 'message.completed',
         accepted: false,
         status: 'failed',
         conversationId,
         userMessageId,
-        assistantMessageId,
+        assistantMessageId: fallbackAssistantMessageId,
         reply: errorReply,
+        blocks: [createTextAgentBlock('text-0', errorReply)],
         raw: { error: 'API_KEY_REQUIRED' },
       };
       return;
@@ -771,8 +1017,8 @@ export class AgentService {
     const inferencePromise = this.runStreamingInference({
       input,
       config: mergedConfig,
-      userEventUuid,
-      assistantMessageId,
+      userMessageId,
+      fallbackAssistantMessageId,
       startTime,
       eventQueue,
     });
@@ -783,57 +1029,26 @@ export class AgentService {
 
     const qeResult = await inferencePromise;
     if (qeResult.success) {
-      const thinkingUuid = randomUUID();
-      const thinkingTimestamp = new Date(now.getTime() + 100).toISOString();
-      await appendJsonlEvent(userId, conversationId, {
-        parentUuid: userEventUuid,
-        isSidechain: false,
-        type: 'assistant',
-        message: {
-          id: assistantMessageId,
-          type: 'message',
-          role: 'assistant',
-          model: qeResult.model ?? 'unknown',
-          content: [createAssistantProcessBlock(qeResult.thinking ?? '')],
-          stop_reason: null,
-          stop_sequence: null,
-          usage: qeResult.usage ?? { input_tokens: 0, output_tokens: 0 },
-        },
-        uuid: thinkingUuid,
-        timestamp: thinkingTimestamp,
-        sessionId: conversationId,
-      });
-
-      const replyUuid = randomUUID();
-      await appendJsonlEvent(userId, conversationId, {
-        parentUuid: thinkingUuid,
-        isSidechain: false,
-        type: 'assistant',
-        message: {
-          id: assistantMessageId,
-          type: 'message',
-          role: 'assistant',
-          model: qeResult.model ?? 'unknown',
-          content: [createAssistantFinalBlock(qeResult.reply)],
-          stop_reason: 'end_turn',
-          stop_sequence: null,
-          usage: qeResult.usage ?? { input_tokens: 0, output_tokens: 0 },
-        },
-        uuid: replyUuid,
-        timestamp: new Date(now.getTime() + 500 + (qeResult.durationMs ?? 0)).toISOString(),
-        sessionId: conversationId,
-      });
-
+      if (!qeResult.messageCreated) {
+        yield {
+          type: 'message.created',
+          conversationId,
+          userMessageId: qeResult.userMessageId,
+          assistantMessageId: qeResult.assistantMessageId,
+          createdAt: now.toISOString(),
+        };
+      }
       yield {
         type: 'message.completed',
         accepted: true,
         status: 'done',
         conversationId,
-        userMessageId,
-        assistantMessageId,
+        userMessageId: qeResult.userMessageId,
+        assistantMessageId: qeResult.assistantMessageId,
         reply: qeResult.reply,
         reasoning: qeResult.thinking,
         generatedFiles: qeResult.generatedFiles,
+        blocks: qeResult.blocks,
         raw: {
           model: qeResult.model,
           usage: qeResult.usage,
@@ -848,12 +1063,31 @@ export class AgentService {
     const thinkingUuid = randomUUID();
     const replyUuid = randomUUID();
 
+    if (!qeResult.messageCreated) {
+      yield {
+        type: 'message.created',
+        conversationId,
+        userMessageId,
+        assistantMessageId: fallbackAssistantMessageId,
+        createdAt: now.toISOString(),
+      };
+    }
+
+    const assistantParentUuid = await this.appendManualUserMessage({
+      userId,
+      conversationId,
+      userMessageId,
+      content: userVisibleContent,
+      clientRequestId,
+      timestamp: now,
+    });
+
     await appendJsonlEvent(userId, conversationId, {
-      parentUuid: userEventUuid,
+      parentUuid: assistantParentUuid,
       isSidechain: false,
       type: 'assistant',
       message: {
-        id: assistantMessageId,
+        id: fallbackAssistantMessageId,
         type: 'message',
         role: 'assistant',
         model: 'stub-agent',
@@ -872,7 +1106,7 @@ export class AgentService {
       isSidechain: false,
       type: 'assistant',
       message: {
-        id: assistantMessageId,
+        id: fallbackAssistantMessageId,
         type: 'message',
         role: 'assistant',
         model: 'stub-agent',
@@ -885,18 +1119,36 @@ export class AgentService {
       timestamp: new Date(now.getTime() + 700).toISOString(),
       sessionId: conversationId,
     });
+    this.invalidateConversationRuntime(conversationId);
 
-    yield { type: 'reasoning.delta', messageId: assistantMessageId, delta: stubThinking };
-    yield { type: 'reply.delta', messageId: assistantMessageId, delta: stubReply };
+    const fallbackBlocks = [
+      createStatusAgentBlock('status-0', stubThinking),
+      createTextAgentBlock('text-0', stubReply),
+    ];
+    yield {
+      type: 'message.block.completed',
+      messageId: fallbackAssistantMessageId,
+      block: fallbackBlocks[0]!,
+    };
+    yield {
+      type: 'message.block.delta',
+      messageId: fallbackAssistantMessageId,
+      blockId: 'text-0',
+      blockType: 'text',
+      delta: stubReply,
+      block: createTextAgentBlock('text-0'),
+    };
+    yield { type: 'reasoning.delta', messageId: fallbackAssistantMessageId, delta: stubThinking };
     yield {
       type: 'message.completed',
       accepted: true,
       status: 'done',
       conversationId,
       userMessageId,
-      assistantMessageId,
+      assistantMessageId: fallbackAssistantMessageId,
       reply: stubReply,
       reasoning: stubThinking,
+      blocks: fallbackBlocks,
       raw: {
         kind: input.kind ?? 'markdown',
         attachmentCount: input.attachments?.length ?? 0,
@@ -913,35 +1165,90 @@ export class AgentService {
   private async runStreamingInference(input: {
     input: AgentSendMessageInput;
     config: ConversationConfig;
-    userEventUuid: string;
-    assistantMessageId: string;
+    userMessageId: string;
+    fallbackAssistantMessageId: string;
     startTime: number;
     eventQueue: AsyncEventQueue<AgentStreamEvent>;
-  }): Promise<
-    | {
-        success: true;
-        reply: string;
-        thinking?: string;
-        model?: string;
-        usage?: Record<string, unknown>;
-        durationMs?: number;
-        generatedFiles?: GeneratedFile[];
-      }
-    | { success: false }
-  > {
+  }): Promise<QueryEngineInferenceResult> {
     const {
       input: messageInput,
       config,
-      assistantMessageId,
+      userMessageId,
+      fallbackAssistantMessageId,
       startTime,
       eventQueue,
     } = input;
     const { conversationId, userId, content } = messageInput;
     let abortHandler: (() => void) | undefined;
+    let actualAssistantMessageId = fallbackAssistantMessageId;
+    let messageCreated = false;
+    const createdAt = new Date(startTime).toISOString();
+    const pendingStreamDeltas: Array<{
+      type: 'reasoning.delta' | 'reply.delta';
+      delta: string;
+    }> = [];
+    const pendingBlockEvents: Array<Extract<AgentStreamEvent, {
+      type: 'message.block.delta' | 'message.block.completed';
+    }>> = [];
+    const emitMessageCreated = (assistantId: string) => {
+      if (messageCreated) {
+        return;
+      }
+      actualAssistantMessageId = assistantId;
+      messageCreated = true;
+      eventQueue.push({
+        type: 'message.created',
+        conversationId,
+        userMessageId,
+        assistantMessageId: actualAssistantMessageId,
+        createdAt,
+      });
+      for (const pending of pendingBlockEvents.splice(0)) {
+        if (pending.type === 'message.block.delta') {
+          eventQueue.push({
+            ...pending,
+            messageId: actualAssistantMessageId,
+          });
+        } else {
+          eventQueue.push({
+            ...pending,
+            messageId: actualAssistantMessageId,
+          });
+        }
+      }
+      for (const pending of pendingStreamDeltas.splice(0)) {
+        eventQueue.push({
+          type: pending.type,
+          messageId: actualAssistantMessageId,
+          delta: pending.delta,
+        });
+      }
+    };
+    const pushStreamDelta = (
+      type: 'reasoning.delta' | 'reply.delta',
+      delta: string,
+    ) => {
+      if (messageCreated) {
+        eventQueue.push({ type, messageId: actualAssistantMessageId, delta });
+        return;
+      }
+      pendingStreamDeltas.push({ type, delta });
+    };
+    const pushBlockEvent = (
+      event: Extract<AgentStreamEvent, {
+        type: 'message.block.delta' | 'message.block.completed';
+      }>,
+    ) => {
+      if (messageCreated) {
+        eventQueue.push({ ...event, messageId: actualAssistantMessageId });
+        return;
+      }
+      pendingBlockEvents.push(event);
+    };
 
     try {
-      const userWorkspaceDir = join(userDataRootDir, String(userId));
-      await mkdir(userWorkspaceDir, { recursive: true });
+      const userWorkspaceDir = await ensureNetworkUserWorkspaceDir(userId);
+      await ensureNetworkTranscriptDir(userId);
 
       if (this.settingsService) {
         const saved = await this.settingsService.getApiSettings(Number(userId));
@@ -963,19 +1270,12 @@ export class AgentService {
         }
       }
 
-      let queryEngine = this.queryEngines.get(conversationId);
-      if (!queryEngine) {
-        const ctx = this.buildSessionContext(
-          conversationId,
-          userId,
-          config,
-          userWorkspaceDir,
-        );
-        this.sessionContexts.set(conversationId, ctx);
-        queryEngine = createQueryEngineForSession(ctx);
-        ctx.queryEngine = queryEngine;
-        this.queryEngines.set(conversationId, queryEngine);
-      }
+      const queryEngine = await this.getOrCreateQueryEngine(
+        conversationId,
+        userId,
+        config,
+        userWorkspaceDir,
+      );
 
       const ctx = this.sessionContexts.get(conversationId)!;
       if (messageInput.abortSignal) {
@@ -992,6 +1292,7 @@ export class AgentService {
       const prevApiKey = process.env.ANTHROPIC_API_KEY;
       const prevBaseUrl = process.env.ANTHROPIC_BASE_URL;
       const prevModel = process.env.ANTHROPIC_MODEL;
+      const profileTurnPrompt = await this.getProfileTurnPrompt(userId, content);
 
       if (config.apiKey) {
         process.env.ANTHROPIC_API_KEY = config.apiKey;
@@ -1008,8 +1309,16 @@ export class AgentService {
           return await runWithSessionContext(ctx, async () => {
             const textParts: string[] = [];
             const thinkingParts: string[] = [];
+            const loadedSkillNames = new Set<string>();
+            let finalAssistantText: string | undefined;
+            let finalResultText: string | undefined;
+            let blocks: AgentMessageBlock[] = [];
+            let blockIndex = 0;
+            let textBlockIndex = 0;
             let model: string | undefined;
             let usage: Record<string, unknown> | undefined;
+            const hiddenConversationMemoryToolUseIds = new Set<string>();
+            const conversationMemoryDir = ctx.config.conversationMemoryDir;
 
             const inputWithAttachments = this.buildPromptWithAttachmentMentions(
               content,
@@ -1017,35 +1326,126 @@ export class AgentService {
               conversationId,
               messageInput.attachments ?? [],
             );
-            const stream = queryEngine!.submitMessage(inputWithAttachments);
+            const conversationMemoryTurnPrompt =
+              await prepareConversationMemoryTurn(
+                ctx,
+                userMessageId,
+                content,
+              );
+            const stream = queryEngine!.submitMessage(inputWithAttachments, {
+              uuid: userMessageId,
+              appendSystemPrompt: [
+                profileTurnPrompt,
+                conversationMemoryTurnPrompt,
+              ].filter(Boolean).join('\n\n') || undefined,
+            });
 
             for await (const msg of stream) {
               if (messageInput.abortSignal?.aborted) {
-                return { reply: '', thinking: '', model, usage, aborted: true };
+                return {
+                  reply: '',
+                  thinking: '',
+                  model,
+                  usage,
+                  aborted: true,
+                  assistantMessageId: actualAssistantMessageId,
+                  messageCreated,
+                };
+              }
+
+              if (isInternalSdkMessage(msg)) {
+                continue;
+              }
+
+              const loadedSkillName = extractLoadedSkillNameFromSdkMessage(msg);
+              if (loadedSkillName) {
+                if (!loadedSkillNames.has(loadedSkillName)) {
+                  loadedSkillNames.add(loadedSkillName);
+                  emitMessageCreated(actualAssistantMessageId);
+                  const skillLoadedBlock = createSkillLoadedBlock<AgentMessageBlock>(
+                    loadedSkillName,
+                  );
+                  blocks = mergeAgentBlock(blocks, skillLoadedBlock);
+                  pushBlockEvent({
+                    type: 'message.block.completed',
+                    messageId: actualAssistantMessageId,
+                    block: skillLoadedBlock,
+                  });
+                }
+                continue;
               }
 
               const msgMessage = (msg as any).message;
               if (msgMessage && Array.isArray(msgMessage.content)) {
+                if (
+                  isConversationMemoryMaintenanceMessage(
+                    msgMessage.content,
+                    conversationMemoryDir,
+                    hiddenConversationMemoryToolUseIds,
+                  )
+                ) {
+                  continue;
+                }
+                const currentMessageTextParts: string[] = [];
+                if (typeof msgMessage.id === 'string' && msgMessage.id.trim()) {
+                  emitMessageCreated(msgMessage.id);
+                }
                 for (const block of msgMessage.content) {
+                  if (
+                    shouldSuppressConversationMemoryBlock(
+                      block,
+                      conversationMemoryDir,
+                      hiddenConversationMemoryToolUseIds,
+                    )
+                  ) {
+                    continue;
+                  }
                   const blockType = typeof block.type === 'string' ? block.type : '';
+                  const skillToolName = extractSkillNameFromToolUseBlock(block);
+                  if (skillToolName) {
+                    if (!loadedSkillNames.has(skillToolName)) {
+                      loadedSkillNames.add(skillToolName);
+                      const skillLoadedBlock = createSkillLoadedBlock<AgentMessageBlock>(
+                        skillToolName,
+                      );
+                      blocks = mergeAgentBlock(blocks, skillLoadedBlock);
+                      pushBlockEvent({
+                        type: 'message.block.completed',
+                        messageId: actualAssistantMessageId,
+                        block: skillLoadedBlock,
+                      });
+                    }
+                    continue;
+                  }
                   if (blockType === 'text' && typeof block.text === 'string' && block.text) {
                     const safeText = sanitizeServerPhysicalPaths(block.text);
+                    const textBlockId = `text-${textBlockIndex++}`;
                     textParts.push(safeText);
-                    eventQueue.push({
-                      type: 'reply.delta',
-                      messageId: assistantMessageId,
+                    currentMessageTextParts.push(safeText);
+                    blocks = appendTextToAgentBlock(blocks, textBlockId, safeText);
+                    pushBlockEvent({
+                      type: 'message.block.delta',
+                      messageId: actualAssistantMessageId,
+                      blockId: textBlockId,
+                      blockType: 'text',
                       delta: safeText,
+                      block: createTextAgentBlock(textBlockId),
                     });
+                    continue;
                   }
 
-                  const reasoningText = formatAgentProcessBlock(block);
-
-                  if (reasoningText) {
-                    thinkingParts.push(reasoningText);
-                    eventQueue.push({
-                      type: 'reasoning.delta',
-                      messageId: assistantMessageId,
-                      delta: reasoningText,
+                  const publicBlock = createPublicAgentBlockFromContentBlock(block, blockIndex);
+                  if (publicBlock) {
+                    blockIndex += 1;
+                    blocks = mergeAgentBlock(blocks, publicBlock);
+                    const legacyReasoningText = publicBlock.text?.trim();
+                    if (legacyReasoningText) {
+                      thinkingParts.push(legacyReasoningText);
+                    }
+                    pushBlockEvent({
+                      type: 'message.block.completed',
+                      messageId: actualAssistantMessageId,
+                      block: publicBlock,
                     });
                   }
                 }
@@ -1055,33 +1455,71 @@ export class AgentService {
                 if (msgMessage.usage && !usage) {
                   usage = msgMessage.usage;
                 }
+                if (currentMessageTextParts.length && msgMessage.stop_reason === 'end_turn') {
+                  finalAssistantText = currentMessageTextParts.join('\n').trim();
+                }
               } else if ((msg as any).type !== 'result') {
-                const reasoningText = formatAgentProcessBlock(msg as Record<string, unknown>);
-                if (reasoningText) {
-                  thinkingParts.push(reasoningText);
-                  eventQueue.push({
-                    type: 'reasoning.delta',
-                    messageId: assistantMessageId,
-                    delta: reasoningText,
+                const publicBlock = createPublicAgentBlockFromContentBlock(msg as Record<string, unknown>, blockIndex);
+                if (publicBlock) {
+                  blockIndex += 1;
+                  blocks = mergeAgentBlock(blocks, publicBlock);
+                  if (publicBlock.text?.trim()) {
+                    thinkingParts.push(publicBlock.text);
+                  }
+                  pushBlockEvent({
+                    type: 'message.block.completed',
+                    messageId: actualAssistantMessageId,
+                    block: publicBlock,
                   });
                 }
               }
 
-              if ((msg as any).type === 'result' && typeof (msg as any).result === 'string' && !textParts.length) {
+              if ((msg as any).type === 'result' && typeof (msg as any).result === 'string') {
                 const safeResult = sanitizeServerPhysicalPaths((msg as any).result);
-                textParts.push(safeResult);
-                eventQueue.push({
-                  type: 'reply.delta',
-                  messageId: assistantMessageId,
-                  delta: safeResult,
-                });
+                if (safeResult.trim()) {
+                  finalResultText = safeResult.trim();
+                  const alreadyStreamed = finalAssistantText === finalResultText
+                    || textParts[textParts.length - 1]?.trim() === finalResultText;
+                  if (!alreadyStreamed) {
+                    const finalTextBlockId = `text-${textBlockIndex++}`;
+                    blocks = appendTextToAgentBlock(blocks, finalTextBlockId, finalResultText);
+                    emitMessageCreated(actualAssistantMessageId);
+                    pushBlockEvent({
+                      type: 'message.block.delta',
+                      messageId: actualAssistantMessageId,
+                      blockId: finalTextBlockId,
+                      blockType: 'text',
+                      delta: finalResultText,
+                      block: createTextAgentBlock(finalTextBlockId),
+                    });
+                  }
+                }
               }
             }
 
-            const reply = sanitizeServerPhysicalPaths(textParts.join('\n').trim());
+            const reply = sanitizeServerPhysicalPaths(
+              finalResultText
+              ?? finalAssistantText
+              ?? textParts.join('\n').trim(),
+            );
             const thinking = sanitizeServerPhysicalPaths(thinkingParts.join('\n').trim());
+            blocks = normalizeCanonicalMessageBlocks(blocks, {
+              authoritativeText: reply,
+            }) ?? [];
 
-            return { reply, thinking, model, usage };
+            if (reply || thinking) {
+              emitMessageCreated(actualAssistantMessageId);
+            }
+
+            return {
+              reply,
+              thinking,
+              blocks,
+              model,
+              usage,
+              assistantMessageId: actualAssistantMessageId,
+              messageCreated,
+            };
           });
         } finally {
           if (prevApiKey === undefined) {
@@ -1107,26 +1545,43 @@ export class AgentService {
       })();
 
       if (!result.reply || result.aborted) {
-        return { success: false };
+        await flushSessionStorage();
+        return {
+          success: false,
+          userMessageId,
+          assistantMessageId: result.assistantMessageId ?? actualAssistantMessageId,
+          messageCreated: result.messageCreated ?? messageCreated,
+        };
       }
 
+      await flushSessionStorage();
+
       const generatedFiles = await this.scanGeneratedFiles(
-        join(userDataRootDir, String(userId)),
+        getNetworkUserWorkspaceDir(userId),
         startTime,
       );
 
       return {
         success: true,
+        userMessageId,
+        assistantMessageId: result.assistantMessageId ?? actualAssistantMessageId,
         reply: result.reply,
         thinking: result.thinking || undefined,
+        blocks: result.blocks,
         model: result.model,
         usage: result.usage,
         durationMs: Date.now() - startTime,
         generatedFiles: generatedFiles.length ? generatedFiles : undefined,
+        messageCreated: result.messageCreated ?? messageCreated,
       };
     } catch (err: any) {
       console.error('[AgentService] QueryEngine streaming inference FAILED:', err?.message ?? err);
-      return { success: false };
+      return {
+        success: false,
+        userMessageId,
+        assistantMessageId: actualAssistantMessageId,
+        messageCreated,
+      };
     } finally {
       eventQueue.close();
     }
@@ -1138,23 +1593,15 @@ export class AgentService {
     content: string,
     config: ConversationConfig,
     attachments: AgentAttachmentInput[] = [],
-  ): Promise<
-    | {
-        success: true;
-        reply: string;
-        thinking?: string;
-        model?: string;
-        usage?: Record<string, unknown>;
-        durationMs?: number;
-        generatedFiles?: GeneratedFile[];
-      }
-    | { success: false }
-  > {
+    userMessageId: string = randomUUID(),
+    fallbackAssistantMessageId: string = `msg_assistant_${randomUUID().replace(/-/g, '')}`,
+  ): Promise<QueryEngineInferenceResult> {
     const startTime = Date.now();
+    let assistantMessageId = fallbackAssistantMessageId;
 
     try {
-      const userWorkspaceDir = join(userDataRootDir, String(userId));
-      await mkdir(userWorkspaceDir, { recursive: true });
+      const userWorkspaceDir = await ensureNetworkUserWorkspaceDir(userId);
+      await ensureNetworkTranscriptDir(userId);
 
       // Inject per-user multimodal config BEFORE engine creation so isEnabled() sees it.
       // Also refreshed on every request so updated DB settings take effect immediately.
@@ -1179,19 +1626,12 @@ export class AgentService {
       }
 
       // Get or create per-conversation QueryEngine + SessionContext
-      let queryEngine = this.queryEngines.get(conversationId);
-      if (!queryEngine) {
-        const ctx = this.buildSessionContext(
-          conversationId,
-          userId,
-          config,
-          userWorkspaceDir,  // absolute path — relative paths double up after the first setCwd call
-        );
-        this.sessionContexts.set(conversationId, ctx);
-        queryEngine = createQueryEngineForSession(ctx);
-        ctx.queryEngine = queryEngine;
-        this.queryEngines.set(conversationId, queryEngine);
-      }
+      const queryEngine = await this.getOrCreateQueryEngine(
+        conversationId,
+        userId,
+        config,
+        userWorkspaceDir,
+      );
 
       const ctx = this.sessionContexts.get(conversationId)!;
 
@@ -1199,6 +1639,7 @@ export class AgentService {
       const prevApiKey = process.env.ANTHROPIC_API_KEY
       const prevBaseUrl = process.env.ANTHROPIC_BASE_URL
       const prevModel = process.env.ANTHROPIC_MODEL
+      const profileTurnPrompt = await this.getProfileTurnPrompt(userId, content)
 
       if (config.apiKey) {
         process.env.ANTHROPIC_API_KEY = config.apiKey
@@ -1215,7 +1656,14 @@ export class AgentService {
           return await runWithSessionContext(ctx, async () => {
             const textParts: string[] = [];
             const thinkingParts: string[] = [];
+            let finalAssistantText: string | undefined;
+            let blocks: AgentMessageBlock[] = [];
+            let blockIndex = 0;
+            let textBlockIndex = 0;
             let model: string | undefined;
+            let usage: Record<string, unknown> | undefined;
+            const hiddenConversationMemoryToolUseIds = new Set<string>();
+            const conversationMemoryDir = ctx.config.conversationMemoryDir;
 
             const inputWithAttachments = this.buildPromptWithAttachmentMentions(
               content,
@@ -1223,39 +1671,101 @@ export class AgentService {
               conversationId,
               attachments,
             );
-            const stream = queryEngine!.submitMessage(inputWithAttachments);
+            const conversationMemoryTurnPrompt =
+              await prepareConversationMemoryTurn(
+                ctx,
+                userMessageId,
+                content,
+              );
+            const stream = queryEngine!.submitMessage(inputWithAttachments, {
+              uuid: userMessageId,
+              appendSystemPrompt: [
+                profileTurnPrompt,
+                conversationMemoryTurnPrompt,
+              ].filter(Boolean).join('\n\n') || undefined,
+            });
 
             for await (const msg of stream) {
+              if (isInternalSdkMessage(msg)) {
+                continue;
+              }
               const msgMessage = (msg as any).message;
               if (msgMessage && Array.isArray(msgMessage.content)) {
+                if (
+                  isConversationMemoryMaintenanceMessage(
+                    msgMessage.content,
+                    conversationMemoryDir,
+                    hiddenConversationMemoryToolUseIds,
+                  )
+                ) {
+                  continue;
+                }
+                const currentMessageTextParts: string[] = [];
+                if (typeof msgMessage.id === 'string' && msgMessage.id.trim()) {
+                  assistantMessageId = msgMessage.id;
+                }
                 for (const block of msgMessage.content) {
-                  if (block.type === 'text' && typeof block.text === 'string') {
-                    textParts.push(sanitizeServerPhysicalPaths(block.text));
+                  if (
+                    shouldSuppressConversationMemoryBlock(
+                      block,
+                      conversationMemoryDir,
+                      hiddenConversationMemoryToolUseIds,
+                    )
+                  ) {
+                    continue;
                   }
-                  const reasoningText = formatAgentProcessBlock(block);
-                  if (reasoningText) {
-                    thinkingParts.push(reasoningText);
+                  if (block.type === 'text' && typeof block.text === 'string') {
+                    const safeText = sanitizeServerPhysicalPaths(block.text);
+                    const textBlockId = `text-${textBlockIndex++}`;
+                    textParts.push(safeText);
+                    currentMessageTextParts.push(safeText);
+                    blocks = appendTextToAgentBlock(blocks, textBlockId, safeText);
+                    continue;
+                  }
+                  const publicBlock = createPublicAgentBlockFromContentBlock(block, blockIndex);
+                  if (publicBlock) {
+                    blockIndex += 1;
+                    blocks = mergeAgentBlock(blocks, publicBlock);
+                    if (publicBlock.text?.trim()) {
+                      thinkingParts.push(publicBlock.text);
+                    }
                   }
                 }
                 if (msgMessage.model && !model) {
                   model = msgMessage.model;
                 }
+                if (msgMessage.usage && !usage) {
+                  usage = msgMessage.usage;
+                }
+                if (currentMessageTextParts.length && msgMessage.stop_reason === 'end_turn') {
+                  finalAssistantText = currentMessageTextParts.join('\n').trim();
+                }
               } else if ((msg as any).type !== 'result') {
-                const reasoningText = formatAgentProcessBlock(msg as Record<string, unknown>);
-                if (reasoningText) {
-                  thinkingParts.push(reasoningText);
+                const publicBlock = createPublicAgentBlockFromContentBlock(msg as Record<string, unknown>, blockIndex);
+                if (publicBlock) {
+                  blockIndex += 1;
+                  blocks = mergeAgentBlock(blocks, publicBlock);
+                  if (publicBlock.text?.trim()) {
+                    thinkingParts.push(publicBlock.text);
+                  }
                 }
               }
 
               if ((msg as any).type === 'result' && typeof (msg as any).result === 'string' && !textParts.length) {
-                textParts.push(sanitizeServerPhysicalPaths((msg as any).result));
+                const safeResult = sanitizeServerPhysicalPaths((msg as any).result);
+                textParts.push(safeResult);
+                blocks = appendTextToAgentBlock(blocks, 'text-0', safeResult);
               }
             }
 
-            const reply = sanitizeServerPhysicalPaths(textParts.join('\n').trim());
+            const reply = sanitizeServerPhysicalPaths(
+              finalAssistantText
+              ?? textParts[textParts.length - 1]
+              ?? '',
+            );
             const thinking = sanitizeServerPhysicalPaths(thinkingParts.join('\n').trim());
 
-            return { reply, thinking, model };
+            return { reply, thinking, blocks, model, usage, assistantMessageId };
           });
         } finally {
           if (prevApiKey === undefined) {
@@ -1279,25 +1789,32 @@ export class AgentService {
 
       if (!result.reply) {
         console.error('[AgentService] QueryEngine returned empty reply');
-        return { success: false };
+        await flushSessionStorage();
+        return { success: false, userMessageId, assistantMessageId };
       }
 
+      await flushSessionStorage();
+
       const generatedFiles = await this.scanGeneratedFiles(
-        join(userDataRootDir, String(userId)),
+        getNetworkUserWorkspaceDir(userId),
         startTime,
       );
 
       return {
         success: true,
+        userMessageId,
+        assistantMessageId: result.assistantMessageId ?? assistantMessageId,
         reply: result.reply,
         thinking: result.thinking || undefined,
+        blocks: result.blocks,
         model: result.model,
+        usage: result.usage,
         durationMs: Date.now() - startTime,
         generatedFiles: generatedFiles.length ? generatedFiles : undefined,
       };
     } catch (err: any) {
       console.error('[AgentService] QueryEngine inference FAILED:', err?.message ?? err);
-      return { success: false };
+      return { success: false, userMessageId, assistantMessageId };
     }
   }
 
@@ -1314,15 +1831,68 @@ export class AgentService {
     config: ConversationConfig = {},
     workspaceDir?: string,
   ): SessionContext {
+    const resolvedWorkspaceDir = resolve(
+      workspaceDir ?? getNetworkUserWorkspaceDir(userId),
+    );
+    const autoMemoryDir = resolve(getNetworkAutoMemoryDir(userId));
+    const transcriptDir = getNetworkTranscriptDir(userId);
+    const conversationMemoryDir = resolve(
+      getNetworkConversationMemoryDir(userId),
+    );
+    const conversationMemorySessionFile = resolve(
+      getNetworkConversationMemorySessionPath(userId, conversationId),
+    );
     return {
       sessionId: conversationId,
       userId,
-      state: createIsolatedState({ sessionId: conversationId as any }),
+      state: createIsolatedState({
+        sessionId: conversationId as any,
+        userId,
+        cwd: resolvedWorkspaceDir,
+        originalCwd: resolvedWorkspaceDir,
+        projectRoot: resolvedWorkspaceDir,
+        sessionProjectDir: transcriptDir,
+      } as any),
       config: {
-        cwd: workspaceDir ?? process.cwd(),
+        cwd: resolvedWorkspaceDir,
         apiKey: config.apiKey,
         baseUrl: config.baseUrl,
+        provider: config.provider,
         model: config.model,
+        userId,
+        workspaceRoot: resolvedWorkspaceDir,
+        autoMemoryDir,
+        conversationMemoryDir,
+        conversationMemorySessionFile,
+        userReadOnlyRoots: [
+          {
+            id: `user-${userId}-uploads`,
+            root: resolve(getNetworkUserFilesDir(userId)),
+            allowedTools: NETWORK_READ_ONLY_FILE_TOOLS,
+          },
+          {
+            id: `user-${userId}-transcripts`,
+            root: resolve(transcriptDir),
+            allowedTools: ['Read'] as const,
+            pathPolicy: 'direct-session-jsonl',
+          },
+        ],
+        sharedReadOnlyRoots: getNetworkSharedReadOnlyRoots(),
+        trustedSkillCatalogRoots: getNetworkTrustedSkillCatalogRoots(),
+        serviceOnlyRoots: [
+          {
+            id: `user-${userId}-conversation-memory-daily`,
+            root: resolve(conversationMemoryDir, 'daily'),
+          },
+          {
+            id: `user-${userId}-conversation-memory-state`,
+            root: resolve(conversationMemoryDir, 'state'),
+          },
+          {
+            id: `user-${userId}-conversation-memory-index`,
+            root: resolve(conversationMemoryDir, '.index'),
+          },
+        ],
       },
       anthropicClient: null,
       queryEngine: null,
@@ -1337,7 +1907,204 @@ export class AgentService {
         emit: () => {},
       },
       pendingToolResponses: new Map(),
+      skillReadOnlyRoots: new Set(),
     } as unknown as SessionContext;
+  }
+
+  private async getOrCreateQueryEngine(
+    conversationId: string,
+    userId: string,
+    config: ConversationConfig,
+    userWorkspaceDir: string,
+  ): Promise<QueryEngine> {
+    this.assertConversationRuntimeActive(conversationId, userId);
+    this.refreshCachedSessionConfig(conversationId, config);
+    this.assertCachedSessionOwner(conversationId, userId);
+
+    const cached = this.queryEngines.get(conversationId);
+    if (cached) {
+      return cached;
+    }
+
+    const pending = this.queryEngineInitializations.get(conversationId);
+    if (pending) {
+      if (pending.userId !== userId) {
+        throw new Error('Session ownership mismatch');
+      }
+      const queryEngine = await pending.promise;
+      this.assertConversationRuntimeActive(conversationId, userId);
+      this.refreshCachedSessionConfig(conversationId, config);
+      return queryEngine;
+    }
+
+    let createdContext = false;
+    const initialization = (async () => {
+      let ctx = this.sessionContexts.get(conversationId);
+      if (!ctx) {
+        ctx = this.buildSessionContext(
+          conversationId,
+          userId,
+          config,
+          userWorkspaceDir,
+        );
+        this.sessionContexts.set(conversationId, ctx);
+        createdContext = true;
+      }
+
+      try {
+        const [{ messages: initialMessages }, commands] = await Promise.all([
+          loadAgentSessionHistory(userId, conversationId),
+          getCommands(userWorkspaceDir),
+        ]);
+        this.assertConversationRuntimeActive(conversationId, userId);
+        const queryEngine = createQueryEngineForSession(ctx, {
+          commands,
+          initialMessages,
+          mcpTools: this.getProfileTools(userId, conversationId),
+        });
+        ctx.queryEngine = queryEngine;
+        this.queryEngines.set(conversationId, queryEngine);
+        return queryEngine;
+      } catch (error) {
+        if (createdContext && this.sessionContexts.get(conversationId) === ctx) {
+          this.sessionContexts.delete(conversationId);
+        }
+        throw error;
+      }
+    })();
+
+    this.queryEngineInitializations.set(conversationId, {
+      userId,
+      promise: initialization,
+    });
+
+    try {
+      return await initialization;
+    } finally {
+      const current = this.queryEngineInitializations.get(conversationId);
+      if (current?.promise === initialization) {
+        this.queryEngineInitializations.delete(conversationId);
+      }
+    }
+  }
+
+  private async appendManualUserMessage(input: {
+    userId: string;
+    conversationId: string;
+    userMessageId: string;
+    content: string;
+    clientRequestId?: string;
+    timestamp: Date;
+  }): Promise<string> {
+    const history = await loadAgentSessionHistory(input.userId, input.conversationId);
+    const alreadyPersisted = history.messages.some(
+      (message) => message.uuid === input.userMessageId,
+    );
+    if (alreadyPersisted) {
+      return history.tailUuid ?? input.userMessageId;
+    }
+
+    await appendJsonlEvent(input.userId, input.conversationId, {
+      parentUuid: history.tailUuid,
+      isSidechain: false,
+      promptId: input.clientRequestId ?? randomUUID(),
+      type: 'user',
+      message: {
+        id: input.userMessageId,
+        role: 'user',
+        content: input.content,
+      },
+      uuid: input.userMessageId,
+      timestamp: input.timestamp.toISOString(),
+      sessionId: input.conversationId,
+    });
+    return input.userMessageId;
+  }
+
+  private invalidateConversationRuntime(conversationId: string): void {
+    this.queryEngines.delete(conversationId);
+    this.sessionContexts.delete(conversationId);
+  }
+
+  private getProfileTools(userId: string, conversationId: string) {
+    if (!this.profileV2Service || !this.profileMemoryService || !this.profileProposalService) {
+      return [];
+    }
+    return createProfileTools({
+      userId: Number(userId),
+      conversationId,
+      baseService: this.profileV2Service,
+      memoryService: this.profileMemoryService,
+      proposalService: this.profileProposalService,
+      recallService: this.profileRecallService,
+    });
+  }
+
+  private async getProfileTurnPrompt(userId: string, query: string) {
+    if (!this.profileRecallService) return undefined;
+    try {
+      const context = await this.profileRecallService.buildContext(Number(userId), query);
+      return context?.rendered;
+    } catch (error) {
+      console.warn('[AgentService] Profile recall failed; continuing without Profile context', {
+        userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return undefined;
+    }
+  }
+
+  private assertCachedSessionOwner(sessionId: string, userId: string) {
+    const context = this.sessionContexts.get(sessionId);
+    if (context?.userId && context.userId !== userId) {
+      throw new Error('Session ownership mismatch');
+    }
+  }
+
+  private assertConversationRuntimeActive(
+    conversationId: string,
+    userId: string,
+  ): void {
+    const disposedOwner = this.disposedConversationOwners.get(conversationId);
+    if (disposedOwner && disposedOwner !== userId) {
+      throw new Error('Session ownership mismatch');
+    }
+    if (disposedOwner === userId) {
+      throw new Error('Conversation runtime has been disposed');
+    }
+  }
+
+  private refreshCachedSessionConfig(
+    conversationId: string,
+    config: ConversationConfig,
+  ): void {
+    const ctx = this.sessionContexts.get(conversationId);
+    if (!ctx) return;
+
+    const apiClientChanged =
+      ctx.config.apiKey !== config.apiKey
+      || ctx.config.baseUrl !== config.baseUrl
+      || ctx.config.provider !== config.provider;
+    const modelChanged = ctx.config.model !== config.model;
+
+    ctx.config.apiKey = config.apiKey;
+    ctx.config.baseUrl = config.baseUrl;
+    ctx.config.provider = config.provider;
+    ctx.config.model = config.model;
+
+    if (apiClientChanged) {
+      // getAnthropicClient() caches the SDK instance on the session context.
+      // Clear it whenever protocol/auth/endpoint settings change so OpenAI
+      // compatibility is applied to the very next request in this conversation.
+      ctx.anthropicClient = null;
+    }
+
+    if (modelChanged && config.model) {
+      const queryEngine = this.queryEngines.get(conversationId) as {
+        setModel?: (model: string) => void;
+      } | undefined;
+      queryEngine?.setModel?.(config.model);
+    }
   }
 
   private buildPromptWithAttachmentMentions(
@@ -1373,7 +2140,7 @@ export class AgentService {
   ): string {
     if (inputPath.startsWith('/api/career-agent/threads/')) {
       const fileName = inputPath.split('/').pop() ?? '';
-      return join(networkRootDir, 'files', String(userId), conversationId, fileName);
+      return join(getNetworkUserFilesDir(userId), conversationId, fileName);
     }
 
     const marker = '/src/Network/files/';

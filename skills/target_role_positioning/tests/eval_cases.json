@@ -1,0 +1,99 @@
+{
+  "skill_id": "target_role_positioning",
+  "positive_cases": [
+    {
+      "id": "pos_001",
+      "user_query": "Choose my primary target from data analyst, business analyst, and PM.",
+      "available_context": {
+        "user_profile_resource": "Operations background, SQL basics",
+        "user_intent_constraint_resource": "Needs stable transition"
+      },
+      "expected_behavior": "Assign primary, backup, and not-recommended roles with reasoning.",
+      "must_include": ["primary_role", "backup_roles", "not_recommended_roles"],
+      "must_not_include": ["all roles are equally good"]
+    },
+    {
+      "id": "pos_002",
+      "user_query": "I have candidate roles but need a main attack direction.",
+      "available_context": {},
+      "expected_behavior": "Ask for candidate roles, profile, and constraints if missing.",
+      "must_include": ["clarifying question"],
+      "must_not_include": ["fabricated role list"]
+    },
+    {
+      "id": "pos_003",
+      "user_query": "Rank these roles and tell me what proof I need to build.",
+      "available_context": {
+        "role_requirement_resource": "JD excerpts"
+      },
+      "expected_behavior": "Position roles and list key evidence to build.",
+      "must_include": ["key_evidence_to_build"],
+      "must_not_include": ["resume rewriting"]
+    }
+  ],
+  "negative_cases": [
+    {
+      "id": "neg_001",
+      "user_query": "I do not know what roles to explore.",
+      "reason_should_not_trigger": "No candidate roles exist yet.",
+      "better_skill": "career_direction_exploration"
+    },
+    {
+      "id": "neg_002",
+      "user_query": "Explain what product operations does.",
+      "reason_should_not_trigger": "The user asks for role cognition.",
+      "better_skill": "role_cognition_analysis"
+    }
+  ],
+  "ambiguous_cases": [
+    {
+      "id": "amb_001",
+      "user_query": "Should I become a PM?",
+      "expected_behavior": "Ask whether there are alternatives and what constraints matter.",
+      "clarifying_question_if_needed": "What other roles are you comparing PM against, and what constraints matter most?"
+    },
+    {
+      "id": "amb_002",
+      "user_query": "Help me target a career.",
+      "expected_behavior": "Ask for candidate roles or route to direction exploration.",
+      "clarifying_question_if_needed": "Do you already have candidate roles, or should we first generate several directions?"
+    }
+  ],
+  "handoff_cases": [
+    {
+      "id": "handoff_001",
+      "user_query": "Now model the competencies for my primary role.",
+      "expected_current_skill_output": "Primary role is selected.",
+      "expected_next_skill": "role_competency_modeling",
+      "handoff_condition": "User asks for competency structure."
+    },
+    {
+      "id": "handoff_002",
+      "user_query": "Compare my skills against the chosen target.",
+      "expected_current_skill_output": "Primary role and evidence needs are defined.",
+      "expected_next_skill": "skill_gap_diagnosis",
+      "handoff_condition": "User asks for gap diagnosis."
+    },
+    {
+      "id": "handoff_003",
+      "user_query": "Design projects to prove I can do this role.",
+      "expected_current_skill_output": "Key evidence to build is listed.",
+      "expected_next_skill": "project_training_generation",
+      "handoff_condition": "User asks for portfolio/project evidence."
+    }
+  ],
+  "regression_cases": [
+    {
+      "id": "reg_001",
+      "risk": "Ignoring constraints",
+      "user_query": "I need low-risk transition but am considering PM and data analyst.",
+      "must_not_regress": "Do not choose a role without discussing transition risk."
+    },
+    {
+      "id": "reg_002",
+      "risk": "No evidence plan",
+      "user_query": "Pick my main target.",
+      "must_not_regress": "Do not omit key evidence to build."
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 import type {
   ArtifactRecord,
+  AskQuestionResponse,
   DraftMessageAttachment,
   ProfileRecord,
   ProfileSuggestion,
@@ -10,6 +11,16 @@ import type {
   ThreadSummary,
   UploadedConversationFile,
 } from '../types/entities';
+import type {
+  BaseProfilePatch,
+  BaseProfileRecord,
+  ProfileChangeProposalRecord,
+  ProfileMemoryRecord,
+  ProfileRevisionRecord,
+  ProfileStateRecord,
+  CreateProfileMemoryInput,
+  ReplaceProfileMemoryInput,
+} from '../modules/profile/profileV2Types';
 
 export interface CreateThreadInput {
   title?: string;
@@ -34,6 +45,11 @@ export interface CareerAgentClient {
   getThreadMessages(threadId: string): Promise<ThreadMessage[]>;
   uploadThreadFile(threadId: string, attachment: DraftMessageAttachment | File): Promise<UploadedConversationFile>;
   sendMessage(threadId: string, input: SendThreadMessageInput): Promise<SendThreadMessageResult>;
+  respondToInteractiveTool?(
+    threadId: string,
+    toolUseId: string,
+    response: AskQuestionResponse,
+  ): Promise<void>;
   streamMessage?(
     threadId: string,
     input: SendThreadMessageInput,
@@ -45,6 +61,17 @@ export interface CareerAgentClient {
     options?: { suggestionRowId?: number },
   ): Promise<ProfileRecord>;
   listProfileSuggestions(): Promise<ProfileSuggestion[]>;
+  getBaseProfile?(): Promise<BaseProfileRecord>;
+  updateBaseProfile?(patch: BaseProfilePatch, expectedVersion: number): Promise<BaseProfileRecord>;
+  listProfileMemories?(filters?: Record<string, string>): Promise<ProfileMemoryRecord[]>;
+  getProfileState?(): Promise<ProfileStateRecord>;
+  createProfileMemory?(input: CreateProfileMemoryInput, expectedVersion: number): Promise<ProfileMemoryRecord>;
+  replaceProfileMemory?(profileIndex: string, input: ReplaceProfileMemoryInput, expectedVersion: number): Promise<ProfileMemoryRecord>;
+  updateProfileMemory?(id: string, patch: Partial<ProfileMemoryRecord>, expectedVersion: number): Promise<ProfileMemoryRecord>;
+  deleteProfileMemory?(id: string, expectedVersion: number): Promise<void>;
+  listProfileProposals?(): Promise<ProfileChangeProposalRecord[]>;
+  resolveProfileProposal?(id: string, action: 'accept' | 'reject'): Promise<ProfileChangeProposalRecord>;
+  listProfileHistory?(): Promise<ProfileRevisionRecord[]>;
   listArtifacts(): Promise<ArtifactRecord[]>;
   getArtifact(artifactId: string): Promise<ArtifactRecord | null>;
   refreshArtifact(artifactId: string): Promise<ArtifactRecord | null>;

@@ -1,6 +1,10 @@
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useWorkspaceStore } from './workspace';
+import {
+  hasCompletedInteractiveToolReply,
+  preserveCompletedLiveReplies,
+  useWorkspaceStore,
+} from './workspace';
 
 describe('useWorkspaceStore', () => {
   beforeEach(() => {
@@ -178,6 +182,143 @@ describe('useWorkspaceStore', () => {
     expect(workspaceStore.messages.filter((message) => (
       message.role === 'assistant' && message.content === '已收到你的消息。mock 模式下不会调用真实后端。'
     ))).toHaveLength(1);
+  });
+
+  it('keeps a completed interactive reply when the immediate history refresh is stale', () => {
+    const reconciled = preserveCompletedLiveReplies([
+      {
+        id: 'assistant-1',
+        threadId: 'thread-1',
+        role: 'assistant',
+        kind: 'markdown',
+        content: '已根据你的选择继续处理。',
+        blocks: [
+          {
+            id: 'ask-question-tool-1',
+            type: 'ask_question',
+            toolUseId: 'tool-1',
+            status: 'pending',
+            questions: [{
+              header: '状态测试',
+              question: '请选择？',
+              options: [
+                { label: '正常', description: '正常路径' },
+                { label: '异常', description: '异常路径' },
+              ],
+              multiSelect: false,
+            }],
+          },
+          { id: 'text-0', type: 'text', text: '已根据你的选择继续处理。' },
+        ],
+        streaming: false,
+        createdAt: '2026-07-18T04:04:14.172Z',
+      },
+    ], [
+      {
+        id: 'assistant-1',
+        threadId: 'thread-1',
+        role: 'assistant',
+        kind: 'markdown',
+        content: '',
+        blocks: [{
+          id: 'ask-question-tool-1',
+          type: 'ask_question',
+          toolUseId: 'tool-1',
+          status: 'pending',
+          questions: [{
+            header: '状态测试',
+            question: '请选择？',
+            options: [
+              { label: '正常', description: '正常路径' },
+              { label: '异常', description: '异常路径' },
+            ],
+            multiSelect: false,
+          }],
+        }],
+        createdAt: '2026-07-18T04:04:14.172Z',
+      },
+    ]);
+
+    expect(reconciled[0]).toMatchObject({
+      content: '已根据你的选择继续处理。',
+      streaming: false,
+    });
+    expect(reconciled[0]?.blocks?.some((block) => block.type === 'ask_question')).toBe(true);
+    expect(reconciled[0]?.blocks?.some((block) => block.type === 'text')).toBe(true);
+  });
+
+  it('recognizes an interactive reply when transcript projection separates the question and answer', () => {
+    expect(hasCompletedInteractiveToolReply([
+      {
+        id: 'assistant-question',
+        threadId: 'thread-1',
+        role: 'assistant',
+        kind: 'markdown',
+        content: '',
+        blocks: [{
+          id: 'ask-question-tool-1',
+          type: 'ask_question',
+          toolUseId: 'tool-1',
+          questions: [{
+            header: '状态测试',
+            question: '请选择？',
+            options: [
+              { label: '正常', description: '正常路径' },
+              { label: '异常', description: '异常路径' },
+            ],
+            multiSelect: false,
+          }],
+        }],
+        createdAt: '2026-07-18T04:04:14.172Z',
+      },
+      {
+        id: 'assistant-final',
+        threadId: 'thread-1',
+        role: 'assistant',
+        kind: 'markdown',
+        content: '最终状态已同步。',
+        createdAt: '2026-07-18T04:04:20.172Z',
+      },
+    ], 'tool-1')).toBe(true);
+  });
+
+  it('does not mistake an interim reply before the question for a completed interactive reply', () => {
+    const messages = [{
+      id: 'assistant-question',
+      threadId: 'thread-1',
+      role: 'assistant' as const,
+      kind: 'markdown' as const,
+      content: 'Assistant is thinking...',
+      stopReason: 'tool_use',
+      blocks: [
+        { id: 'status-0', type: 'status' as const, text: '正在调用工具。' },
+        {
+          id: 'ask-question-tool-1',
+          type: 'ask_question' as const,
+          toolUseId: 'tool-1',
+          questions: [{
+            question: '请选择。',
+            header: '状态测试',
+            options: [{ label: '通过', description: '正常' }],
+            multiSelect: false,
+          }],
+        },
+        { id: 'text-0', type: 'text' as const, text: 'Assistant is thinking...' },
+      ],
+      createdAt: '2026-07-18T04:21:11.987Z',
+    }];
+
+    expect(hasCompletedInteractiveToolReply(messages, 'tool-1')).toBe(false);
+    expect(hasCompletedInteractiveToolReply([
+      {
+        ...messages[0],
+        stopReason: 'end_turn',
+        blocks: [
+          ...messages[0].blocks!,
+          { id: 'text-0', type: 'text' as const, text: '实时结果已显示。' },
+        ],
+      },
+    ], 'tool-1')).toBe(true);
   });
 
   it('revokes local blob attachment urls before clearing messages on thread switch', async () => {

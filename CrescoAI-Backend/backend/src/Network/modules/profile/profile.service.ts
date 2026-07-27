@@ -26,6 +26,7 @@ import {
   type ProfileRecord,
   type ProfileSuggestion,
 } from './profile.types';
+import { profileFeatureFlags } from './profile-feature-flags';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -216,6 +217,7 @@ export class ProfileService {
   }
 
   async listSuggestions(userId: number): Promise<ProfileSuggestion[]> {
+    if (!profileFeatureFlags.legacySuggestionExtraction()) return [];
     const suggestions = await this.suggestionRepo.find({
       where: { userId, status: 'pending' },
       order: { createdAt: 'DESC', rowId: 'DESC' },
@@ -244,6 +246,7 @@ export class ProfileService {
     output,
     sourceThreadId = null,
   }: SaveSuggestionsFromOutputInput): Promise<ProfileSuggestion[]> {
+    if (!profileFeatureFlags.legacySuggestionExtraction()) return [];
     const candidates = this.extractSuggestionCandidates(output);
     const saved: ProfileSuggestion[] = [];
     const seen = new Set<string>();

@@ -9,7 +9,7 @@ describe('resolveRuntimeConfig', () => {
       environmentName: 'development',
       clientMode: 'mock',
       apiBaseUrl: null,
-      userId: '1',
+      userId: '',
       upstreamWithCredentials: false,
       artifactTransport: 'mock',
       voiceInputEnabled: false,
@@ -58,6 +58,7 @@ describe('resolveRuntimeConfig', () => {
   it('enables skipAuth when the flag is set', () => {
     const config = resolveRuntimeConfig({ VITE_CAREER_AGENT_SKIP_AUTH: 'true' });
     expect(config.skipAuth).toBe(true);
+    expect(config.userId).toBe('1');
   });
 
   it('falls back to polling for invalid upstream transport values', () => {
@@ -70,11 +71,11 @@ describe('resolveRuntimeConfig', () => {
     expect(config.artifactTransport).toBe('polling');
   });
 
-  it('defaults empty user id values to the local development user', () => {
+  it('does not invent a user id outside explicit skip-auth mode', () => {
     const config = resolveRuntimeConfig({
       VITE_CAREER_AGENT_USER_ID: ' ',
     });
 
-    expect(config.userId).toBe('1');
+    expect(config.userId).toBe('');
   });
 });

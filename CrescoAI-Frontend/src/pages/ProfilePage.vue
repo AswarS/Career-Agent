@@ -4,6 +4,17 @@ import { storeToRefs } from 'pinia';
 import MobileRailTrigger from '../modules/navigation/MobileRailTrigger.vue';
 import ProfileSnapshotCard from '../modules/profile/ProfileSnapshotCard.vue';
 import ProfileSuggestionCard from '../modules/profile/ProfileSuggestionCard.vue';
+import BaseProfileForm from '../modules/profile/BaseProfileForm.vue';
+import ProfileMemoryWorkspace from '../modules/profile/ProfileMemoryWorkspace.vue';
+import ProfileProposalPanel from '../modules/profile/ProfileProposalPanel.vue';
+import ProfileHistoryPanel from '../modules/profile/ProfileHistoryPanel.vue';
+import { useProfileV2Store } from '../modules/profile/profileV2Store';
+import type {
+  BaseProfilePatch,
+  CreateProfileMemoryInput,
+  ProfileMemoryRecord,
+  ReplaceProfileMemoryInput,
+} from '../modules/profile/profileV2Types';
 import {
   buildProfileSnapshotSections,
   formatRequiredLevel,
@@ -22,6 +33,16 @@ import { useWorkspaceStore } from '../stores/workspace';
 import type { DeepPartial, ProfileRecord, ProfileSuggestion } from '../types/entities';
 
 const workspaceStore = useWorkspaceStore();
+const profileV2Store = useProfileV2Store();
+const {
+  baseProfile,
+  saving: baseProfileSaving,
+  error: profileV2Error,
+  memories: profileMemories,
+  profileState,
+  proposals: profileV2Proposals,
+  history: profileV2History,
+} = storeToRefs(profileV2Store);
 const {
   activeThread,
   artifacts,
@@ -49,7 +70,33 @@ const requirementSortOrder: Record<ProfileFieldRequirementKind, number> = {
 
 onMounted(() => {
   void workspaceStore.initialize();
+  void profileV2Store.loadBaseProfile();
+  void profileV2Store.loadMemoryWorkspace();
 });
+
+async function saveBaseProfile(patch: BaseProfilePatch) {
+  await profileV2Store.saveBaseProfile(patch);
+}
+
+async function createProfileMemory(input: CreateProfileMemoryInput) {
+  await profileV2Store.createMemory(input);
+}
+
+async function updateProfileMemory(id: string, patch: Partial<ProfileMemoryRecord>) {
+  await profileV2Store.updateMemory(id, patch);
+}
+
+async function replaceProfileMemory(profileIndex: string, input: ReplaceProfileMemoryInput) {
+  await profileV2Store.replaceMemory(profileIndex, input);
+}
+
+async function deleteProfileMemory(id: string) {
+  await profileV2Store.deleteMemory(id);
+}
+
+async function resolveProfileProposal(id: string, action: 'accept' | 'reject') {
+  await profileV2Store.resolveProposal(id, action);
+}
 
 watch(
   profile,
@@ -336,7 +383,7 @@ function formatSuggestionStatus(status: typeof profileSuggestionsStatus.value) {
         <MobileRailTrigger />
         <div>
           <p class="eyebrow">轻量画像</p>
-          <h1>{{ profile?.basicInfo.fullName || (profile ? '我的职业画像' : '正在加载画像...') }}</h1>
+          <h1>{{ baseProfile?.name || profile?.basicInfo.fullName || (profile ? '我的职业画像' : '正在加载画像...') }}</h1>
         </div>
       </div>
       <div class="header-actions">
@@ -349,17 +396,17 @@ function formatSuggestionStatus(status: typeof profileSuggestionsStatus.value) {
             打开画像摘要
           </button>
           <button
-            v-if="!isEditing"
+            v-if="!profileState && !isEditing"
             class="secondary-button"
             :disabled="!primaryProfileSuggestion || profileSaveStatus === 'loading'"
             @click="applyPrimarySuggestion"
           >
             应用ai建议
           </button>
-          <button v-if="!isEditing" class="primary-button" :disabled="!profile" @click="beginEditing">
+          <button v-if="!profileState && !isEditing" class="primary-button" :disabled="!profile" @click="beginEditing">
             开始编辑
           </button>
-          <template v-else>
+          <template v-else-if="!profileState">
             <button class="secondary-button" @click="cancelEditing">放弃草稿</button>
             <button
               class="primary-button"
@@ -373,6 +420,29 @@ function formatSuggestionStatus(status: typeof profileSuggestionsStatus.value) {
       </div>
     </header>
 
+    <BaseProfileForm
+      v-if="baseProfile"
+      :profile="baseProfile"
+      :saving="baseProfileSaving"
+      @save="saveBaseProfile"
+    />
+    <p v-if="profileV2Error" class="notice-copy">{{ profileV2Error }}</p>
+    <ProfileMemoryWorkspace
+      v-if="profileState"
+      :memories="profileMemories"
+      :profile-state="profileState"
+      @create="createProfileMemory"
+      @update="updateProfileMemory"
+      @replace="replaceProfileMemory"
+      @delete="deleteProfileMemory"
+    />
+    <ProfileProposalPanel
+      v-if="profileState"
+      :proposals="profileV2Proposals"
+      @resolve="resolveProfileProposal"
+    />
+    <ProfileHistoryPanel v-if="profileState" :history="profileV2History" />
+
     <section v-if="profileStatus === 'loading'" class="state-card">
       <p class="eyebrow">加载中</p>
       <h2>正在加载结构化画像...</h2>
@@ -385,7 +455,7 @@ function formatSuggestionStatus(status: typeof profileSuggestionsStatus.value) {
       <button class="secondary-button retry-button" @click="workspaceStore.initialize()">重新加载</button>
     </section>
 
-    <section v-else-if="profile && draftProfile" class="profile-layout" :class="{ editing: isEditing }">
+    <section v-else-if="profile && draftProfile && !profileState" class="profile-layout" :class="{ editing: isEditing }">
       <div v-if="!isEditing" class="snapshot-grid">
         <ProfileSnapshotCard
           v-for="section in snapshotSections"
