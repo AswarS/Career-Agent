@@ -231,6 +231,7 @@ export type DeepPartial<T> = {
 };
 
 export interface ProfileSuggestion {
+  rowId?: number;
   id: string;
   title: string;
   rationale: string;

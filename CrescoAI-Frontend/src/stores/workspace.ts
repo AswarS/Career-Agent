@@ -664,16 +664,27 @@ export const useWorkspaceStore = defineStore('workspace', {
         this.errorMessage = error instanceof Error ? error.message : 'Unknown artifact refresh error';
       }
     },
-    async saveProfileDraft(nextProfile: ProfileRecord) {
+    async saveProfileDraft(
+      nextProfile: ProfileRecord,
+      suggestionRowId?: number,
+    ) {
       await this.initialize();
       this.profileSaveStatus = 'loading';
       this.errorMessage = null;
 
       try {
-        const savedProfile = await client.updateProfile(nextProfile);
+        const savedProfile = await client.updateProfile(
+          nextProfile,
+          { suggestionRowId },
+        );
         const refreshedProfileSummary = await client.getArtifact('artifact-profile-summary');
 
         this.profile = savedProfile;
+        if (suggestionRowId) {
+          this.profileSuggestions = this.profileSuggestions.filter(
+            (suggestion) => suggestion.rowId !== suggestionRowId,
+          );
+        }
 
         if (refreshedProfileSummary) {
           this.upsertArtifactRecord(refreshedProfileSummary);

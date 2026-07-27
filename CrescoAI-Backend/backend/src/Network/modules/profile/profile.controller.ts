@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Put, Req } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseIntPipe,
+  Post,
+  Put,
+  Req,
+} from '@nestjs/common';
 import type { Request } from 'express';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ProfileService } from './profile.service';
@@ -20,5 +29,13 @@ export class ProfileController {
   @Get('suggestions')
   listSuggestions(@Req() req: Request) {
     return this.profileService.listSuggestions(req.userId!);
+  }
+
+  @Post('suggestions/:rowId/reject')
+  rejectSuggestion(
+    @Req() req: Request,
+    @Param('rowId', ParseIntPipe) rowId: number,
+  ) {
+    return this.profileService.rejectSuggestion(req.userId!, rowId);
   }
 }

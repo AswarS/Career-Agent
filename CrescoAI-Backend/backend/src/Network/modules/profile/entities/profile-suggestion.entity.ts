@@ -9,7 +9,10 @@ import {
 export type ProfileSuggestionStatus = 'pending' | 'accepted' | 'rejected';
 
 @Entity('profile_suggestions')
-@Index(['userId', 'status', 'createdAt'])
+@Index(
+  'IDX_profile_suggestions_user_status_created',
+  ['userId', 'status', 'createdAt'],
+)
 export class ProfileSuggestionEntity {
   @PrimaryGeneratedColumn({ type: 'integer' })
   rowId!: number;
@@ -34,6 +37,9 @@ export class ProfileSuggestionEntity {
 
   @Column({ type: 'varchar', default: 'pending' })
   status!: ProfileSuggestionStatus;
+
+  @Column({ type: 'datetime', nullable: true })
+  resolvedAt!: Date | null;
 
   @CreateDateColumn()
   createdAt!: Date;

@@ -1,13 +1,21 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+import { randomUUID } from 'node:crypto';
+import { DataSource, Repository } from 'typeorm';
 import { UserEntity } from '../user/entities/user.entity';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { CareerProfileVersionEntity } from './entities/career-profile-version.entity';
 import { ProfileSuggestionEntity } from './entities/profile-suggestion.entity';
+import {
+  hashCanonicalProfile,
+  serializeCanonicalProfile,
+} from './profile-version.utils';
 import {
   createDefaultProfile,
   hasProfilePatchFields,
@@ -34,6 +42,8 @@ export class ProfileService {
     private readonly userRepo: Repository<UserEntity>,
     @InjectRepository(ProfileSuggestionEntity)
     private readonly suggestionRepo: Repository<ProfileSuggestionEntity>,
+    @InjectDataSource()
+    private readonly dataSource: DataSource,
   ) {}
 
   async getProfile(userId: number) {
@@ -53,16 +63,156 @@ export class ProfileService {
       });
     }
 
-    const user = await this.findUser(userId);
-    const profile = normalizeProfileRecord(source, user.displayName);
-
-    user.profileJson = JSON.stringify(profile);
-    if (profile.basicInfo.fullName) {
-      user.displayName = profile.basicInfo.fullName;
+    if (!this.dataSource) {
+      throw new InternalServerErrorException({
+        code: 'PROFILE_VERSION_STORE_UNAVAILABLE',
+        message: 'profile version storage is unavailable',
+      });
     }
-    await this.userRepo.save(user);
 
-    return profile;
+    return this.dataSource.transaction(async (manager) => {
+      const userRepo = manager.getRepository(UserEntity);
+      const user = await userRepo.findOne({ where: { id: userId } });
+      if (!user) {
+        throw new NotFoundException({
+          code: 'USER_NOT_FOUND',
+          message: 'user not found',
+        });
+      }
+      const profile = normalizeProfileRecord(source, user.displayName);
+      const profileJson = serializeCanonicalProfile(profile);
+      const currentVersion = user.profileVersion ?? 0;
+      const nextVersion = currentVersion + 1;
+      const profileVersionId = randomUUID();
+      const suggestion = dto.suggestionRowId
+        ? await manager.getRepository(ProfileSuggestionEntity).findOne({
+            where: {
+              rowId: dto.suggestionRowId,
+              userId,
+              status: 'pending',
+            },
+          })
+        : null;
+      if (dto.suggestionRowId && !suggestion) {
+        throw new NotFoundException({
+          code: 'PROFILE_SUGGESTION_NOT_FOUND',
+          message: 'pending profile suggestion not found',
+        });
+      }
+      if (
+        suggestion
+        && !this.profileContainsPatch(
+          profile,
+          this.parsePatchJson(suggestion.patchJson),
+        )
+      ) {
+        throw new BadRequestException({
+          code: 'PROFILE_SUGGESTION_PATCH_NOT_APPLIED',
+          message: 'saved profile does not contain the accepted suggestion',
+        });
+      }
+      const claimedVersion = await userRepo.update(
+        { id: userId, profileVersion: currentVersion },
+        { profileVersion: nextVersion },
+      );
+      if (claimedVersion.affected !== 1) {
+        throw new ConflictException({
+          code: 'PROFILE_VERSION_CONFLICT',
+          message: 'profile changed concurrently; reload and retry',
+        });
+      }
+
+      await manager.getRepository(CareerProfileVersionEntity).insert({
+        id: profileVersionId,
+        userId,
+        version: nextVersion,
+        schemaVersion: profile.schemaVersion,
+        profileJson,
+        contentHash: hashCanonicalProfile(profileJson),
+        createdBy: suggestion ? 'suggestion' : 'user',
+        sourceThreadId: suggestion?.sourceThreadId ?? null,
+      });
+      user.profileJson = profileJson;
+      user.profileVersion = nextVersion;
+      user.currentProfileVersionId = profileVersionId;
+      if (profile.basicInfo.fullName) {
+        user.displayName = profile.basicInfo.fullName;
+      }
+      await userRepo.save(user);
+      if (suggestion) {
+        suggestion.status = 'accepted';
+        suggestion.resolvedAt = new Date();
+        await manager.getRepository(ProfileSuggestionEntity).save(suggestion);
+      }
+
+      return profile;
+    });
+  }
+
+  async rejectSuggestion(userId: number, rowId: number) {
+    const suggestion = await this.suggestionRepo.findOne({
+      where: { rowId, userId, status: 'pending' },
+    });
+    if (!suggestion) {
+      throw new NotFoundException({
+        code: 'PROFILE_SUGGESTION_NOT_FOUND',
+        message: 'pending profile suggestion not found',
+      });
+    }
+    suggestion.status = 'rejected';
+    suggestion.resolvedAt = new Date();
+    await this.suggestionRepo.save(suggestion);
+    return { success: true };
+  }
+
+  async getCurrentProfileSnapshot(userId: number) {
+    if (!this.dataSource) {
+      throw new InternalServerErrorException({
+        code: 'PROFILE_VERSION_STORE_UNAVAILABLE',
+        message: 'profile version storage is unavailable',
+      });
+    }
+    const user = await this.findUser(userId);
+    if (!user.currentProfileVersionId) {
+      throw new InternalServerErrorException({
+        code: 'PROFILE_VERSION_MISSING',
+        message: 'current profile version is missing',
+      });
+    }
+    const version = await this.dataSource
+      .getRepository(CareerProfileVersionEntity)
+      .findOne({ where: { id: user.currentProfileVersionId, userId } });
+    if (!version) {
+      throw new InternalServerErrorException({
+        code: 'PROFILE_VERSION_MISSING',
+        message: 'current profile version is missing',
+      });
+    }
+
+    let profile: unknown;
+    try {
+      profile = JSON.parse(version.profileJson) as unknown;
+    } catch {
+      throw new InternalServerErrorException({
+        code: 'PROFILE_DATA_CORRUPT',
+        message: 'current profile version contains invalid JSON',
+      });
+    }
+    if (hashCanonicalProfile(version.profileJson) !== version.contentHash) {
+      throw new InternalServerErrorException({
+        code: 'PROFILE_DATA_CORRUPT',
+        message: 'current profile version hash does not match its content',
+      });
+    }
+
+    return {
+      externalUserId: user.publicUserId,
+      profileVersion: String(version.version),
+      schemaVersion: version.schemaVersion,
+      updatedAt: version.createdAt.toISOString(),
+      profile,
+      contentHash: version.contentHash,
+    };
   }
 
   async listSuggestions(userId: number): Promise<ProfileSuggestion[]> {
@@ -173,6 +323,7 @@ export class ProfileService {
     }
 
     return {
+      rowId: entity.rowId,
       id: entity.id,
       title: entity.title,
       rationale: entity.rationale,
@@ -191,6 +342,34 @@ export class ProfileService {
     } catch {
       return {};
     }
+  }
+
+  private profileContainsPatch(
+    profile: ProfileRecord,
+    patch: DeepPartial<ProfileRecord>,
+  ) {
+    const matches = (actual: unknown, expected: unknown): boolean => {
+      if (Array.isArray(expected)) {
+        return (
+          Array.isArray(actual)
+          && JSON.stringify(actual) === JSON.stringify(expected)
+        );
+      }
+      if (
+        typeof expected === 'object'
+        && expected !== null
+        && !Array.isArray(expected)
+      ) {
+        if (typeof actual !== 'object' || actual === null) {
+          return false;
+        }
+        return Object.entries(expected).every(([key, value]) =>
+          matches((actual as Record<string, unknown>)[key], value));
+      }
+      return actual === expected;
+    };
+
+    return matches(profile, patch);
   }
 
   private normalizeSuggestionCandidate(

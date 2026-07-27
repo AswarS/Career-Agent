@@ -419,10 +419,12 @@ export function createUpstreamCareerAgentClient(
       const payload = await requestOptionalJson<unknown>(CAREER_AGENT_API_ROUTES.profile());
       return sanitizeProfileRecord(payload ?? createDefaultProfile());
     },
-    async updateProfile(profile) {
+    async updateProfile(profile, options) {
       const payload = await requestJson<unknown>(CAREER_AGENT_API_ROUTES.profile(), {
         method: 'PUT',
-        data: profile,
+        data: options?.suggestionRowId
+          ? { profile, suggestionRowId: options.suggestionRowId }
+          : profile,
       });
 
       return sanitizeProfileRecord(payload);

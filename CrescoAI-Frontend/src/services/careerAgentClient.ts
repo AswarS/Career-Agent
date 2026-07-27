@@ -40,7 +40,10 @@ export interface CareerAgentClient {
     options?: StreamThreadMessageOptions,
   ): AsyncIterable<ThreadMessageStreamEvent>;
   getProfile(): Promise<ProfileRecord>;
-  updateProfile(profile: ProfileRecord): Promise<ProfileRecord>;
+  updateProfile(
+    profile: ProfileRecord,
+    options?: { suggestionRowId?: number },
+  ): Promise<ProfileRecord>;
   listProfileSuggestions(): Promise<ProfileSuggestion[]>;
   listArtifacts(): Promise<ArtifactRecord[]>;
   getArtifact(artifactId: string): Promise<ArtifactRecord | null>;

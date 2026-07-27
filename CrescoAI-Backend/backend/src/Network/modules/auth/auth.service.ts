@@ -4,15 +4,21 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { randomBytes, randomUUID, scrypt as scryptCallback, createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { UserEntity } from '../user/entities/user.entity';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
 import { createDefaultProfile } from '../profile/profile.types';
+import { careerAgentJwtSecret } from '../../security.config.js';
+import { CareerProfileVersionEntity } from '../profile/entities/career-profile-version.entity.js';
+import {
+  hashCanonicalProfile,
+  serializeCanonicalProfile,
+} from '../profile/profile-version.utils.js';
 
 const scrypt = promisify(scryptCallback);
 interface AccessTokenPayload {
@@ -31,6 +37,8 @@ export class AuthService {
   constructor(
     @InjectRepository(UserEntity)
     private readonly userRepo: Repository<UserEntity>,
+    @InjectDataSource()
+    private readonly dataSource: DataSource,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -48,6 +56,9 @@ export class AuthService {
 
     const displayName = this.normalizeDisplayName(dto.display_name ?? dto.displayName, email, username);
     const passwordHash = await this.hashPassword(dto.password);
+    const profileJson = serializeCanonicalProfile(
+      createDefaultProfile(displayName),
+    );
     const user = this.userRepo.create({
       userId: undefined,
       publicUserId: randomUUID(),
@@ -55,14 +66,16 @@ export class AuthService {
       username,
       displayName,
       passwordHash,
-      profileJson: JSON.stringify(createDefaultProfile(displayName)),
+      profileJson,
       tokenVersion: 0,
+      accountStatus: 'active',
+      accountVersion: 1,
+      profileVersion: 0,
+      currentProfileVersionId: null,
     });
     let saved: UserEntity | undefined;
     try {
-      saved = await this.userRepo.save(user);
-      saved.userId = String(saved.id);
-      await this.userRepo.save(saved);
+      saved = await this.persistNewUser(user, profileJson);
     } catch (error) {
       if (this.isUniqueConstraintError(error)) {
         throw new ConflictException(this.error('USER_ALREADY_EXISTS', 'email or username already exists'));
@@ -87,6 +100,7 @@ export class AuthService {
     if (!user?.passwordHash || !(await this.verifyPassword(dto.password, user.passwordHash))) {
       throw new UnauthorizedException(this.error('INVALID_CREDENTIALS', 'invalid email, username or password'));
     }
+    this.assertAccountActive(user);
 
     return this.issueSession(user);
   }
@@ -107,6 +121,7 @@ export class AuthService {
     if (!user?.refreshTokenExpiresAt || user.refreshTokenExpiresAt.getTime() <= Date.now()) {
       throw new UnauthorizedException(this.error('UNAUTHORIZED', 'refresh token is invalid or expired'));
     }
+    this.assertAccountActive(user);
 
     return this.issueSession(user);
   }
@@ -128,6 +143,7 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException(this.error('UNAUTHORIZED', 'session is invalid'));
     }
+    this.assertAccountActive(user);
 
     return {
       user: this.toAuthUser(user),
@@ -141,11 +157,40 @@ export class AuthService {
     if (!user || user.tokenVersion !== payload.token_version) {
       throw new UnauthorizedException(this.error('UNAUTHORIZED', 'token is invalid or expired'));
     }
+    this.assertAccountActive(user);
 
     return {
       ...this.toAuthUser(user),
       internalUserId: user.id,
     };
+  }
+
+  private async persistNewUser(user: UserEntity, profileJson: string) {
+    if (!this.dataSource) {
+      const saved = await this.userRepo.save(user);
+      saved.userId = String(saved.id);
+      return this.userRepo.save(saved);
+    }
+
+    return this.dataSource.transaction(async (manager) => {
+      const userRepo = manager.getRepository(UserEntity);
+      const saved = await userRepo.save(user);
+      const profileVersionId = randomUUID();
+      await manager.getRepository(CareerProfileVersionEntity).insert({
+        id: profileVersionId,
+        userId: saved.id,
+        version: 1,
+        schemaVersion: 'career_profile_v1',
+        profileJson,
+        contentHash: hashCanonicalProfile(profileJson),
+        createdBy: 'registration',
+        sourceThreadId: null,
+      });
+      saved.userId = String(saved.id);
+      saved.profileVersion = 1;
+      saved.currentProfileVersionId = profileVersionId;
+      return userRepo.save(saved);
+    });
   }
 
   private async issueSession(user: UserEntity) {
@@ -332,7 +377,7 @@ export class AuthService {
   }
 
   private jwtSecret() {
-    return process.env.CAREER_AGENT_JWT_SECRET ?? process.env.JWT_SECRET ?? 'career-agent-dev-secret';
+    return careerAgentJwtSecret();
   }
 
   private accessTokenExpiresInSeconds() {
@@ -383,6 +428,14 @@ export class AuthService {
 
   private error(code: string, message: string) {
     return { code, message };
+  }
+
+  private assertAccountActive(user: UserEntity) {
+    if (user.accountStatus === 'disabled') {
+      throw new UnauthorizedException(
+        this.error('ACCOUNT_DISABLED', 'account is disabled'),
+      );
+    }
   }
 
   private isUniqueConstraintError(error: unknown) {

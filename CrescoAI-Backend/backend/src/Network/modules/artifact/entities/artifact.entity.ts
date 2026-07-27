@@ -1,6 +1,10 @@
-import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
 
 @Entity('artifacts')
+@Index(
+  'IDX_artifacts_user_conversation_created',
+  ['userId', 'conversationId', 'createdAt'],
+)
 export class ArtifactEntity {
   @PrimaryGeneratedColumn({ type: 'integer' })
   id!: number;

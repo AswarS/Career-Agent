@@ -12,11 +12,17 @@ application. Production mode disables TypeORM schema synchronization by
 default. `CAREER_AGENT_SCHEMA_SYNC=true` is intended only for disposable
 development databases.
 
-For a completely empty database, `network:migrate` first initializes the
-complete current schema and then records/applies incremental migrations. This
-is the only production path that performs baseline synchronization; normal
-application startup still uses `synchronize: false`.
+The migration chain contains a frozen legacy baseline followed by incremental
+schema changes. It supports both a completely empty database and a recognized
+legacy Career Agent database. It does not derive a production schema from the
+current TypeORM entities.
 
 If the database contains application tables but has no `users` table, the
-command stops instead of guessing how to repair a partially initialized
-database. Run this command once before starting any application instances.
+baseline migration stops instead of guessing how to repair a partially
+initialized database. Run migrations once before starting any application
+instances.
+
+Production startup also requires `CAREER_AGENT_JWT_SECRET` (or the legacy
+`JWT_SECRET`) to contain at least 32 characters. Set
+`CAREER_AGENT_FILE_DOWNLOAD_TOKEN_SECRET` separately when file download tokens
+must use a different signing key.

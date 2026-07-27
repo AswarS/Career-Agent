@@ -1,6 +1,14 @@
-import { Column, Entity, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import {
+  Column,
+  Entity,
+  Index,
+  PrimaryGeneratedColumn,
+  CreateDateColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 
 @Entity('teams')
+@Index('IDX_teams_user_updated', ['userId', 'updatedAt'])
 export class TeamEntity {
   @PrimaryGeneratedColumn('uuid')
   id!: string;

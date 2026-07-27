@@ -1,6 +1,13 @@
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  Index,
+  PrimaryGeneratedColumn,
+} from 'typeorm';
 
 @Entity('memories')
+@Index('IDX_memories_user_created', ['userId', 'createdAt'])
 export class MemoryEntity {
   @PrimaryGeneratedColumn({ type: 'integer' })
   id!: number;

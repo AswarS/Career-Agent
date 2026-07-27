@@ -15,8 +15,10 @@ import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { enableConfigs } from '../utils/config.js';
 import { ensureBootstrapMacro } from '../bootstrapMacro.js';
+import { validateCareerAgentSecurityConfig } from './security.config.js';
 
 enableConfigs();
+validateCareerAgentSecurityConfig();
 ensureBootstrapMacro();
 
 async function bootstrap() {

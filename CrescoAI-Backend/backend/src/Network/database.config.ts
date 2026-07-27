@@ -5,6 +5,8 @@ import { ConversationEntity } from './modules/conversation/entities/conversation
 import { MessageEntity } from './modules/conversation/entities/message.entity.js';
 import { GeneratedAppEntity } from './modules/generated-app/entities/generated-app.entity.js';
 import { MemoryEntity } from './modules/memory/entities/memory.entity.js';
+import { IntegrationOutboxEntity } from './modules/integration/entities/integration-outbox.entity.js';
+import { CareerProfileVersionEntity } from './modules/profile/entities/career-profile-version.entity.js';
 import { ProfileSuggestionEntity } from './modules/profile/entities/profile-suggestion.entity.js';
 import { ResourceEntity } from './modules/resource/entities/resource.entity.js';
 import { ApiSettingsEntity } from './modules/settings/entities/api-settings.entity.js';
@@ -28,4 +30,6 @@ export const careerAgentEntities = [
   ResourceEntity,
   GeneratedAppEntity,
   ProfileSuggestionEntity,
+  CareerProfileVersionEntity,
+  IntegrationOutboxEntity,
 ];
