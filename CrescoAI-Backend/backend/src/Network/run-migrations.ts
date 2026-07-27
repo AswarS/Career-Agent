@@ -1,19 +1,20 @@
 import { mkdir } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { dirname } from 'node:path';
 import { DataSource } from 'typeorm';
+import { careerAgentDatabasePath } from './database.config.js';
+import { initializeCareerAgentBaselineIfEmpty } from './initialize-baseline.js';
 import { AddPublicUserId1785128058000 } from './migrations/1785128058000-AddPublicUserId.js';
 
-const networkDir = dirname(fileURLToPath(import.meta.url));
-const database =
-  process.env.CAREER_AGENT_DATABASE_PATH
-  ?? join(networkDir, 'data', 'test.sqlite');
-
-await mkdir(dirname(database), { recursive: true });
+await mkdir(dirname(careerAgentDatabasePath), { recursive: true });
+const initializedBaseline =
+  await initializeCareerAgentBaselineIfEmpty(careerAgentDatabasePath);
+if (initializedBaseline) {
+  console.log('Initialized the Career Agent baseline schema.');
+}
 
 const dataSource = new DataSource({
   type: 'sqlite',
-  database,
+  database: careerAgentDatabasePath,
   migrations: [AddPublicUserId1785128058000],
   migrationsTransactionMode: 'all',
   synchronize: false,

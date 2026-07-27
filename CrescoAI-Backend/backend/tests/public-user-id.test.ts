@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { DataSource } from 'typeorm';
+import { initializeCareerAgentBaselineIfEmpty } from '../src/Network/initialize-baseline.js';
 import { AuthService } from '../src/Network/modules/auth/auth.service.js';
 import { AddPublicUserId1785128058000 } from '../src/Network/migrations/1785128058000-AddPublicUserId.js';
 import type { UserEntity } from '../src/Network/modules/user/entities/user.entity.js';
@@ -46,6 +50,51 @@ function decodePayload(token: string) {
 }
 
 describe('public user identity', () => {
+  test('an empty production database receives the complete baseline exactly once', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'career-agent-baseline-'));
+    const database = join(directory, 'career.sqlite');
+
+    try {
+      expect(await initializeCareerAgentBaselineIfEmpty(database)).toBe(true);
+
+      const dataSource = new DataSource({ type: 'sqlite', database });
+      await dataSource.initialize();
+      const tables = await dataSource.query(`
+        SELECT "name"
+        FROM "sqlite_master"
+        WHERE "type" = 'table'
+      `) as Array<{ name: string }>;
+      await dataSource.destroy();
+      const tableNames = new Set(tables.map(({ name }) => name));
+
+      expect(tableNames.has('users')).toBe(true);
+      expect(tableNames.has('conversations')).toBe(true);
+      expect(tableNames.has('messages')).toBe(true);
+      expect(tableNames.has('api_settings')).toBe(true);
+      expect(await initializeCareerAgentBaselineIfEmpty(database)).toBe(false);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test('baseline initialization rejects a partially initialized database', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'career-agent-partial-'));
+    const database = join(directory, 'career.sqlite');
+
+    try {
+      const dataSource = new DataSource({ type: 'sqlite', database });
+      await dataSource.initialize();
+      await dataSource.query('CREATE TABLE "orphaned_domain_table" ("id" integer)');
+      await dataSource.destroy();
+
+      await expect(
+        initializeCareerAgentBaselineIfEmpty(database),
+      ).rejects.toThrow('partially initialized without users table');
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   test('registration exposes an opaque UUID and uses it as the JWT subject', async () => {
     const repository = new InMemoryUserRepository();
     const service = new AuthService(repository as never);
