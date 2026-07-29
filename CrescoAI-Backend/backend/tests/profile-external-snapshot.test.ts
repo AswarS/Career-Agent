@@ -105,8 +105,8 @@ function createService(memories: ProfileMemoryItemEntity[]) {
 
 describe('Profile V2 external snapshot', () => {
   test('is deterministic, complete, and excludes internal identifiers', async () => {
-    const first = memory('P-0001', 'Target role');
-    const second = memory('P-0002', 'Career constraint');
+    const first = memory('P000001', 'Target role');
+    const second = memory('P000002', 'Career constraint');
     const snapshotA = await createService([second, first]).getCurrentSnapshot(41);
     const snapshotB = await createService([first, second]).getCurrentSnapshot(41);
 
@@ -115,7 +115,7 @@ describe('Profile V2 external snapshot', () => {
     expect(snapshotA.schemaVersion).toBe('career_profile_v2');
     expect(snapshotA.contentHash).toMatch(/^[a-f0-9]{64}$/);
     expect(snapshotA.profile.memories.map(({ profileIndex }) => profileIndex))
-      .toEqual(['P-0001', 'P-0002']);
+      .toEqual(['P000001', 'P000002']);
     // Expiration is a persisted lifecycle transition. The snapshot must not
     // silently change merely because wall-clock time advanced.
     expect(snapshotA.profile.memories[0].expiresAt)

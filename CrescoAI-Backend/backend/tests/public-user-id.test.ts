@@ -7,11 +7,11 @@ import { DataSource } from 'typeorm';
 import { AuthService } from '../src/Network/modules/auth/auth.service.js';
 import { CreateCareerAgentBaseline1785000000000 } from '../src/Network/migrations/1785000000000-CreateCareerAgentBaseline.js';
 import { AddPublicUserId1785128058000 } from '../src/Network/migrations/1785128058000-AddPublicUserId.js';
-import { AlignCareerAgentSchema1785128059000 } from '../src/Network/migrations/1785128059000-AlignCareerAgentSchema.js';
-import { AddIntegrationKernel1785128060000 } from '../src/Network/migrations/1785128060000-AddIntegrationKernel.js';
-import { ConsolidateProfileV2Snapshot1785128061000 } from '../src/Network/migrations/1785128061000-ConsolidateProfileV2Snapshot.js';
+import { careerAgentMigrations } from '../src/Network/migrations/migration-list.js';
 import { resolveCareerAgentSecurityConfig } from '../src/Network/security.config.js';
 import type { UserEntity } from '../src/Network/modules/user/entities/user.entity.js';
+import { careerAgentEntities } from '../src/Network/database.config.js';
+import { ApiSettingsEntity } from '../src/Network/modules/settings/entities/api-settings.entity.js';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -57,13 +57,8 @@ function migrationDataSource(database: string) {
   return new DataSource({
     type: 'sqlite',
     database,
-    migrations: [
-      CreateCareerAgentBaseline1785000000000,
-      AddPublicUserId1785128058000,
-      AlignCareerAgentSchema1785128059000,
-      AddIntegrationKernel1785128060000,
-      ConsolidateProfileV2Snapshot1785128061000,
-    ],
+    entities: careerAgentEntities,
+    migrations: careerAgentMigrations,
     migrationsTransactionMode: 'all',
     synchronize: false,
   });
@@ -77,7 +72,8 @@ describe('public user identity', () => {
     try {
       const dataSource = migrationDataSource(database);
       await dataSource.initialize();
-      expect(await dataSource.runMigrations({ transaction: 'all' })).toHaveLength(5);
+      expect(await dataSource.runMigrations({ transaction: 'all' }))
+        .toHaveLength(careerAgentMigrations.length);
       const tables = await dataSource.query(`
         SELECT "name"
         FROM "sqlite_master"
@@ -91,6 +87,28 @@ describe('public user identity', () => {
       const userColumns = await dataSource.query(
         'PRAGMA table_info("users")',
       ) as Array<{ name: string }>;
+      const settingsRepo = dataSource.getRepository(ApiSettingsEntity);
+      const savedSettings = await settingsRepo.save(settingsRepo.create({
+        userId: 1001,
+        provider: 'anthropic',
+        model: 'test-model',
+      }));
+      expect(await settingsRepo.findOneByOrFail({ id: savedSettings.id }))
+        .toMatchObject({
+          userId: 1001,
+          provider: 'anthropic',
+          model: 'test-model',
+        });
+      for (const metadata of dataSource.entityMetadatas) {
+        const columns = await dataSource.query(
+          `PRAGMA table_info("${metadata.tableName}")`,
+        ) as Array<{ name: string }>;
+        const actual = new Set(columns.map(({ name }) => name));
+        const missing = metadata.columns
+          .map(({ databaseName }) => databaseName)
+          .filter((name) => !actual.has(name));
+        expect(missing, `${metadata.tableName} missing columns`).toEqual([]);
+      }
       expect(await dataSource.runMigrations({ transaction: 'all' })).toHaveLength(0);
       await dataSource.destroy();
       const tableNames = new Set(tables.map(({ name }) => name));
@@ -124,14 +142,14 @@ describe('public user identity', () => {
       await dataSource.initialize();
       await dataSource.query('CREATE TABLE "orphaned_domain_table" ("id" integer)');
       await expect(dataSource.runMigrations({ transaction: 'all' }))
-        .rejects.toThrow('partially initialized without users table');
+        .rejects.toThrow('unsupported partially initialized Career database');
       await dataSource.destroy();
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
   });
 
-  test('baseline migration rejects an unknown legacy users shape', async () => {
+  test('baseline migration rejects a users-only partial database', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'career-agent-unknown-'));
     const database = join(directory, 'career.sqlite');
     const dataSource = migrationDataSource(database);
@@ -139,11 +157,86 @@ describe('public user identity', () => {
     try {
       await dataSource.initialize();
       await dataSource.query(
-        'CREATE TABLE "users" ("id" integer PRIMARY KEY)',
+        `CREATE TABLE "users" (
+          "id" integer PRIMARY KEY,
+          "profileJson" text NOT NULL DEFAULT ('{}'),
+          "tokenVersion" integer NOT NULL DEFAULT (0),
+          "createdAt" datetime NOT NULL DEFAULT (datetime('now')),
+          "updatedAt" datetime NOT NULL DEFAULT (datetime('now'))
+        )`,
       );
       await expect(dataSource.runMigrations({ transaction: 'all' }))
-        .rejects.toThrow('unsupported legacy users schema');
+        .rejects.toThrow('missing tables');
     } finally {
+      if (dataSource.isInitialized) {
+        await dataSource.destroy();
+      }
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test('baseline migration rejects unknown tables beside a complete legacy schema', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'career-agent-unknown-'));
+    const database = join(directory, 'career.sqlite');
+    const seed = new DataSource({ type: 'sqlite', database });
+    const dataSource = migrationDataSource(database);
+
+    try {
+      await seed.initialize();
+      const queryRunner = seed.createQueryRunner();
+      await new CreateCareerAgentBaseline1785000000000().up(queryRunner);
+      await queryRunner.query(
+        'CREATE TABLE "foreign_business_data" ("id" integer PRIMARY KEY)',
+      );
+      await queryRunner.release();
+      await seed.destroy();
+
+      await dataSource.initialize();
+      await expect(dataSource.runMigrations({ transaction: 'all' }))
+        .rejects.toThrow('unknown tables: foreign_business_data');
+    } finally {
+      if (seed.isInitialized) {
+        await seed.destroy();
+      }
+      if (dataSource.isInitialized) {
+        await dataSource.destroy();
+      }
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test('schema alignment adds provider to an existing settings table', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'career-agent-provider-'));
+    const database = join(directory, 'career.sqlite');
+    const seed = new DataSource({ type: 'sqlite', database });
+    const dataSource = migrationDataSource(database);
+
+    try {
+      await seed.initialize();
+      const queryRunner = seed.createQueryRunner();
+      await new CreateCareerAgentBaseline1785000000000().up(queryRunner);
+      await queryRunner.dropColumn('api_settings', 'provider');
+      await queryRunner.release();
+      await seed.destroy();
+
+      await dataSource.initialize();
+      await dataSource.runMigrations({ transaction: 'all' });
+      const settingsRepo = dataSource.getRepository(ApiSettingsEntity);
+      const setting = await settingsRepo.save(settingsRepo.create({
+        userId: 2002,
+        model: 'legacy-model',
+      }));
+
+      expect(await settingsRepo.findOneByOrFail({ id: setting.id }))
+        .toMatchObject({
+          userId: 2002,
+          provider: 'anthropic',
+          model: 'legacy-model',
+        });
+    } finally {
+      if (seed.isInitialized) {
+        await seed.destroy();
+      }
       if (dataSource.isInitialized) {
         await dataSource.destroy();
       }
@@ -157,7 +250,7 @@ describe('public user identity', () => {
     const baselineSource = new DataSource({
       type: 'sqlite',
       database,
-      migrations: [CreateCareerAgentBaseline1785000000000],
+      migrations: careerAgentMigrations.slice(0, 7),
       migrationsTransactionMode: 'all',
     });
     const dataSource = migrationDataSource(database);
@@ -194,7 +287,7 @@ describe('public user identity', () => {
       ) as Array<{ count: number }>;
 
       expect(columns.some(({ name }) => name === 'publicUserId')).toBe(false);
-      expect(Number(count)).toBe(1);
+      expect(Number(count)).toBe(7);
       const versionTables = await dataSource.query(`
         SELECT "name"
         FROM "sqlite_master"

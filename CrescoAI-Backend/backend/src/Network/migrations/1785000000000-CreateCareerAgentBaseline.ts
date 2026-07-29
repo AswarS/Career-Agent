@@ -33,6 +33,7 @@ const legacyRequiredColumns: Record<string, string[]> = {
   ],
   generated_apps: ["id", "userId", "appName", "createdAt", "updatedAt"],
 };
+const optionalLegacyTables = new Set(["profile_suggestions"]);
 
 async function validateLegacyTableIfPresent(
   queryRunner: QueryRunner,
@@ -96,10 +97,28 @@ export class CreateCareerAgentBaseline1785000000000 implements MigrationInterfac
           !infrastructureTables.has(name) && !preBaselineTables.has(name),
       );
 
-    if (applicationTables.length > 0 && !applicationTables.includes("users")) {
-      throw new Error(
-        `database is partially initialized without users table: ${applicationTables.join(", ")}`,
+    if (applicationTables.length > 0) {
+      const expectedLegacyTables = Object.keys(legacyRequiredColumns);
+      const unknownTables = applicationTables.filter(
+        (name) =>
+          !legacyRequiredColumns[name] && !optionalLegacyTables.has(name),
       );
+      const missingTables = expectedLegacyTables.filter(
+        (name) => !applicationTables.includes(name),
+      );
+      if (unknownTables.length > 0 || missingTables.length > 0) {
+        throw new Error(
+          [
+            "unsupported partially initialized Career database",
+            unknownTables.length
+              ? `unknown tables: ${unknownTables.join(", ")}`
+              : "",
+            missingTables.length
+              ? `missing tables: ${missingTables.join(", ")}`
+              : "",
+          ].filter(Boolean).join("; "),
+        );
+      }
     }
     for (const [tableName, requiredColumns] of Object.entries(
       legacyRequiredColumns,
@@ -195,6 +214,7 @@ export class CreateCareerAgentBaseline1785000000000 implements MigrationInterfac
       CREATE TABLE IF NOT EXISTS "api_settings" (
         "id" integer PRIMARY KEY AUTOINCREMENT NOT NULL,
         "userId" integer NOT NULL UNIQUE,
+        "provider" text NOT NULL DEFAULT ('anthropic'),
         "apiKey" text,
         "baseUrl" text,
         "model" text,

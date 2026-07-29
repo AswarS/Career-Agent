@@ -1013,10 +1013,6 @@ export const useWorkspaceStore = defineStore('workspace', {
         delete this.transientMessagesByThread[targetThreadId];
         this.messageSubmitStatusByThread[targetThreadId] = 'ready';
 
-        revokeLocalMessageResources(this.transientMessagesByThread[targetThreadId] ?? []);
-        delete this.transientMessagesByThread[targetThreadId];
-        this.messageSubmitStatusByThread[targetThreadId] = 'ready';
-
         if (this.activeThreadId !== targetThreadId) {
           return false;
         }

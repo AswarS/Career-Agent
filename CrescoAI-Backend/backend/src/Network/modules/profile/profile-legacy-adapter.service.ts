@@ -18,6 +18,7 @@ import { ProfileProjectionService } from './profile-projection.service';
 import { serializeCanonicalProfile } from './profile-version.utils';
 import { ProfileV2Service } from './profile-v2.service';
 import type { ProfileRecord } from './profile.types';
+import { formatProfileIndex } from './profile-index.utils';
 
 interface LegacyMemoryValue {
   slotKey: string;
@@ -235,7 +236,7 @@ export class ProfileLegacyAdapterService {
       changed = true;
       if (next) {
         const profileIndex = current.profileIndex
-          ?? `P-${String(state.nextProfileIndex).padStart(4, '0')}`;
+          ?? formatProfileIndex(state.nextProfileIndex);
         if (!current.profileIndex) {
           state.nextProfileIndex += 1;
         }
@@ -260,7 +261,7 @@ export class ProfileLegacyAdapterService {
     }
 
     for (const next of desired.values()) {
-      const profileIndex = `P-${String(state.nextProfileIndex).padStart(4, '0')}`;
+      const profileIndex = formatProfileIndex(state.nextProfileIndex);
       state.nextProfileIndex += 1;
       const created = this.createMemory(
         manager,

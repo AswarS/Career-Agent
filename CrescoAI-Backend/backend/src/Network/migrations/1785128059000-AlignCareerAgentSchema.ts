@@ -62,6 +62,15 @@ export class AlignCareerAgentSchema1785128059000 implements MigrationInterface {
         isNullable: true,
       }),
     );
+    await addColumnIfMissing(
+      queryRunner,
+      "api_settings",
+      new TableColumn({
+        name: "provider",
+        type: "text",
+        default: "'anthropic'",
+      }),
+    );
 
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "profile_suggestions" (
@@ -148,6 +157,7 @@ export class AlignCareerAgentSchema1785128059000 implements MigrationInterface {
     await queryRunner.query('DROP TABLE IF EXISTS "profile_suggestions"');
     for (const [tableName, columnName] of [
       ["resources", "artifactId"],
+      ["api_settings", "provider"],
       ["artifacts", "metadataJson"],
       ["artifacts", "sizeBytes"],
       ["artifacts", "mimeType"],
