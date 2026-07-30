@@ -132,6 +132,7 @@ $env:VITE_CAREER_AGENT_CLIENT_MODE = "upstream"
 $env:VITE_CAREER_AGENT_API_BASE_URL = "http://localhost:4000"
 $env:VITE_CAREER_AGENT_USER_ID = "1"
 $env:VITE_CAREER_AGENT_WITH_CREDENTIALS = "false"
+$env:VITE_CAREER_AGENT_SKIP_AUTH = "false"
 npm run dev -- --host 127.0.0.1 --port 4173
 ```
 

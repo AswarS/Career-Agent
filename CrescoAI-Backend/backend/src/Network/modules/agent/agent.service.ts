@@ -48,9 +48,15 @@ import {
 import { prepareConversationMemoryTurn } from '../../memory/conversationMemoryRuntime.js';
 import {
   isConversationMemoryMaintenanceMessage,
+  isConversationMemorySdkReminder,
   isInternalSdkMessage,
   shouldSuppressConversationMemoryBlock,
 } from '../../memory/conversationMemoryVisibility.js';
+import {
+  collectConversationMemoryPrivateIdentifiers,
+  sanitizeConversationMemoryPublicText,
+  sanitizeConversationMemoryPublicValue,
+} from '../../memory/conversationMemoryPublicPolicy.js';
 import {
   createSkillLoadedBlock,
   extractLoadedSkillNameFromText,
@@ -304,6 +310,37 @@ function createStatusAgentBlock(
     title,
     text: sanitizeServerPhysicalPaths(text),
   };
+}
+
+function sanitizeConversationMemoryAgentText(
+  input: string,
+  context: SessionContext,
+): string {
+  return sanitizeConversationMemoryPublicText(
+    sanitizeServerPhysicalPaths(input),
+    context.conversationMemoryTurn?.privateConversationIds,
+  );
+}
+
+function sanitizeConversationMemoryAgentBlock(
+  block: AgentMessageBlock,
+  context: SessionContext,
+): AgentMessageBlock {
+  return sanitizeConversationMemoryPublicValue(
+    block,
+    context.conversationMemoryTurn?.privateConversationIds,
+  );
+}
+
+function registerConversationMemoryAgentIdentifiers(
+  value: unknown,
+  context: SessionContext,
+): void {
+  const privateIds = context.conversationMemoryTurn?.privateConversationIds;
+  if (!privateIds) return;
+  for (const identifier of collectConversationMemoryPrivateIdentifiers(value)) {
+    privateIds.add(identifier);
+  }
 }
 
 function createPublicAgentBlockFromContentBlock(
@@ -1319,6 +1356,7 @@ export class AgentService {
             let usage: Record<string, unknown> | undefined;
             const hiddenConversationMemoryToolUseIds = new Set<string>();
             const conversationMemoryDir = ctx.config.conversationMemoryDir;
+            let conversationMemoryMaintenanceActive = false;
 
             const inputWithAttachments = this.buildPromptWithAttachmentMentions(
               content,
@@ -1353,7 +1391,15 @@ export class AgentService {
                 };
               }
 
-              if (isInternalSdkMessage(msg)) {
+              if (isConversationMemorySdkReminder(msg)) {
+                conversationMemoryMaintenanceActive = true;
+                continue;
+              }
+
+              if (
+                conversationMemoryMaintenanceActive ||
+                isInternalSdkMessage(msg)
+              ) {
                 continue;
               }
 
@@ -1377,6 +1423,10 @@ export class AgentService {
 
               const msgMessage = (msg as any).message;
               if (msgMessage && Array.isArray(msgMessage.content)) {
+                registerConversationMemoryAgentIdentifiers(
+                  msgMessage.content,
+                  ctx,
+                );
                 if (
                   isConversationMemoryMaintenanceMessage(
                     msgMessage.content,
@@ -1418,7 +1468,10 @@ export class AgentService {
                     continue;
                   }
                   if (blockType === 'text' && typeof block.text === 'string' && block.text) {
-                    const safeText = sanitizeServerPhysicalPaths(block.text);
+                    const safeText = sanitizeConversationMemoryAgentText(
+                      block.text,
+                      ctx,
+                    );
                     const textBlockId = `text-${textBlockIndex++}`;
                     textParts.push(safeText);
                     currentMessageTextParts.push(safeText);
@@ -1434,7 +1487,11 @@ export class AgentService {
                     continue;
                   }
 
-                  const publicBlock = createPublicAgentBlockFromContentBlock(block, blockIndex);
+                  const rawPublicBlock =
+                    createPublicAgentBlockFromContentBlock(block, blockIndex);
+                  const publicBlock = rawPublicBlock
+                    ? sanitizeConversationMemoryAgentBlock(rawPublicBlock, ctx)
+                    : null;
                   if (publicBlock) {
                     blockIndex += 1;
                     blocks = mergeAgentBlock(blocks, publicBlock);
@@ -1459,7 +1516,13 @@ export class AgentService {
                   finalAssistantText = currentMessageTextParts.join('\n').trim();
                 }
               } else if ((msg as any).type !== 'result') {
-                const publicBlock = createPublicAgentBlockFromContentBlock(msg as Record<string, unknown>, blockIndex);
+                const rawPublicBlock = createPublicAgentBlockFromContentBlock(
+                  msg as Record<string, unknown>,
+                  blockIndex,
+                );
+                const publicBlock = rawPublicBlock
+                  ? sanitizeConversationMemoryAgentBlock(rawPublicBlock, ctx)
+                  : null;
                 if (publicBlock) {
                   blockIndex += 1;
                   blocks = mergeAgentBlock(blocks, publicBlock);
@@ -1475,7 +1538,10 @@ export class AgentService {
               }
 
               if ((msg as any).type === 'result' && typeof (msg as any).result === 'string') {
-                const safeResult = sanitizeServerPhysicalPaths((msg as any).result);
+                const safeResult = sanitizeConversationMemoryAgentText(
+                  (msg as any).result,
+                  ctx,
+                );
                 if (safeResult.trim()) {
                   finalResultText = safeResult.trim();
                   const alreadyStreamed = finalAssistantText === finalResultText
@@ -1497,12 +1563,16 @@ export class AgentService {
               }
             }
 
-            const reply = sanitizeServerPhysicalPaths(
+            const reply = sanitizeConversationMemoryAgentText(
               finalResultText
               ?? finalAssistantText
               ?? textParts.join('\n').trim(),
+              ctx,
             );
-            const thinking = sanitizeServerPhysicalPaths(thinkingParts.join('\n').trim());
+            const thinking = sanitizeConversationMemoryAgentText(
+              thinkingParts.join('\n').trim(),
+              ctx,
+            );
             blocks = normalizeCanonicalMessageBlocks(blocks, {
               authoritativeText: reply,
             }) ?? [];
@@ -1664,6 +1734,7 @@ export class AgentService {
             let usage: Record<string, unknown> | undefined;
             const hiddenConversationMemoryToolUseIds = new Set<string>();
             const conversationMemoryDir = ctx.config.conversationMemoryDir;
+            let conversationMemoryMaintenanceActive = false;
 
             const inputWithAttachments = this.buildPromptWithAttachmentMentions(
               content,
@@ -1686,11 +1757,22 @@ export class AgentService {
             });
 
             for await (const msg of stream) {
-              if (isInternalSdkMessage(msg)) {
+              if (isConversationMemorySdkReminder(msg)) {
+                conversationMemoryMaintenanceActive = true;
+                continue;
+              }
+              if (
+                conversationMemoryMaintenanceActive ||
+                isInternalSdkMessage(msg)
+              ) {
                 continue;
               }
               const msgMessage = (msg as any).message;
               if (msgMessage && Array.isArray(msgMessage.content)) {
+                registerConversationMemoryAgentIdentifiers(
+                  msgMessage.content,
+                  ctx,
+                );
                 if (
                   isConversationMemoryMaintenanceMessage(
                     msgMessage.content,
@@ -1715,14 +1797,21 @@ export class AgentService {
                     continue;
                   }
                   if (block.type === 'text' && typeof block.text === 'string') {
-                    const safeText = sanitizeServerPhysicalPaths(block.text);
+                    const safeText = sanitizeConversationMemoryAgentText(
+                      block.text,
+                      ctx,
+                    );
                     const textBlockId = `text-${textBlockIndex++}`;
                     textParts.push(safeText);
                     currentMessageTextParts.push(safeText);
                     blocks = appendTextToAgentBlock(blocks, textBlockId, safeText);
                     continue;
                   }
-                  const publicBlock = createPublicAgentBlockFromContentBlock(block, blockIndex);
+                  const rawPublicBlock =
+                    createPublicAgentBlockFromContentBlock(block, blockIndex);
+                  const publicBlock = rawPublicBlock
+                    ? sanitizeConversationMemoryAgentBlock(rawPublicBlock, ctx)
+                    : null;
                   if (publicBlock) {
                     blockIndex += 1;
                     blocks = mergeAgentBlock(blocks, publicBlock);
@@ -1741,7 +1830,13 @@ export class AgentService {
                   finalAssistantText = currentMessageTextParts.join('\n').trim();
                 }
               } else if ((msg as any).type !== 'result') {
-                const publicBlock = createPublicAgentBlockFromContentBlock(msg as Record<string, unknown>, blockIndex);
+                const rawPublicBlock = createPublicAgentBlockFromContentBlock(
+                  msg as Record<string, unknown>,
+                  blockIndex,
+                );
+                const publicBlock = rawPublicBlock
+                  ? sanitizeConversationMemoryAgentBlock(rawPublicBlock, ctx)
+                  : null;
                 if (publicBlock) {
                   blockIndex += 1;
                   blocks = mergeAgentBlock(blocks, publicBlock);
@@ -1752,18 +1847,25 @@ export class AgentService {
               }
 
               if ((msg as any).type === 'result' && typeof (msg as any).result === 'string' && !textParts.length) {
-                const safeResult = sanitizeServerPhysicalPaths((msg as any).result);
+                const safeResult = sanitizeConversationMemoryAgentText(
+                  (msg as any).result,
+                  ctx,
+                );
                 textParts.push(safeResult);
                 blocks = appendTextToAgentBlock(blocks, 'text-0', safeResult);
               }
             }
 
-            const reply = sanitizeServerPhysicalPaths(
+            const reply = sanitizeConversationMemoryAgentText(
               finalAssistantText
               ?? textParts[textParts.length - 1]
               ?? '',
+              ctx,
             );
-            const thinking = sanitizeServerPhysicalPaths(thinkingParts.join('\n').trim());
+            const thinking = sanitizeConversationMemoryAgentText(
+              thinkingParts.join('\n').trim(),
+              ctx,
+            );
 
             return { reply, thinking, blocks, model, usage, assistantMessageId };
           });

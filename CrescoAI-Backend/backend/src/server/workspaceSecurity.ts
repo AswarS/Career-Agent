@@ -189,19 +189,16 @@ export async function checkSessionWorkspacePath(
     if (memoryRoot && isPathWithinRoot(canonicalPath, memoryRoot)) {
       const relativePath = relative(memoryRoot, canonicalPath)
       const normalizedRelative = relativePath.split(sep).join('/')
-      const isAggregate = normalizedRelative === 'MEMORY.md'
       const isDirectSessionSummary =
         /^sessions\/[A-Za-z0-9_-]{8,128}\.md$/.test(normalizedRelative)
 
       if (access === 'read' && options.toolName === 'Read') {
-        if (isAggregate || isDirectSessionSummary) {
+        if (isDirectSessionSummary) {
           return {
             allowed: true,
             canonicalPath,
             rootType: 'conversation-memory',
-            rootId: isAggregate
-              ? 'conversation-memory-aggregate'
-              : 'conversation-memory-session',
+            rootId: 'conversation-memory-session',
           }
         }
       }
@@ -230,7 +227,7 @@ export async function checkSessionWorkspacePath(
       return {
         allowed: false,
         reason:
-          'Conversation memory permits Read on MEMORY.md/session summaries and Write/Edit only on the current session summary',
+          'Conversation memory permits Read on direct session summaries and Write/Edit only on the current session summary',
         rootType: 'service',
         rootId: 'conversation-memory-protected',
       }

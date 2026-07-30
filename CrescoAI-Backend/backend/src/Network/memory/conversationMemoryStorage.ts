@@ -25,6 +25,7 @@ import {
   isConversationMemorySessionDeleting,
   withConversationMemoryRootLock,
 } from './conversationMemoryLock.js'
+import { containsConversationMemoryPrivateIdentifier } from './conversationMemoryPublicPolicy.js'
 
 export const CONVERSATION_MEMORY_SCHEMA_VERSION = 1
 export const CONVERSATION_MEMORY_INDEX_START =
@@ -217,10 +218,20 @@ export function getConversationMemoryToolPathError(
   }
   if (content !== undefined) {
     try {
-      validateConversationMemorySummary(content, {
+      const parsed = validateConversationMemorySummary(content, {
         conversationId: turn.conversationId,
         requiredTurnId: turn.requiredTurnId,
       })
+      if (
+        containsConversationMemoryPrivateIdentifier(
+          stripRequiredSummaryHeading(parsed.body),
+          turn.privateConversationIds,
+        )
+      ) {
+        throw new Error(
+          'Conversation memory topic bodies must not contain conversation ids or transcript filenames',
+        )
+      }
       assertConversationMemoryContainsNoSecrets(content)
     } catch (error) {
       return error instanceof Error ? error.message : String(error)
@@ -268,6 +279,16 @@ export async function commitConversationMemorySessionUpdate(
     conversationId: turn.conversationId,
     requiredTurnId: turn.requiredTurnId,
   })
+  if (
+    containsConversationMemoryPrivateIdentifier(
+      stripRequiredSummaryHeading(parsed.body),
+      turn.privateConversationIds,
+    )
+  ) {
+    throw new Error(
+      'Conversation memory topic bodies must not contain conversation ids or transcript filenames',
+    )
+  }
   assertConversationMemoryContainsNoSecrets(content)
 
   await withConversationMemoryRootLock(turn.rootDir, async () => {
@@ -467,6 +488,10 @@ function isErrorCode(error: unknown, code: string): boolean {
     'code' in error &&
     error.code === code
   )
+}
+
+function stripRequiredSummaryHeading(body: string): string {
+  return body.replace(/^#\s+[^\r\n]+\r?\n?/, '').trim()
 }
 
 export async function readCurrentConversationMemorySummary(

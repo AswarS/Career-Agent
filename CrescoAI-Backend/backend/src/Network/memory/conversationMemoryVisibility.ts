@@ -1,7 +1,9 @@
 import { isAbsolute, resolve } from 'node:path'
 import { isPathWithinRoot } from '../../server/workspaceSecurity.js'
 
-const CONVERSATION_MEMORY_ORIGIN = 'conversation-memory'
+export const CONVERSATION_MEMORY_ORIGIN = 'conversation-memory'
+export const CONVERSATION_MEMORY_REMINDER_MARKER =
+  '<career-agent:conversation-memory-checkpoint>'
 
 export type ConversationMemoryToolUseIds = Set<string>
 
@@ -12,6 +14,54 @@ export type ConversationMemoryToolUseIds = Set<string>
 export function isInternalSdkMessage(value: unknown): boolean {
   const record = asRecord(value)
   return record?.isSynthetic === true || record?.isMeta === true
+}
+
+export function isConversationMemorySdkReminder(value: unknown): boolean {
+  const record = asRecord(value)
+  if (!record || (record.isSynthetic !== true && record.isMeta !== true)) {
+    return false
+  }
+  const message = asRecord(record.message)
+  return readMessageText(message?.content).includes(
+    CONVERSATION_MEMORY_REMINDER_MARKER,
+  )
+}
+
+export function isConversationMemoryTranscriptReminder(
+  value: unknown,
+): boolean {
+  const record = asRecord(value)
+  if (!record || record.isMeta !== true) return false
+  const origin = asRecord(record.origin)
+  if (origin?.kind === CONVERSATION_MEMORY_ORIGIN) return true
+  const message = asRecord(record.message)
+  return readMessageText(message?.content).includes(
+    CONVERSATION_MEMORY_REMINDER_MARKER,
+  )
+}
+
+export function isPublicTranscriptUserTurn(value: unknown): boolean {
+  const record = asRecord(value)
+  if (
+    !record ||
+    record.type !== 'user' ||
+    isInternalTranscriptMessage(record)
+  ) {
+    return false
+  }
+  const message = asRecord(record.message)
+  if (message?.role !== 'user' || record.toolUseResult !== undefined)
+    return false
+  const content = message.content
+  if (!Array.isArray(content)) return typeof content === 'string'
+  return !content.some((item) => {
+    const block = asRecord(item)
+    return (
+      block?.type === 'tool_result' ||
+      block?.tool_use_id !== undefined ||
+      block?.toolUseId !== undefined
+    )
+  })
 }
 
 /** Raw transcript messages retain isMeta/origin and must stay model-visible. */
@@ -138,6 +188,21 @@ function readPath(value: unknown): string | null {
 
 function readNonEmptyString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+function readMessageText(value: unknown): string {
+  if (typeof value === 'string') return value
+  if (!Array.isArray(value)) return ''
+  return value
+    .map((item) => {
+      const block = asRecord(item)
+      return typeof block?.text === 'string'
+        ? block.text
+        : typeof block?.content === 'string'
+          ? block.content
+          : ''
+    })
+    .join('\n')
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
