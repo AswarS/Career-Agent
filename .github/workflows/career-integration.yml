@@ -32,7 +32,9 @@ jobs:
           bun-version: 1.3.5
 
       - name: Install backend dependencies
-        run: bun install --frozen-lockfile
+        # bun.lock was produced behind a regional mirror. Force the canonical
+        # registry so CI is not coupled to mirror-specific package retention.
+        run: bun install --frozen-lockfile --registry https://registry.npmjs.org
 
       - name: Run Network integration tests
         run: >-
