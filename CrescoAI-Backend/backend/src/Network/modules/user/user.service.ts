@@ -68,7 +68,7 @@ export class UserService {
           eventType: 'account.status.changed',
           externalUserId: targetUser.publicUserId,
           status: 'disabled',
-          sourceVersion: String(accountVersion),
+          sourceVersion: String(accountVersion).padStart(20, '0'),
           occurredAt: occurredAt.toISOString(),
         }),
         status: 'pending',

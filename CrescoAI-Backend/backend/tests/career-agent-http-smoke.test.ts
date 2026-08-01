@@ -81,9 +81,14 @@ describe('Career Agent HTTP smoke flow', () => {
   let tempDatabaseDir = '';
   const previousJwtSecret = process.env.CAREER_AGENT_JWT_SECRET;
   const previousDatabasePath = process.env.CAREER_AGENT_DATABASE_PATH;
+  const previousSchemaSync = process.env.CAREER_AGENT_SCHEMA_SYNC;
+  const previousPraxisEnabled =
+    process.env.CAREER_AGENT_PRAXIS_INTEGRATION_ENABLED;
 
   beforeAll(async () => {
     process.env.CAREER_AGENT_JWT_SECRET = 'career-agent-http-smoke-secret';
+    process.env.CAREER_AGENT_SCHEMA_SYNC = 'true';
+    process.env.CAREER_AGENT_PRAXIS_INTEGRATION_ENABLED = 'true';
     tempDatabaseDir = await mkdtemp(join(tmpdir(), 'career-agent-http-smoke-'));
     process.env.CAREER_AGENT_DATABASE_PATH = join(tempDatabaseDir, 'smoke.sqlite');
     const { AppModule } = await import('../src/Network/app.module.js');
@@ -110,6 +115,16 @@ describe('Career Agent HTTP smoke flow', () => {
       delete process.env.CAREER_AGENT_DATABASE_PATH;
     } else {
       process.env.CAREER_AGENT_DATABASE_PATH = previousDatabasePath;
+    }
+    if (previousSchemaSync === undefined) {
+      delete process.env.CAREER_AGENT_SCHEMA_SYNC;
+    } else {
+      process.env.CAREER_AGENT_SCHEMA_SYNC = previousSchemaSync;
+    }
+    if (previousPraxisEnabled === undefined) {
+      delete process.env.CAREER_AGENT_PRAXIS_INTEGRATION_ENABLED;
+    } else {
+      process.env.CAREER_AGENT_PRAXIS_INTEGRATION_ENABLED = previousPraxisEnabled;
     }
     if (tempDatabaseDir) {
       await rm(tempDatabaseDir, { recursive: true, force: true });
@@ -144,6 +159,37 @@ describe('Career Agent HTTP smoke flow', () => {
         .set('Authorization', `Bearer ${accessToken}`)
         .expect(200);
 
+      const rejectedIntegration = await request(server)
+        .get(`/integration/praxis/v1/accounts/${userId}`)
+        .set('Authorization', 'Bearer praxis.invalid')
+        .expect(401);
+      expect(rejectedIntegration.body).toMatchObject({
+        code: 'SERVICE_AUTHENTICATION_FAILED',
+        retryable: false,
+      });
+      expect(rejectedIntegration.headers['x-trace-id']).toBeTruthy();
+
+      const accountIntegration = await request(server)
+        .get(`/integration/praxis/v1/accounts/${userId}`)
+        .set(
+          'Authorization',
+          'Bearer praxis-dev.praxis-development-service-secret',
+        )
+        .expect(200);
+      expect(accountIntegration.body.externalUserId).toBe(userId);
+      expect(accountIntegration.body.sourceVersion).toMatch(/^\d{20}$/);
+
+      const ssoTicket = await request(server)
+        .post('/api/career-agent/integrations/praxis/sso-ticket')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(201);
+      expect(ssoTicket.body.ticket.split('.')).toHaveLength(3);
+
+      const jwks = await request(server)
+        .get('/integration/praxis/v1/.well-known/jwks.json')
+        .expect(200);
+      expect(jwks.body.keys[0]).toMatchObject({ alg: 'ES256', use: 'sig' });
+
       await request(server)
         .get('/api/career-agent/threads')
         .set('Authorization', `Bearer ${accessToken}`)
@@ -152,7 +198,7 @@ describe('Career Agent HTTP smoke flow', () => {
       await request(server)
         .get('/api/career-agent/threads/not-a-user-identity')
         .set('Authorization', `Bearer ${accessToken}`)
-        .expect(403);
+        .expect(404);
 
       const threadResponse = await request(server)
         .post('/api/career-agent/threads')

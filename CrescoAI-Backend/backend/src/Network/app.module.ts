@@ -17,6 +17,7 @@ import { GeneratedModule } from './modules/generated/generated.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ProfileModule } from './modules/profile/profile.module';
+import { PraxisIntegrationModule } from './modules/integration/praxis-integration.module';
 
 const synchronizeSchema =
   process.env.CAREER_AGENT_SCHEMA_SYNC === 'true';
@@ -42,6 +43,7 @@ const synchronizeSchema =
     SettingsModule,
     UserModule,
     ProfileModule,
+    PraxisIntegrationModule,
     GeneratedModule,
   ],
   providers: [AppService],

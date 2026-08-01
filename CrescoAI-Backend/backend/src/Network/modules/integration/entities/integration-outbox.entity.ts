@@ -6,7 +6,11 @@ import {
   PrimaryColumn,
 } from "typeorm";
 
-export type IntegrationOutboxStatus = "pending" | "published" | "failed";
+export type IntegrationOutboxStatus =
+  | "pending"
+  | "publishing"
+  | "published"
+  | "failed";
 
 @Entity("integration_outbox")
 @Index("IDX_integration_outbox_status_available", [
@@ -47,4 +51,13 @@ export class IntegrationOutboxEntity {
 
   @Column({ type: "datetime", nullable: true })
   publishedAt!: Date | null;
+
+  @Column({ type: "varchar", nullable: true })
+  lockToken!: string | null;
+
+  @Column({ type: "datetime", nullable: true })
+  lockedAt!: Date | null;
+
+  @Column({ type: "text", nullable: true })
+  lastError!: string | null;
 }

@@ -31,6 +31,9 @@ export class UserEntity {
   @Column({ nullable: true })
   displayName?: string;
 
+  @Column({ nullable: true })
+  avatarUrl?: string | null;
+
   @Column({ nullable: true, select: false })
   passwordHash?: string;
 

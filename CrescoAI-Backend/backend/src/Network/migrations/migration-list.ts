@@ -9,6 +9,7 @@ import { AddPublicUserId1785128058000 } from './1785128058000-AddPublicUserId.js
 import { AlignCareerAgentSchema1785128059000 } from './1785128059000-AlignCareerAgentSchema.js';
 import { AddIntegrationKernel1785128060000 } from './1785128060000-AddIntegrationKernel.js';
 import { ConsolidateProfileV2Snapshot1785128061000 } from './1785128061000-ConsolidateProfileV2Snapshot.js';
+import { AddPraxisIntegrationDelivery1785128062000 } from './1785128062000-AddPraxisIntegrationDelivery.js';
 
 /**
  * The exact ordered migration chain used by production and migration tests.
@@ -26,4 +27,5 @@ export const careerAgentMigrations = [
   AlignCareerAgentSchema1785128059000,
   AddIntegrationKernel1785128060000,
   ConsolidateProfileV2Snapshot1785128061000,
+  AddPraxisIntegrationDelivery1785128062000,
 ];

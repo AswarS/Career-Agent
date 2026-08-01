@@ -338,9 +338,10 @@ describe('public user identity', () => {
   });
 
   test('migration atomically backfills unique UUIDs and makes the column required', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'career-agent-public-id-'));
     const dataSource = new DataSource({
       type: 'sqlite',
-      database: ':memory:',
+      database: join(directory, 'career.sqlite'),
     });
     await dataSource.initialize();
     await dataSource.query(`
@@ -382,6 +383,7 @@ describe('public user identity', () => {
       immutable = true;
     }
     await dataSource.destroy();
+    await rm(directory, { recursive: true, force: true });
 
     expect(rows.map((row: { id: number }) => row.id)).toEqual([1, 2]);
     expect(rows.every((row: { publicUserId: string }) =>
