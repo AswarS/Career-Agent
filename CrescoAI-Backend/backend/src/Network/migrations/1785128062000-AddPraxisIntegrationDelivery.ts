@@ -18,6 +18,31 @@ async function recreatePublicUserIdTrigger(queryRunner: QueryRunner) {
   `);
 }
 
+function normalizeAvatarUrl(value: unknown) {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    const url = new URL(value.trim());
+    return url.protocol === 'https:' ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+async function normalizeStoredAvatarUrls(queryRunner: QueryRunner) {
+  const rows = await queryRunner.query(
+    `SELECT "id", "avatarUrl" FROM "users" WHERE "avatarUrl" IS NOT NULL`,
+  ) as Array<{ id: number; avatarUrl: unknown }>;
+  for (const row of rows) {
+    const normalized = normalizeAvatarUrl(row.avatarUrl);
+    if (normalized !== row.avatarUrl) {
+      await queryRunner.query(
+        `UPDATE "users" SET "avatarUrl" = ? WHERE "id" = ?`,
+        [normalized, row.id],
+      );
+    }
+  }
+}
+
 async function addColumnIfMissing(
   queryRunner: QueryRunner,
   tableName: string,
@@ -54,6 +79,7 @@ implements MigrationInterface {
       'integration_outbox',
       new TableColumn({ name: 'lastError', type: 'text', isNullable: true }),
     );
+    await normalizeStoredAvatarUrls(queryRunner);
     // TypeORM rebuilds SQLite tables for ADD COLUMN and does not preserve
     // custom triggers attached to the rebuilt users table.
     await recreatePublicUserIdTrigger(queryRunner);

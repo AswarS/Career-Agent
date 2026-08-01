@@ -56,6 +56,46 @@ function privateKey(environment: Environment, production: boolean): KeyObject {
   return createPrivateKey(pem);
 }
 
+function verificationKeys(
+  raw: string | undefined,
+  algorithm: 'ES256' | 'RS256',
+) {
+  if (!raw?.trim()) return {} as Record<string, KeyObject>;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error(
+      'CAREER_AGENT_PRAXIS_SSO_VERIFICATION_KEYS_JSON must be a JSON object',
+    );
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(
+      'CAREER_AGENT_PRAXIS_SSO_VERIFICATION_KEYS_JSON must be a JSON object',
+    );
+  }
+  const keys: Record<string, KeyObject> = {};
+  for (const [kid, value] of Object.entries(parsed)) {
+    if (!kid.trim() || typeof value !== 'string') {
+      throw new Error('SSO verification key contains an invalid kid or PEM');
+    }
+    let key: KeyObject;
+    try {
+      key = createPublicKey(value.replace(/\\n/g, '\n'));
+    } catch {
+      throw new Error(`SSO verification key ${kid} is not a valid public key`);
+    }
+    if (
+      (algorithm === 'ES256' && key.asymmetricKeyType !== 'ec')
+      || (algorithm === 'RS256' && key.asymmetricKeyType !== 'rsa')
+    ) {
+      throw new Error(`SSO verification key ${kid} does not match ${algorithm}`);
+    }
+    keys[kid] = key;
+  }
+  return keys;
+}
+
 function requireHttps(value: string, name: string, production: boolean) {
   const url = new URL(value);
   if (production && url.protocol !== 'https:') {
@@ -73,9 +113,9 @@ export interface PraxisIntegrationConfig {
   eventSigningKeys: Record<string, string>;
   activeEventSigningKid: string;
   ssoAlgorithm: 'ES256' | 'RS256';
-  ssoKid: string;
+  activeSsoKid: string;
   ssoPrivateKey: KeyObject;
-  ssoPublicKey: KeyObject;
+  ssoVerificationKeys: Record<string, KeyObject>;
 }
 
 export function resolvePraxisIntegrationConfig(
@@ -107,9 +147,9 @@ export function resolvePraxisIntegrationConfig(
       eventSigningKeys: {},
       activeEventSigningKid: '',
       ssoAlgorithm: algorithm,
-      ssoKid: '',
+      activeSsoKid: '',
       ssoPrivateKey: disabledPrivateKey,
-      ssoPublicKey: createPublicKey(disabledPrivateKey),
+      ssoVerificationKeys: {},
     };
   }
 
@@ -160,6 +200,15 @@ export function resolvePraxisIntegrationConfig(
   ) {
     throw new Error(`Praxis SSO private key does not match ${algorithm}`);
   }
+  const activeSsoKid =
+    environment.CAREER_AGENT_PRAXIS_SSO_ACTIVE_KID?.trim()
+    || environment.CAREER_AGENT_PRAXIS_SSO_KID?.trim()
+    || 'career-dev';
+  const ssoVerificationKeys = verificationKeys(
+    environment.CAREER_AGENT_PRAXIS_SSO_VERIFICATION_KEYS_JSON,
+    algorithm,
+  );
+  ssoVerificationKeys[activeSsoKid] = createPublicKey(signingKey);
 
   return {
     enabled: true,
@@ -181,10 +230,9 @@ export function resolvePraxisIntegrationConfig(
     eventSigningKeys,
     activeEventSigningKid,
     ssoAlgorithm: algorithm,
-    ssoKid: environment.CAREER_AGENT_PRAXIS_SSO_KID?.trim()
-      || 'career-dev',
+    activeSsoKid,
     ssoPrivateKey: signingKey,
-    ssoPublicKey: createPublicKey(signingKey),
+    ssoVerificationKeys,
   };
 }
 

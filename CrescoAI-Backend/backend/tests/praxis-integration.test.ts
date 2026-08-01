@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import {
   createPublicKey,
   createHmac,
+  generateKeyPairSync,
   randomUUID,
   verify,
 } from 'node:crypto';
@@ -14,6 +15,7 @@ import { IntegrationOutboxEntity } from '../src/Network/modules/integration/enti
 import { PraxisIntegrationService } from '../src/Network/modules/integration/praxis-integration.service.js';
 import { PraxisSsoService } from '../src/Network/modules/integration/praxis-sso.service.js';
 import { PraxisOutboxPublisherService } from '../src/Network/modules/integration/praxis-outbox-publisher.service.js';
+import { applyPublicAccountPatch } from '../src/Network/modules/integration/account-publication.js';
 
 const USER_ID = 'b26f5098-7f4a-4f4f-91ef-965fb9c14e7f';
 
@@ -48,6 +50,8 @@ describe('Praxis production integration boundary', () => {
     delete process.env.CAREER_AGENT_PRAXIS_SERVICE_CREDENTIALS_JSON;
     delete process.env.CAREER_AGENT_PRAXIS_EVENT_SIGNING_KEYS_JSON;
     delete process.env.CAREER_AGENT_PRAXIS_EVENT_SIGNING_KID;
+    delete process.env.CAREER_AGENT_PRAXIS_SSO_ACTIVE_KID;
+    delete process.env.CAREER_AGENT_PRAXIS_SSO_VERIFICATION_KEYS_JSON;
     process.env.CAREER_AGENT_PRAXIS_BASE_URL = 'http://localhost:8000';
     process.env.CAREER_AGENT_PRAXIS_ISSUER = 'http://localhost:4000';
     databasePath = join(tmpdir(), `career-praxis-${randomUUID()}.sqlite`);
@@ -65,6 +69,9 @@ describe('Praxis production integration boundary', () => {
     delete process.env.CAREER_AGENT_PRAXIS_INTEGRATION_ENABLED;
     delete process.env.CAREER_AGENT_PRAXIS_BASE_URL;
     delete process.env.CAREER_AGENT_PRAXIS_ISSUER;
+    delete process.env.CAREER_AGENT_PRAXIS_SSO_PRIVATE_KEY;
+    delete process.env.CAREER_AGENT_PRAXIS_SSO_ACTIVE_KID;
+    delete process.env.CAREER_AGENT_PRAXIS_SSO_VERIFICATION_KEYS_JSON;
     if (dataSource.isInitialized) await dataSource.destroy();
     await rm(databasePath, { force: true });
   });
@@ -129,6 +136,36 @@ describe('Praxis production integration boundary', () => {
     }]);
   });
 
+  it('publishes active and retained SSO verification keys in JWKS', async () => {
+    const active = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+    const retained = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+    process.env.CAREER_AGENT_PRAXIS_SSO_PRIVATE_KEY = active.privateKey.export({
+      format: 'pem',
+      type: 'pkcs8',
+    }).toString();
+    process.env.CAREER_AGENT_PRAXIS_SSO_ACTIVE_KID = 'career-active';
+    process.env.CAREER_AGENT_PRAXIS_SSO_VERIFICATION_KEYS_JSON = JSON.stringify({
+      'career-retained': retained.publicKey.export({
+        format: 'pem',
+        type: 'spki',
+      }).toString(),
+    });
+    const user = await dataSource.getRepository(UserEntity).save(userRecord());
+    const service = new PraxisSsoService(dataSource.getRepository(UserEntity));
+
+    const issued = await service.issueTicket(user.id);
+    const header = JSON.parse(
+      Buffer.from(issued.ticket.split('.')[0], 'base64url').toString(),
+    );
+    const jwks = service.jwks();
+
+    expect(header.kid).toBe('career-active');
+    expect(jwks.keys.map((key) => key.kid)).toEqual([
+      'career-active',
+      'career-retained',
+    ]);
+  });
+
   it('signs and publishes an account event exactly once', async () => {
     const payload = JSON.stringify({
       eventId: 'event_account_demo001',
@@ -183,6 +220,35 @@ describe('Praxis production integration boundary', () => {
       .digest('base64url');
     expect(match![2]).toBe(expected);
     expect(await publisher.publishAvailable()).toBe(0);
+  });
+
+  it('versions public account fields and emits status changes atomically', async () => {
+    const user = await dataSource.getRepository(UserEntity).save(userRecord());
+    await dataSource.transaction(async (manager) => {
+      const managed = await manager.findOneByOrFail(UserEntity, { id: user.id });
+      await applyPublicAccountPatch(manager, managed, {
+        displayName: 'Updated User',
+        avatarUrl: 'http://unsafe.example/avatar.png',
+        accountStatus: 'disabled',
+      });
+    });
+
+    const updated = await dataSource.getRepository(UserEntity)
+      .findOneByOrFail({ id: user.id });
+    const events = await dataSource.getRepository(IntegrationOutboxEntity)
+      .find();
+    expect(updated).toMatchObject({
+      displayName: 'Updated User',
+      avatarUrl: null,
+      accountStatus: 'disabled',
+      accountVersion: 43,
+    });
+    expect(events).toHaveLength(1);
+    expect(JSON.parse(events[0].payloadJson)).toMatchObject({
+      externalUserId: USER_ID,
+      status: 'disabled',
+      sourceVersion: '00000000000000000043',
+    });
   });
 
   it('does not claim an event before its availableAt time', async () => {

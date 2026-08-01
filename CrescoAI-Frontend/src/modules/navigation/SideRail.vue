@@ -4,6 +4,8 @@ import { RouterLink, useRoute, useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
 import { useAuthStore } from '../../stores/auth';
 import { useWorkspaceStore } from '../../stores/workspace';
+import { runtimeConfig } from '../../config/runtime';
+import { createPraxisSsoClient } from '../../services/praxisSsoClient';
 
 const props = withDefaults(defineProps<{
   layoutMode?: 'desktop' | 'mobile';
@@ -22,8 +24,11 @@ const router = useRouter();
 const { mobileSideRailOpen, threads, activeThreadId, sideRailCollapsed, threadCreateStatus, threadDeleteStatus } = storeToRefs(workspaceStore);
 const openThreadMenuId = ref<string | null>(null);
 const deletingThreadId = ref<string | null>(null);
+const praxisSsoClient = createPraxisSsoClient();
+const praxisLaunchStatus = ref<'idle' | 'loading' | 'error'>('idle');
+const praxisLaunchError = ref<string | null>(null);
 
-type IconName = 'profile' | 'artifacts' | 'settings' | 'plus' | 'panelOpen' | 'panelClose' | 'more' | 'trash' | 'logout';
+type IconName = 'profile' | 'artifacts' | 'settings' | 'praxis' | 'plus' | 'panelOpen' | 'panelClose' | 'more' | 'trash' | 'logout';
 
 const navItems = computed(() => [
   { label: '画像', icon: 'profile' as const, to: '/profile' },
@@ -36,6 +41,11 @@ const sideRailContentId = 'side-rail-content';
 const isMobileLayout = computed(() => props.layoutMode === 'mobile');
 const isVisible = computed(() => !isMobileLayout.value || mobileSideRailOpen.value);
 const effectiveCollapsed = computed(() => isMobileLayout.value ? false : sideRailCollapsed.value);
+const showPraxisLaunch = computed(
+  () => runtimeConfig.clientMode === 'upstream'
+    && runtimeConfig.upstreamConfigured
+    && !runtimeConfig.skipAuth,
+);
 
 function toggleSideRail() {
   if (isMobileLayout.value) {
@@ -77,6 +87,12 @@ function getIconPaths(icon: IconName) {
         'M14 5v4',
         'M8 10v4',
         'M14 15v4',
+      ];
+    case 'praxis':
+      return [
+        'M14 5h5v5',
+        'M10 14 19 5',
+        'M19 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h6',
       ];
     case 'plus':
       return [
@@ -184,6 +200,20 @@ async function logout() {
   }
 }
 
+async function launchPraxis() {
+  if (praxisLaunchStatus.value === 'loading') return;
+  praxisLaunchStatus.value = 'loading';
+  praxisLaunchError.value = null;
+  try {
+    await praxisSsoClient.launch();
+  } catch (error) {
+    praxisLaunchStatus.value = 'error';
+    praxisLaunchError.value = error instanceof Error
+      ? error.message
+      : '无法进入 Praxis。';
+  }
+}
+
 watch(
   () => route.fullPath,
   () => {
@@ -283,6 +313,27 @@ onBeforeUnmount(() => {
           </span>
           <span class="nav-label">{{ item.label }}</span>
         </RouterLink>
+        <button
+          v-if="showPraxisLaunch"
+          type="button"
+          class="nav-link praxis-link"
+          title="进入 Praxis"
+          aria-label="进入 Praxis"
+          :disabled="praxisLaunchStatus === 'loading'"
+          @click="launchPraxis"
+        >
+          <span class="nav-icon-shell" aria-hidden="true">
+            <svg class="nav-icon" viewBox="0 0 24 24">
+              <path v-for="path in getIconPaths('praxis')" :key="path" :d="path" />
+            </svg>
+          </span>
+          <span class="nav-label">
+            {{ praxisLaunchStatus === 'loading' ? '正在进入 Praxis…' : '进入 Praxis' }}
+          </span>
+        </button>
+        <p v-if="praxisLaunchError && !effectiveCollapsed" class="praxis-error" role="alert">
+          {{ praxisLaunchError }}
+        </p>
       </nav>
 
       <section v-if="!effectiveCollapsed" class="thread-block">
@@ -540,6 +591,26 @@ onBeforeUnmount(() => {
   color: var(--color-text);
   background: transparent;
   white-space: nowrap;
+}
+
+.praxis-link {
+  width: 100%;
+  border: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.praxis-link:disabled {
+  cursor: wait;
+  opacity: 0.68;
+}
+
+.praxis-error {
+  margin: 0 8px;
+  color: var(--color-danger, #b42318);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .nav-label {

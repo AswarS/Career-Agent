@@ -178,6 +178,31 @@ describe('Career Agent HTTP smoke flow', () => {
         .expect(200);
       expect(accountIntegration.body.externalUserId).toBe(userId);
       expect(accountIntegration.body.sourceVersion).toMatch(/^\d{20}$/);
+      const initialAccountVersion = BigInt(
+        accountIntegration.body.sourceVersion,
+      );
+
+      await request(server)
+        .patch('/api/career-agent/settings/username')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({
+          username: `smoke_${suffix.replaceAll('-', '').slice(0, 20)}`,
+          display_name: 'Updated Smoke User',
+        })
+        .expect(200);
+      const updatedAccountIntegration = await request(server)
+        .get(`/integration/praxis/v1/accounts/${userId}`)
+        .set(
+          'Authorization',
+          'Bearer praxis-dev.praxis-development-service-secret',
+        )
+        .expect(200);
+      expect(BigInt(updatedAccountIntegration.body.sourceVersion)).toBe(
+        initialAccountVersion + 1n,
+      );
+      expect(updatedAccountIntegration.body.displayName).toBe(
+        'Updated Smoke User',
+      );
 
       const ssoTicket = await request(server)
         .post('/api/career-agent/integrations/praxis/sso-ticket')

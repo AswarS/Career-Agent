@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { UserEntity } from '../user/entities/user.entity';
+import { applyPublicAccountPatch } from '../integration/account-publication';
 import { UpdateBaseProfileDto } from './dto/base-profile.dto';
 import { BaseProfileEntity } from './entities/base-profile.entity';
 import { ProfileRevisionEntity } from './entities/profile-revision.entity';
@@ -115,8 +116,9 @@ export class ProfileV2Service {
       if (patch.name) {
         const user = await manager.findOne(UserEntity, { where: { id: userId } });
         if (user) {
-          user.displayName = patch.name;
-          await manager.save(user);
+          await applyPublicAccountPatch(manager, user, {
+            displayName: patch.name,
+          });
         }
       }
 

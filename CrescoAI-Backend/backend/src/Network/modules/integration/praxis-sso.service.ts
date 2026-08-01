@@ -27,7 +27,7 @@ export class PraxisSsoService {
     const header = this.encode({
       alg: config.ssoAlgorithm,
       typ: 'JWT',
-      kid: config.ssoKid,
+      kid: config.activeSsoKid,
     });
     const payload = this.encode({
       iss: config.issuer,
@@ -57,14 +57,15 @@ export class PraxisSsoService {
     if (!config.enabled) {
       throw new ServiceUnavailableException('Praxis integration is disabled');
     }
-    const jwk = config.ssoPublicKey.export({ format: 'jwk' });
     return {
-      keys: [{
-        ...jwk,
-        kid: config.ssoKid,
-        use: 'sig',
-        alg: config.ssoAlgorithm,
-      }],
+      keys: Object.entries(config.ssoVerificationKeys)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([kid, publicKey]) => ({
+          ...publicKey.export({ format: 'jwk' }),
+          kid,
+          use: 'sig',
+          alg: config.ssoAlgorithm,
+        })),
     };
   }
 

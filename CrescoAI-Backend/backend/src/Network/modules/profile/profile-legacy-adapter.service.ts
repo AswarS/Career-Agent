@@ -8,6 +8,7 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import { randomUUID } from 'node:crypto';
 import { DataSource, EntityManager } from 'typeorm';
 import { UserEntity } from '../user/entities/user.entity';
+import { applyPublicAccountPatch } from '../integration/account-publication';
 import { BaseProfileEntity } from './entities/base-profile.entity';
 import { ProfileMemoryItemEntity } from './entities/profile-memory-item.entity';
 import { ProfileProjectionJobEntity } from './entities/profile-projection-job.entity';
@@ -101,9 +102,9 @@ export class ProfileLegacyAdapterService {
       user.profileJson = serializeCanonicalProfile(profile);
       const displayName =
         profile.basicInfo.fullName || profile.basicInfo.displayName;
-      if (displayName) {
-        user.displayName = displayName;
-      }
+      await applyPublicAccountPatch(manager, user, {
+        displayName: displayName || user.displayName,
+      });
       await manager.save(user);
 
       if (suggestion) {

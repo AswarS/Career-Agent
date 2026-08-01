@@ -8,6 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserEntity } from '../user/entities/user.entity';
 import { ProfileExternalSnapshotService } from '../profile/profile-external-snapshot.service';
+import { normalizePublicAvatarUrl } from './account-publication';
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -75,7 +76,7 @@ export class PraxisIntegrationService {
       items: page.map((user) => ({
         externalUserId: user.publicUserId,
         displayName: this.displayName(user),
-        avatarUrl: user.avatarUrl ?? null,
+        avatarUrl: normalizePublicAvatarUrl(user.avatarUrl),
         accountStatus: user.accountStatus,
       })),
       nextCursor: hasMore
@@ -111,7 +112,7 @@ export class PraxisIntegrationService {
     return {
       externalUserId: user.publicUserId,
       displayName: this.displayName(user),
-      avatarUrl: user.avatarUrl ?? null,
+      avatarUrl: normalizePublicAvatarUrl(user.avatarUrl),
       accountStatus: user.accountStatus,
       sourceVersion: this.version(user.accountVersion),
       occurredAt: user.updatedAt.toISOString(),

@@ -97,16 +97,23 @@ async function createUser(dataSource: DataSource, displayName = 'Before') {
   }));
 }
 
+async function createTestDataSource() {
+  const directory = await mkdtemp(join(tmpdir(), 'profile-v2-test-'));
+  temporaryDirectories.push(directory);
+  const dataSource = new DataSource({
+    type: 'sqlite',
+    database: join(directory, 'profile.sqlite'),
+    synchronize: true,
+    entities,
+  });
+  dataSources.push(dataSource);
+  await dataSource.initialize();
+  return dataSource;
+}
+
 describe('Profile V2 snapshot integration', () => {
   test('legacy write indexes can be replaced through the Profile V2 API', async () => {
-    const dataSource = new DataSource({
-      type: 'sqlite',
-      database: ':memory:',
-      synchronize: true,
-      entities,
-    });
-    dataSources.push(dataSource);
-    await dataSource.initialize();
+    const dataSource = await createTestDataSource();
     const user = await createUser(dataSource);
     const profileV2 = profileV2Service(dataSource);
     const projection = projectionStub();
@@ -134,6 +141,10 @@ describe('Profile V2 snapshot integration', () => {
     profile.careerProfile.skills = ['Product strategy', 'AI'];
 
     await adapter.apply(user.id, profile);
+    const updatedUser = await dataSource.getRepository(UserEntity)
+      .findOneByOrFail({ id: user.id });
+    expect(updatedUser.displayName).toBe('After');
+    expect(updatedUser.accountVersion).toBe(2);
     const snapshot = await snapshotService.getCurrentSnapshot(user.id);
     const targetRole = snapshot.profile.memories.find(
       ({ slotKey }) =>
@@ -162,15 +173,30 @@ describe('Profile V2 snapshot integration', () => {
     });
   });
 
+  test('Profile V2 name changes advance the public account version once', async () => {
+    const dataSource = await createTestDataSource();
+    const user = await createUser(dataSource);
+    const service = profileV2Service(dataSource);
+    await service.getBaseProfile(user.id);
+
+    await service.updateBaseProfile(
+      user.id,
+      { name: 'Profile V2 Name' },
+      {
+        sourceType: 'user_ui',
+        actorType: 'user',
+        userConfirmed: true,
+      },
+    );
+
+    const updated = await dataSource.getRepository(UserEntity)
+      .findOneByOrFail({ id: user.id });
+    expect(updated.displayName).toBe('Profile V2 Name');
+    expect(updated.accountVersion).toBe(2);
+  });
+
   test('a failed initial revision rolls back and the next request recovers', async () => {
-    const dataSource = new DataSource({
-      type: 'sqlite',
-      database: ':memory:',
-      synchronize: true,
-      entities,
-    });
-    dataSources.push(dataSource);
-    await dataSource.initialize();
+    const dataSource = await createTestDataSource();
     const user = await createUser(dataSource, 'Recoverable');
     let failRevision = true;
     const failingDataSource = {
@@ -223,14 +249,7 @@ describe('Profile V2 snapshot integration', () => {
   });
 
   test('repairs an existing partial initialization', async () => {
-    const dataSource = new DataSource({
-      type: 'sqlite',
-      database: ':memory:',
-      synchronize: true,
-      entities,
-    });
-    dataSources.push(dataSource);
-    await dataSource.initialize();
+    const dataSource = await createTestDataSource();
     const user = await createUser(dataSource, 'Partial');
     await dataSource.getRepository(BaseProfileEntity).save({
       userId: user.id,

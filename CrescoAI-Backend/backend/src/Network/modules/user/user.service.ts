@@ -2,7 +2,6 @@ import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/commo
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { join } from 'node:path';
 import { rm } from 'node:fs/promises';
-import { randomUUID } from 'node:crypto';
 import { DataSource, In, Repository } from 'typeorm';
 import { ConversationEntity } from '../conversation/entities/conversation.entity';
 import { MessageEntity } from '../conversation/entities/message.entity';
@@ -13,7 +12,7 @@ import { TeamEntity } from '../team/entities/team.entity';
 import { UserEntity } from './entities/user.entity';
 import { ResourceEntity } from '../resource/entities/resource.entity';
 import { GeneratedAppEntity } from '../generated-app/entities/generated-app.entity';
-import { IntegrationOutboxEntity } from '../integration/entities/integration-outbox.entity';
+import { enqueueAccountStatusChanged } from '../integration/account-publication';
 import { BaseProfileEntity } from '../profile/entities/base-profile.entity';
 import { ProfileStateEntity } from '../profile/entities/profile-state.entity';
 import { ProfileMemoryItemEntity } from '../profile/entities/profile-memory-item.entity';
@@ -54,28 +53,15 @@ export class UserService {
     const conversationIds = conversations.map((c) => c.id);
     const occurredAt = new Date();
     const accountVersion = (targetUser.accountVersion ?? 0) + 1;
-    const eventId = randomUUID();
 
     await this.dataSource.transaction(async (manager) => {
-      await manager.insert(IntegrationOutboxEntity, {
-        id: eventId,
-        eventType: 'account.status.changed',
-        aggregateType: 'user',
-        aggregateId: targetUser.publicUserId,
-        aggregateVersion: accountVersion,
-        payloadJson: JSON.stringify({
-          eventId,
-          eventType: 'account.status.changed',
-          externalUserId: targetUser.publicUserId,
-          status: 'disabled',
-          sourceVersion: String(accountVersion).padStart(20, '0'),
-          occurredAt: occurredAt.toISOString(),
-        }),
-        status: 'pending',
-        attempts: 0,
-        availableAt: occurredAt,
-        publishedAt: null,
-      });
+      await enqueueAccountStatusChanged(
+        manager,
+        targetUser,
+        'disabled',
+        accountVersion,
+        occurredAt,
+      );
       if (conversationIds.length > 0) {
         await manager.delete(MessageEntity, { conversationId: In(conversationIds) });
       }

@@ -7,6 +7,7 @@ import { DataSource } from 'typeorm';
 import { AuthService } from '../src/Network/modules/auth/auth.service.js';
 import { CreateCareerAgentBaseline1785000000000 } from '../src/Network/migrations/1785000000000-CreateCareerAgentBaseline.js';
 import { AddPublicUserId1785128058000 } from '../src/Network/migrations/1785128058000-AddPublicUserId.js';
+import { AddPraxisIntegrationDelivery1785128062000 } from '../src/Network/migrations/1785128062000-AddPraxisIntegrationDelivery.js';
 import { careerAgentMigrations } from '../src/Network/migrations/migration-list.js';
 import { resolveCareerAgentSecurityConfig } from '../src/Network/security.config.js';
 import type { UserEntity } from '../src/Network/modules/user/entities/user.entity.js';
@@ -424,5 +425,43 @@ describe('public user identity', () => {
     expect(principal.internalUserId).toBe(7);
     expect(UUID_PATTERN.test(principal.id)).toBe(true);
     expect(user.publicUserId).toBe(principal.id);
+  });
+
+  test('Praxis migration clears unsafe stored avatar URLs', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'career-agent-avatar-'));
+    const dataSource = new DataSource({
+      type: 'sqlite',
+      database: join(directory, 'career.sqlite'),
+    });
+    try {
+      await dataSource.initialize();
+      await dataSource.query(`
+        CREATE TABLE "users" (
+          "id" integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+          "publicUserId" varchar(36) NOT NULL,
+          "avatarUrl" varchar
+        )
+      `);
+      await dataSource.query(
+        `INSERT INTO "users" ("publicUserId", "avatarUrl") VALUES
+         (?, 'http://legacy.example/avatar.png'),
+         (?, 'https://safe.example/avatar.png')`,
+        [randomUUID(), randomUUID()],
+      );
+      const runner = dataSource.createQueryRunner();
+      await new AddPraxisIntegrationDelivery1785128062000().up(runner);
+      await runner.release();
+
+      const rows = await dataSource.query(
+        `SELECT "avatarUrl" FROM "users" ORDER BY "id"`,
+      ) as Array<{ avatarUrl: string | null }>;
+      expect(rows).toEqual([
+        { avatarUrl: null },
+        { avatarUrl: 'https://safe.example/avatar.png' },
+      ]);
+    } finally {
+      if (dataSource.isInitialized) await dataSource.destroy();
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 });
