@@ -29,9 +29,16 @@ import {
 } from '../agent/ask-user-question.js';
 import {
   isConversationMemoryMaintenanceMessage,
+  isConversationMemoryTranscriptReminder,
   isInternalTranscriptMessage,
+  isPublicTranscriptUserTurn,
   shouldSuppressConversationMemoryBlock,
 } from '../../memory/conversationMemoryVisibility.js';
+import {
+  collectConversationMemoryPrivateIdentifiers,
+  sanitizeConversationMemoryPublicText,
+  sanitizeConversationMemoryPublicValue,
+} from '../../memory/conversationMemoryPublicPolicy.js';
 
 type ProjectedConversationMessage = ConversationMessage & {
   uuid?: string;
@@ -62,6 +69,11 @@ export class ConversationTranscriptProjectionService {
     const mediaByMessageId = input.mediaByMessageId ?? new Map<string, MessageMedia[]>();
     const { messages, leafUuids } = await loadTranscriptFile(input.filePath);
     const chain = this.selectConversationChain(messages, leafUuids);
+    const transcriptPrivateConversationIds =
+      collectConversationMemoryPrivateIdentifiers(
+        [...messages.values()],
+        input.sessionId,
+      );
 
     if (!chain.length) {
       return this.projectLegacyJsonl(
@@ -77,6 +89,7 @@ export class ConversationTranscriptProjectionService {
       input.sessionId,
       mediaByMessageId,
       input.conversationMemoryDir,
+      transcriptPrivateConversationIds,
     );
   }
 
@@ -108,18 +121,37 @@ export class ConversationTranscriptProjectionService {
     sessionId: string,
     mediaByMessageId: Map<string, MessageMedia[]>,
     conversationMemoryDir?: string,
+    transcriptPrivateConversationIds?: ReadonlySet<string>,
   ): ConversationMessage[] {
     const order: string[] = [];
     const map = new Map<string, ProjectedConversationMessage>();
     let activeAssistantMessageId: string | null = null;
     const hiddenSkillToolUseIds = new Set<string>();
     const hiddenConversationMemoryToolUseIds = new Set<string>();
+    const privateConversationIds =
+      collectConversationMemoryPrivateIdentifiers(events, sessionId);
+    for (const privateConversationId of transcriptPrivateConversationIds ?? []) {
+      privateConversationIds.add(privateConversationId);
+    }
+    let conversationMemoryMaintenanceActive = false;
 
     for (const event of events) {
+      if (isConversationMemoryTranscriptReminder(event)) {
+        conversationMemoryMaintenanceActive = true;
+        continue;
+      }
+      if (conversationMemoryMaintenanceActive) {
+        if (isPublicTranscriptUserTurn(event)) {
+          conversationMemoryMaintenanceActive = false;
+        } else {
+          continue;
+        }
+      }
       if (isInternalTranscriptMessage(event)) {
         // Internal prompts are part of the model chain, not the public chat.
-        // Do not reset activeAssistantMessageId: assistant continuations after
-        // a memory checkpoint still belong to the same public response.
+        // Other internal prompts do not split the active public trajectory.
+        // Conversation Memory reminders are handled by the maintenance phase
+        // above, where the entire internal tail is suppressed.
         continue;
       }
 
@@ -182,7 +214,52 @@ export class ConversationTranscriptProjectionService {
     return order
       .map((id) => this.attachMedia(map.get(id), mediaByMessageId))
       .filter((message): message is ConversationMessage => Boolean(message))
-      .map((message) => this.normalizeProjectedMessage(message));
+      .map((message) => this.normalizeProjectedMessage(message))
+      .map((message) =>
+        this.sanitizeConversationMemoryProjectedMessage(
+          message,
+          privateConversationIds,
+        ),
+      );
+  }
+
+  private sanitizeConversationMemoryProjectedMessage(
+    message: ConversationMessage,
+    privateConversationIds: ReadonlySet<string>,
+  ): ConversationMessage {
+    return {
+      ...message,
+      content: sanitizeConversationMemoryPublicText(
+        message.content,
+        privateConversationIds,
+      ),
+      reasoning:
+        typeof message.reasoning === 'string'
+          ? sanitizeConversationMemoryPublicText(
+              message.reasoning,
+              privateConversationIds,
+            )
+          : message.reasoning,
+      think:
+        typeof message.think === 'string'
+          ? sanitizeConversationMemoryPublicText(
+              message.think,
+              privateConversationIds,
+            )
+          : message.think,
+      blocks: message.blocks
+        ? sanitizeConversationMemoryPublicValue(
+            message.blocks,
+            privateConversationIds,
+          )
+        : message.blocks,
+      actions: message.actions
+        ? sanitizeConversationMemoryPublicValue(
+            message.actions,
+            privateConversationIds,
+          )
+        : message.actions,
+    };
   }
 
   private projectTranscriptMessage(

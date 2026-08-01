@@ -13,6 +13,7 @@ export type ConversationMemoryTurnState = {
   maxReminders: number
   writeMode: ConversationMemoryWriteMode
   status: 'pending' | 'committed' | 'gate_exhausted'
+  privateConversationIds: Set<string>
 }
 
 export type ConversationMemoryFrontmatter = {
