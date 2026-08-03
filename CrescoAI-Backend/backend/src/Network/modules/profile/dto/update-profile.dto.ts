@@ -4,8 +4,10 @@ import {
   ArrayMaxSize,
   IsArray,
   IsObject,
+  IsInt,
   IsOptional,
   IsString,
+  Min,
   MaxLength,
   ValidateNested,
 } from 'class-validator';
@@ -537,6 +539,11 @@ export class ProfileFieldsDto {
 }
 
 export class UpdateProfileDto extends ProfileFieldsDto {
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  suggestionRowId?: number;
+
   @IsOptional()
   @IsObject()
   _meta?: Record<string, unknown>;

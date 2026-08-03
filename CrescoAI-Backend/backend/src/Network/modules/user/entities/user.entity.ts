@@ -15,6 +15,11 @@ export class UserEntity {
   @Column({ nullable: true })
   userId?: string;
 
+  /** Stable, opaque identifier exposed across API and module boundaries. */
+  @Index('IDX_users_publicUserId_unique', { unique: true })
+  @Column({ length: 36 })
+  publicUserId!: string;
+
   @Index({ unique: true })
   @Column({ nullable: true })
   email?: string;
@@ -25,6 +30,9 @@ export class UserEntity {
 
   @Column({ nullable: true })
   displayName?: string;
+
+  @Column({ nullable: true })
+  avatarUrl?: string | null;
 
   @Column({ nullable: true, select: false })
   passwordHash?: string;
@@ -40,6 +48,12 @@ export class UserEntity {
 
   @Column({ default: 0 })
   tokenVersion!: number;
+
+  @Column({ type: 'varchar', default: 'active' })
+  accountStatus!: 'active' | 'disabled';
+
+  @Column({ type: 'integer', default: 1 })
+  accountVersion!: number;
 
   @CreateDateColumn()
   createdAt!: Date;

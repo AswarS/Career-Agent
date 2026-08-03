@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { UserEntity } from '../user/entities/user.entity';
+import { applyPublicAccountPatch } from '../integration/account-publication';
 import { UpdateBaseProfileDto } from './dto/base-profile.dto';
 import { BaseProfileEntity } from './entities/base-profile.entity';
 import { ProfileRevisionEntity } from './entities/profile-revision.entity';
@@ -31,7 +32,7 @@ export class ProfileV2Service {
   ) {}
 
   async getBaseProfile(userId: number): Promise<BaseProfileRecord> {
-    const entity = await this.ensureBaseProfile(userId);
+    const { base: entity } = await this.ensureProfileInitialized(userId);
     return this.toBaseRecord(entity);
   }
 
@@ -58,7 +59,7 @@ export class ProfileV2Service {
       throw profileValidationError('at least one base profile field is required');
     }
 
-    await this.ensureBaseProfile(userId);
+    await this.ensureProfileInitialized(userId);
     return this.dataSource.transaction(async (manager) => {
       const entity = await manager.findOneOrFail(BaseProfileEntity, { where: { userId } });
 
@@ -115,8 +116,9 @@ export class ProfileV2Service {
       if (patch.name) {
         const user = await manager.findOne(UserEntity, { where: { id: userId } });
         if (user) {
-          user.displayName = patch.name;
-          await manager.save(user);
+          await applyPublicAccountPatch(manager, user, {
+            displayName: patch.name,
+          });
         }
       }
 
@@ -125,83 +127,139 @@ export class ProfileV2Service {
   }
 
   async getState(userId: number) {
-    await this.ensureBaseProfile(userId);
-    return this.ensureState(userId);
+    const { state } = await this.ensureProfileInitialized(userId);
+    return state;
   }
 
-  private async ensureBaseProfile(userId: number) {
-    const existing = await this.baseRepo.findOne({ where: { userId } });
-    if (existing) return existing;
+  private async ensureProfileInitialized(userId: number) {
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      try {
+        return await this.dataSource.transaction(async (manager) => {
+          const user = await manager.findOne(UserEntity, {
+            where: { id: userId },
+          });
+          if (!user) {
+            throw profileValidationError(
+              'authenticated user does not exist',
+            );
+          }
 
-    const user = await this.userRepo.findOne({ where: { id: userId } });
-    if (!user) throw profileValidationError('authenticated user does not exist');
-    const legacy = normalizeProfileRecord(
-      this.parseJson(user.profileJson),
-      user.displayName ?? '',
-    );
-    const education = legacy.careerProfile.educationBackground
-      ? [{
-          school: '',
-          major: '',
-          degree: '',
-          graduationDate: null,
-          description: legacy.careerProfile.educationBackground,
-        }]
-      : [];
-    const entity = this.baseRepo.create({
-      userId,
-      name: legacy.basicInfo.fullName || user.displayName || '',
-      gender: '',
-      birthDate: null,
-      educationLevel: '',
-      educationBackgroundJson: JSON.stringify(education),
-      currentCity: legacy.basicInfo.currentCity,
-      currentStatus: legacy.careerProfile.employmentStatus,
-      currentRole: legacy.careerProfile.currentRole,
-      currentIndustry: '',
-      yearsOfExperience: null,
-      contactLanguage: '',
-      version: 1,
-    });
-    const saved = await this.baseRepo.save(entity);
-    const state = await this.ensureState(userId);
-    await this.dataSource.getRepository(ProfileRevisionEntity).save({
-      userId,
-      aggregateVersion: state.aggregateVersion,
-      targetType: 'base_profile',
-      targetId: String(saved.id),
-      operation: 'create',
-      beforeJson: null,
-      afterJson: JSON.stringify(this.toBaseRecord(saved)),
-      sourceType: 'system_migration',
-      updateLevel: 'L3',
-      sourceConversationId: null,
-      sourceMessageId: null,
-      userConfirmed: false,
-      actorType: 'system',
-    });
-    await this.dataSource.getRepository(ProfileProjectionJobEntity).save({
-      userId,
-      targetVersion: state.aggregateVersion,
-      status: 'pending',
-      retryCount: 0,
-      lastError: null,
-    });
-    return saved;
+          let base = await manager.findOne(BaseProfileEntity, {
+            where: { userId },
+          });
+          if (!base) {
+            const legacy = normalizeProfileRecord(
+              this.parseJson(user.profileJson),
+              user.displayName ?? '',
+            );
+            const education = legacy.careerProfile.educationBackground
+              ? [{
+                  school: '',
+                  major: '',
+                  degree: '',
+                  graduationDate: null,
+                  description: legacy.careerProfile.educationBackground,
+                }]
+              : [];
+            base = await manager.save(manager.create(BaseProfileEntity, {
+              userId,
+              name:
+                legacy.basicInfo.fullName || user.displayName || '',
+              gender: '',
+              birthDate: null,
+              educationLevel: '',
+              educationBackgroundJson: JSON.stringify(education),
+              currentCity: legacy.basicInfo.currentCity,
+              currentStatus: legacy.careerProfile.employmentStatus,
+              currentRole: legacy.careerProfile.currentRole,
+              currentIndustry: '',
+              yearsOfExperience: null,
+              contactLanguage: '',
+              version: 1,
+            }));
+          }
+
+          let state = await manager.findOne(ProfileStateEntity, {
+            where: { userId },
+          });
+          if (!state) {
+            state = await manager.save(manager.create(ProfileStateEntity, {
+              userId,
+              aggregateVersion: 1,
+              projectionVersion: 0,
+              projectionStatus: 'pending',
+              nextProfileIndex: 1,
+            }));
+          }
+
+          const baseTargetId = String(base.id);
+          const revision = await manager.findOne(ProfileRevisionEntity, {
+            where: {
+              userId,
+              targetType: 'base_profile',
+              targetId: baseTargetId,
+            },
+            order: { id: 'ASC' },
+          });
+          if (!revision) {
+            await manager.save(manager.create(ProfileRevisionEntity, {
+              userId,
+              aggregateVersion: state.aggregateVersion,
+              targetType: 'base_profile',
+              targetId: baseTargetId,
+              operation: 'create',
+              beforeJson: null,
+              afterJson: JSON.stringify(this.toBaseRecord(base)),
+              sourceType: 'system_migration',
+              updateLevel: 'L3',
+              sourceConversationId: null,
+              sourceMessageId: null,
+              userConfirmed: false,
+              actorType: 'system',
+            }));
+          }
+
+          const projectionJob = await manager.findOne(
+            ProfileProjectionJobEntity,
+            {
+              where: {
+                userId,
+                targetVersion: state.aggregateVersion,
+              },
+              order: { id: 'ASC' },
+            },
+          );
+          if (!projectionJob) {
+            await manager.save(manager.create(ProfileProjectionJobEntity, {
+              userId,
+              targetVersion: state.aggregateVersion,
+              status: 'pending',
+              retryCount: 0,
+              lastError: null,
+            }));
+          }
+          return { base, state };
+        });
+      } catch (error) {
+        lastError = error;
+        if (!this.isRetryableInitializationError(error) || attempt === 3) {
+          throw error;
+        }
+        await new Promise((resolve) =>
+          setTimeout(resolve, 10 * (attempt + 1)));
+      }
+    }
+    throw lastError;
   }
 
-  private async ensureState(userId: number) {
-    const existing = await this.stateRepo.findOne({ where: { userId } });
-    if (existing) return existing;
-    return this.stateRepo.save(
-      this.stateRepo.create({
-        userId,
-        aggregateVersion: 1,
-        projectionVersion: 0,
-        projectionStatus: 'pending',
-        nextProfileIndex: 1,
-      }),
-    );
+  private isRetryableInitializationError(error: unknown) {
+    const message = error instanceof Error
+      ? error.message.toLowerCase()
+      : String(error).toLowerCase();
+    return message.includes('unique constraint')
+      || message.includes('sqlite_busy')
+      || message.includes('database is locked');
   }
 
   private normalizeBasePatch(input: UpdateBaseProfileDto | BaseProfilePatch): BaseProfilePatch {

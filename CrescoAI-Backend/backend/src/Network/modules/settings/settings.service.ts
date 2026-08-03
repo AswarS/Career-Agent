@@ -1,10 +1,11 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { ApiSettingsEntity } from './entities/api-settings.entity';
 import { UpdateApiSettingsDto } from './dto/update-api-settings.dto';
 import { UpdateUsernameDto } from './dto/update-username.dto';
 import { UserEntity } from '../user/entities/user.entity';
+import { applyPublicAccountPatch } from '../integration/account-publication';
 
 const defaultAnthropicBaseUrl = 'https://api.anthropic.com';
 const defaultAnthropicModel = 'claude-sonnet-4-5';
@@ -12,6 +13,8 @@ const defaultAnthropicModel = 'claude-sonnet-4-5';
 @Injectable()
 export class SettingsService {
   constructor(
+    @InjectDataSource()
+    private readonly dataSource: DataSource,
     @InjectRepository(ApiSettingsEntity)
     private readonly settingsRepo: Repository<ApiSettingsEntity>,
     @InjectRepository(UserEntity)
@@ -22,12 +25,16 @@ export class SettingsService {
   async getSettings(userId: number) {
     const user = await this.userRepo.findOne({ where: { id: userId } });
     const setting = await this.settingsRepo.findOne({ where: { userId } });
-    const apiSettings = setting ? [this.toApiSettingView(setting)] : [];
+    const apiSettings = setting && user
+      ? [this.toApiSettingView(setting, user.publicUserId)]
+      : [];
 
     return {
       account: user
         ? {
-            id: String(user.id),
+            id: user.publicUserId!,
+            publicUserId: user.publicUserId!,
+            public_user_id: user.publicUserId!,
             email: user.email,
             username: user.username,
             display_name: user.displayName,
@@ -50,8 +57,13 @@ export class SettingsService {
 
   /** List endpoint — returns array of normalised view objects */
   async listApiSettings(userId: number) {
-    const setting = await this.settingsRepo.findOne({ where: { userId } });
-    return setting ? [this.toApiSettingView(setting)] : [];
+    const [setting, user] = await Promise.all([
+      this.settingsRepo.findOne({ where: { userId } }),
+      this.userRepo.findOne({ where: { id: userId } }),
+    ]);
+    return setting && user
+      ? [this.toApiSettingView(setting, user.publicUserId)]
+      : [];
   }
 
   async upsertSettings(userId: number, dto: UpdateApiSettingsDto) {
@@ -89,7 +101,8 @@ export class SettingsService {
     if (videoModels !== undefined) existing.videoModels = videoModels;
 
     const saved = await this.settingsRepo.save(existing);
-    const view = this.toApiSettingView(saved);
+    const publicUserId = await this.getPublicUserId(userId);
+    const view = this.toApiSettingView(saved, publicUserId);
 
     return {
       message: 'api setting saved successfully',
@@ -99,43 +112,55 @@ export class SettingsService {
   }
 
   async updateUsername(userId: number, dto: UpdateUsernameDto) {
-    const user = await this.userRepo.findOne({ where: { id: userId } });
-    if (!user) {
-      throw new NotFoundException('user not found');
-    }
-
     const username = dto.username.trim().toLowerCase();
-    const existing = await this.userRepo.findOne({ where: { username } });
-    if (existing && existing.id !== userId) {
-      throw new ConflictException({ code: 'USERNAME_ALREADY_EXISTS', message: 'username already exists' });
-    }
-
-    user.username = username;
-    user.displayName = dto.display_name ?? dto.displayName ?? user.displayName ?? username;
-
     try {
-      await this.userRepo.save(user);
+      return await this.dataSource.transaction(async (manager) => {
+        const user = await manager.findOne(UserEntity, { where: { id: userId } });
+        if (!user) {
+          throw new NotFoundException('user not found');
+        }
+        const existing = await manager.findOne(UserEntity, {
+          where: { username },
+        });
+        if (existing && existing.id !== userId) {
+          throw new ConflictException({
+            code: 'USERNAME_ALREADY_EXISTS',
+            message: 'username already exists',
+          });
+        }
+
+        user.username = username;
+        await applyPublicAccountPatch(manager, user, {
+          displayName:
+            dto.display_name ?? dto.displayName ?? user.displayName ?? username,
+        });
+        // Username is not part of the external account contract. Persist it
+        // even when the public account fields did not change.
+        await manager.save(user);
+
+        return {
+          message: 'username updated successfully',
+          account: {
+            id: user.publicUserId!,
+            publicUserId: user.publicUserId!,
+            public_user_id: user.publicUserId!,
+            email: user.email,
+            username: user.username,
+            display_name: user.displayName,
+            displayName: user.displayName,
+            created_at: user.createdAt?.toISOString() ?? null,
+            createdAt: user.createdAt?.toISOString() ?? null,
+            updated_at: user.updatedAt?.toISOString() ?? null,
+            updatedAt: user.updatedAt?.toISOString() ?? null,
+          },
+        };
+      });
     } catch (error) {
       if (this.isUniqueConstraintError(error)) {
         throw new ConflictException({ code: 'USERNAME_ALREADY_EXISTS', message: 'username already exists' });
       }
       throw error;
     }
-
-    return {
-      message: 'username updated successfully',
-      account: {
-        id: String(user.id),
-        email: user.email,
-        username: user.username,
-        display_name: user.displayName,
-        displayName: user.displayName,
-        created_at: user.createdAt?.toISOString() ?? null,
-        createdAt: user.createdAt?.toISOString() ?? null,
-        updated_at: user.updatedAt?.toISOString() ?? null,
-        updatedAt: user.updatedAt?.toISOString() ?? null,
-      },
-    };
   }
 
   async testApiSetting(userId: number, dto: UpdateApiSettingsDto) {
@@ -206,10 +231,19 @@ export class SettingsService {
     }
   }
 
-  private toApiSettingView(setting: ApiSettingsEntity) {
+  private async getPublicUserId(userId: number) {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('user not found');
+    }
+    return user.publicUserId;
+  }
+
+  private toApiSettingView(setting: ApiSettingsEntity, publicUserId: string) {
     return {
       id: String(setting.id),
-      userId: String(setting.userId),
+      userId: publicUserId,
+      user_id: publicUserId,
       provider: setting.provider ?? 'anthropic',
       model: setting.model ?? defaultAnthropicModel,
       base_url: setting.baseUrl ?? defaultAnthropicBaseUrl,

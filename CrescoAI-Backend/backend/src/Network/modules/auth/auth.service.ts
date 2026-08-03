@@ -4,15 +4,21 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { randomBytes, scrypt as scryptCallback, createHash, createHmac, timingSafeEqual } from 'node:crypto';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+import { randomBytes, randomUUID, scrypt as scryptCallback, createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { UserEntity } from '../user/entities/user.entity';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
 import { createDefaultProfile } from '../profile/profile.types';
+import { careerAgentJwtSecret } from '../../security.config.js';
+import { serializeCanonicalProfile } from '../profile/profile-version.utils.js';
+import { BaseProfileEntity } from '../profile/entities/base-profile.entity.js';
+import { ProfileProjectionJobEntity } from '../profile/entities/profile-projection-job.entity.js';
+import { ProfileRevisionEntity } from '../profile/entities/profile-revision.entity.js';
+import { ProfileStateEntity } from '../profile/entities/profile-state.entity.js';
 
 const scrypt = promisify(scryptCallback);
 interface AccessTokenPayload {
@@ -31,6 +37,8 @@ export class AuthService {
   constructor(
     @InjectRepository(UserEntity)
     private readonly userRepo: Repository<UserEntity>,
+    @InjectDataSource()
+    private readonly dataSource: DataSource,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -48,20 +56,24 @@ export class AuthService {
 
     const displayName = this.normalizeDisplayName(dto.display_name ?? dto.displayName, email, username);
     const passwordHash = await this.hashPassword(dto.password);
+    const profileJson = serializeCanonicalProfile(
+      createDefaultProfile(displayName),
+    );
     const user = this.userRepo.create({
       userId: undefined,
+      publicUserId: randomUUID(),
       email,
       username,
       displayName,
       passwordHash,
-      profileJson: JSON.stringify(createDefaultProfile(displayName)),
+      profileJson,
       tokenVersion: 0,
+      accountStatus: 'active',
+      accountVersion: 1,
     });
     let saved: UserEntity | undefined;
     try {
-      saved = await this.userRepo.save(user);
-      saved.userId = String(saved.id);
-      await this.userRepo.save(saved);
+      saved = await this.persistNewUser(user, displayName);
     } catch (error) {
       if (this.isUniqueConstraintError(error)) {
         throw new ConflictException(this.error('USER_ALREADY_EXISTS', 'email or username already exists'));
@@ -86,6 +98,7 @@ export class AuthService {
     if (!user?.passwordHash || !(await this.verifyPassword(dto.password, user.passwordHash))) {
       throw new UnauthorizedException(this.error('INVALID_CREDENTIALS', 'invalid email, username or password'));
     }
+    this.assertAccountActive(user);
 
     return this.issueSession(user);
   }
@@ -106,12 +119,13 @@ export class AuthService {
     if (!user?.refreshTokenExpiresAt || user.refreshTokenExpiresAt.getTime() <= Date.now()) {
       throw new UnauthorizedException(this.error('UNAUTHORIZED', 'refresh token is invalid or expired'));
     }
+    this.assertAccountActive(user);
 
     return this.issueSession(user);
   }
 
   async logout(userId: string) {
-    const user = await this.userRepo.findOne({ where: { id: Number(userId) } });
+    const user = await this.findUserBySubject(userId);
     if (user) {
       user.refreshTokenHash = null;
       user.refreshTokenExpiresAt = null;
@@ -123,10 +137,11 @@ export class AuthService {
   }
 
   async getSession(userId: string) {
-    const user = await this.userRepo.findOne({ where: { id: Number(userId) } });
+    const user = await this.findUserBySubject(userId);
     if (!user) {
       throw new UnauthorizedException(this.error('UNAUTHORIZED', 'session is invalid'));
     }
+    this.assertAccountActive(user);
 
     return {
       user: this.toAuthUser(user),
@@ -135,13 +150,82 @@ export class AuthService {
 
   async verifyAccessToken(token: string) {
     const payload = this.verifySignedToken(token);
-    const user = await this.userRepo.findOne({ where: { id: Number(payload.sub) } });
+    const user = await this.findUserBySubject(payload.sub);
 
     if (!user || user.tokenVersion !== payload.token_version) {
       throw new UnauthorizedException(this.error('UNAUTHORIZED', 'token is invalid or expired'));
     }
+    this.assertAccountActive(user);
 
-    return this.toAuthUser(user);
+    return {
+      ...this.toAuthUser(user),
+      internalUserId: user.id,
+    };
+  }
+
+  private async persistNewUser(user: UserEntity, displayName: string) {
+    if (!this.dataSource) {
+      const saved = await this.userRepo.save(user);
+      saved.userId = String(saved.id);
+      return this.userRepo.save(saved);
+    }
+
+    return this.dataSource.transaction(async (manager) => {
+      const userRepo = manager.getRepository(UserEntity);
+      const saved = await userRepo.save(user);
+      const base = await manager.save(manager.create(BaseProfileEntity, {
+        userId: saved.id,
+        name: displayName,
+        gender: '',
+        birthDate: null,
+        educationLevel: '',
+        educationBackgroundJson: '[]',
+        currentCity: '',
+        currentStatus: '',
+        currentRole: '',
+        currentIndustry: '',
+        yearsOfExperience: null,
+        contactLanguage: '',
+        version: 1,
+      }));
+      const state = await manager.save(manager.create(ProfileStateEntity, {
+        userId: saved.id,
+        aggregateVersion: 1,
+        projectionVersion: 0,
+        projectionStatus: 'pending',
+        nextProfileIndex: 1,
+      }));
+      await manager.save(manager.create(ProfileRevisionEntity, {
+        userId: saved.id,
+        aggregateVersion: state.aggregateVersion,
+        targetType: 'base_profile',
+        targetId: String(base.id),
+        operation: 'create',
+        beforeJson: null,
+        afterJson: JSON.stringify({
+          name: base.name,
+          currentCity: base.currentCity,
+          currentRole: base.currentRole,
+          currentStatus: base.currentStatus,
+          educationBackgroundJson: base.educationBackgroundJson,
+        }),
+        sourceType: 'registration',
+        updateLevel: 'L3',
+        sourceConversationId: null,
+        sourceMessageId: null,
+        userConfirmed: true,
+        actorType: 'user',
+      }));
+      await manager.save(manager.create(ProfileProjectionJobEntity, {
+        userId: saved.id,
+        targetVersion: state.aggregateVersion,
+        status: 'pending',
+        retryCount: 0,
+        lastError: null,
+      }));
+      saved.userId = String(saved.id);
+      return userRepo.save(saved);
+    });
   }
 
   private async issueSession(user: UserEntity) {
@@ -150,7 +234,7 @@ export class AuthService {
     const refreshExpiresIn = this.refreshTokenExpiresInSeconds();
     const expiresAtDate = new Date((now + accessExpiresIn) * 1000);
     const payload: AccessTokenPayload = {
-      sub: String(user.id),
+      sub: user.publicUserId!,
       email: user.email,
       username: user.username,
       display_name: user.displayName,
@@ -233,6 +317,27 @@ export class AuthService {
     return query.where(clauses.join(' OR '), params).getOne();
   }
 
+  private async findUserBySubject(subject: string) {
+    const normalizedSubject = subject?.trim();
+    if (!normalizedSubject) {
+      return null;
+    }
+
+    const byPublicId = await this.userRepo.findOne({
+      where: { publicUserId: normalizedSubject },
+    });
+    if (byPublicId) {
+      return byPublicId;
+    }
+
+    // Compatibility for access tokens issued before publicUserId existed.
+    const legacyId = Number(normalizedSubject);
+    if (!Number.isInteger(legacyId) || legacyId < 1) {
+      return null;
+    }
+    return this.userRepo.findOne({ where: { id: legacyId } });
+  }
+
   private async hashPassword(password: string) {
     const salt = randomBytes(16).toString('base64url');
     const derivedKey = (await scrypt(password, salt, 64)) as Buffer;
@@ -307,7 +412,7 @@ export class AuthService {
   }
 
   private jwtSecret() {
-    return process.env.CAREER_AGENT_JWT_SECRET ?? process.env.JWT_SECRET ?? 'career-agent-dev-secret';
+    return careerAgentJwtSecret();
   }
 
   private accessTokenExpiresInSeconds() {
@@ -346,7 +451,9 @@ export class AuthService {
     const displayName = user.displayName ?? this.normalizeDisplayName(undefined, user.email, user.username);
 
     return {
-      id: String(user.id),
+      id: user.publicUserId!,
+      publicUserId: user.publicUserId!,
+      public_user_id: user.publicUserId!,
       email: user.email,
       username: user.username,
       display_name: displayName,
@@ -356,6 +463,14 @@ export class AuthService {
 
   private error(code: string, message: string) {
     return { code, message };
+  }
+
+  private assertAccountActive(user: UserEntity) {
+    if (user.accountStatus === 'disabled') {
+      throw new UnauthorizedException(
+        this.error('ACCOUNT_DISABLED', 'account is disabled'),
+      );
+    }
   }
 
   private isUniqueConstraintError(error: unknown) {

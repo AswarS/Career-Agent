@@ -53,7 +53,11 @@ function createService() {
 
   return {
     rows,
-    service: new ProfileService(userRepo as never, suggestionRepo as never),
+    service: new ProfileService(
+      userRepo as never,
+      suggestionRepo as never,
+      undefined as never,
+    ),
   };
 }
 
@@ -86,6 +90,7 @@ describe('ProfileService suggestions', () => {
 
     await expect(service.listSuggestions(1)).resolves.toEqual([
       {
+        rowId: 1,
         id: 'suggestion-target-role',
         title: '收紧目标角色',
         rationale: '来自本次会话中的明确目标岗位表达。',
@@ -232,5 +237,28 @@ describe('ProfileService suggestions', () => {
 
     expect(rows).toHaveLength(1);
     expect(await service.listSuggestions(1)).toHaveLength(1);
+  });
+
+  test('rejects a pending suggestion and removes it from the pending list', async () => {
+    const { rows, service } = createService();
+    await service.saveSuggestionsFromOutput({
+      userId: 1,
+      sourceThreadId: 'thread-reject',
+      output: {
+        profile_suggestion: {
+          id: 'suggestion-reject',
+          title: 'Reject this',
+          rationale: 'This suggestion is intentionally rejected',
+          patch: { intentConstraints: { targetRole: 'Not applicable' } },
+        },
+      },
+    });
+
+    await expect(service.rejectSuggestion(1, 1)).resolves.toEqual({
+      success: true,
+    });
+    expect(rows[0].status).toBe('rejected');
+    expect(rows[0].resolvedAt).toBeInstanceOf(Date);
+    await expect(service.listSuggestions(1)).resolves.toEqual([]);
   });
 });

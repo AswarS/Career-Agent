@@ -1,10 +1,12 @@
 import {
   BadRequestException,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { UserEntity } from '../user/entities/user.entity';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ProfileSuggestionEntity } from './entities/profile-suggestion.entity';
@@ -19,6 +21,8 @@ import {
   type ProfileSuggestion,
 } from './profile.types';
 import { profileFeatureFlags } from './profile-feature-flags';
+import { ProfileExternalSnapshotService } from './profile-external-snapshot.service';
+import { ProfileLegacyAdapterService } from './profile-legacy-adapter.service';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -35,6 +39,12 @@ export class ProfileService {
     private readonly userRepo: Repository<UserEntity>,
     @InjectRepository(ProfileSuggestionEntity)
     private readonly suggestionRepo: Repository<ProfileSuggestionEntity>,
+    @InjectDataSource()
+    private readonly dataSource: DataSource,
+    @Optional()
+    private readonly legacyAdapter?: ProfileLegacyAdapterService,
+    @Optional()
+    private readonly externalSnapshotService?: ProfileExternalSnapshotService,
   ) {}
 
   async getProfile(userId: number) {
@@ -54,16 +64,63 @@ export class ProfileService {
       });
     }
 
+    if (!this.dataSource || !this.legacyAdapter) {
+      throw new InternalServerErrorException({
+        code: 'PROFILE_V2_STORE_UNAVAILABLE',
+        message: 'Profile V2 storage is unavailable',
+      });
+    }
+
     const user = await this.findUser(userId);
     const profile = normalizeProfileRecord(source, user.displayName);
-
-    user.profileJson = JSON.stringify(profile);
-    if (profile.basicInfo.fullName) {
-      user.displayName = profile.basicInfo.fullName;
+    if (dto.suggestionRowId) {
+      const suggestion = await this.suggestionRepo.findOne({
+        where: {
+          rowId: dto.suggestionRowId,
+          userId,
+          status: 'pending',
+        },
+      });
+      if (
+        suggestion
+        && !this.profileContainsPatch(
+          profile,
+          this.parsePatchJson(suggestion.patchJson),
+        )
+      ) {
+        throw new BadRequestException({
+          code: 'PROFILE_SUGGESTION_PATCH_NOT_APPLIED',
+          message: 'saved profile does not contain the accepted suggestion',
+        });
+      }
     }
-    await this.userRepo.save(user);
+    return this.legacyAdapter.apply(userId, profile, dto.suggestionRowId);
+  }
 
-    return profile;
+  async rejectSuggestion(userId: number, rowId: number) {
+    const suggestion = await this.suggestionRepo.findOne({
+      where: { rowId, userId, status: 'pending' },
+    });
+    if (!suggestion) {
+      throw new NotFoundException({
+        code: 'PROFILE_SUGGESTION_NOT_FOUND',
+        message: 'pending profile suggestion not found',
+      });
+    }
+    suggestion.status = 'rejected';
+    suggestion.resolvedAt = new Date();
+    await this.suggestionRepo.save(suggestion);
+    return { success: true };
+  }
+
+  async getCurrentProfileSnapshot(userId: number) {
+    if (!this.externalSnapshotService) {
+      throw new InternalServerErrorException({
+        code: 'PROFILE_V2_STORE_UNAVAILABLE',
+        message: 'Profile V2 snapshot storage is unavailable',
+      });
+    }
+    return this.externalSnapshotService.getCurrentSnapshot(userId);
   }
 
   async listSuggestions(userId: number): Promise<ProfileSuggestion[]> {
@@ -176,6 +233,7 @@ export class ProfileService {
     }
 
     return {
+      rowId: entity.rowId,
       id: entity.id,
       title: entity.title,
       rationale: entity.rationale,
@@ -194,6 +252,34 @@ export class ProfileService {
     } catch {
       return {};
     }
+  }
+
+  private profileContainsPatch(
+    profile: ProfileRecord,
+    patch: DeepPartial<ProfileRecord>,
+  ) {
+    const matches = (actual: unknown, expected: unknown): boolean => {
+      if (Array.isArray(expected)) {
+        return (
+          Array.isArray(actual)
+          && JSON.stringify(actual) === JSON.stringify(expected)
+        );
+      }
+      if (
+        typeof expected === 'object'
+        && expected !== null
+        && !Array.isArray(expected)
+      ) {
+        if (typeof actual !== 'object' || actual === null) {
+          return false;
+        }
+        return Object.entries(expected).every(([key, value]) =>
+          matches((actual as Record<string, unknown>)[key], value));
+      }
+      return actual === expected;
+    };
+
+    return matches(profile, patch);
   }
 
   private normalizeSuggestionCandidate(

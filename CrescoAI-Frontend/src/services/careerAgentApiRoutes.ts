@@ -2,7 +2,7 @@ const CAREER_AGENT_API_BASE_PATH = '/api/career-agent';
 
 export const CAREER_AGENT_API_ROUTE_PATTERNS = {
   createThread: `${CAREER_AGENT_API_BASE_PATH}/threads`,
-  listThreads: `${CAREER_AGENT_API_BASE_PATH}/threads/:userId`,
+  listThreads: `${CAREER_AGENT_API_BASE_PATH}/threads`,
   thread: `${CAREER_AGENT_API_BASE_PATH}/threads/:threadId`,
   threadMessages: `${CAREER_AGENT_API_BASE_PATH}/threads/:threadId/messages`,
   threadMessagesStream: `${CAREER_AGENT_API_BASE_PATH}/threads/:threadId/messages/stream`,
@@ -27,6 +27,7 @@ export const CAREER_AGENT_API_ROUTE_PATTERNS = {
   authRegister: `${CAREER_AGENT_API_BASE_PATH}/auth/register`,
   authRefresh: `${CAREER_AGENT_API_BASE_PATH}/auth/refresh`,
   authLogout: `${CAREER_AGENT_API_BASE_PATH}/auth/logout`,
+  praxisSsoTicket: `${CAREER_AGENT_API_BASE_PATH}/integrations/praxis/sso-ticket`,
   settings: `${CAREER_AGENT_API_BASE_PATH}/settings`,
   settingsUsername: `${CAREER_AGENT_API_BASE_PATH}/settings/username`,
   settingsApi: `${CAREER_AGENT_API_BASE_PATH}/settings/api`,
@@ -150,8 +151,8 @@ export const CAREER_AGENT_API_ROUTES = {
   createThread() {
     return CAREER_AGENT_API_ROUTE_PATTERNS.createThread;
   },
-  listThreads(userId: string) {
-    return CAREER_AGENT_API_ROUTE_PATTERNS.listThreads.replace(':userId', encodeURIComponent(userId));
+  listThreads() {
+    return CAREER_AGENT_API_ROUTE_PATTERNS.listThreads;
   },
   thread(threadId: string) {
     return CAREER_AGENT_API_ROUTE_PATTERNS.thread.replace(':threadId', encodeURIComponent(threadId));
@@ -233,6 +234,9 @@ export const CAREER_AGENT_API_ROUTES = {
   },
   authLogout() {
     return CAREER_AGENT_API_ROUTE_PATTERNS.authLogout;
+  },
+  praxisSsoTicket() {
+    return CAREER_AGENT_API_ROUTE_PATTERNS.praxisSsoTicket;
   },
   settings() {
     return CAREER_AGENT_API_ROUTE_PATTERNS.settings;

@@ -300,6 +300,7 @@ export type DeepPartial<T> = {
 };
 
 export interface ProfileSuggestion {
+  rowId?: number;
   id: string;
   title: string;
   rationale: string;
@@ -365,6 +366,7 @@ export type ArtifactPayload = ArtifactRecord['payload'];
 
 export interface AuthUser {
   id: string;
+  publicUserId?: string;
   email: string | null;
   username: string | null;
   displayName: string;
@@ -393,6 +395,7 @@ export interface RegisterCredentials {
 
 export interface AccountSetting {
   id: string;
+  publicUserId?: string;
   email: string | null;
   username: string | null;
   displayName: string;

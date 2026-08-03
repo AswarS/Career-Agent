@@ -5,6 +5,8 @@ import {
   OnModuleInit,
   Optional,
 } from '@nestjs/common';
+import { readFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import {
   SkillRegistry,
   type SkillHandlerResult,
@@ -14,6 +16,7 @@ import {
 import { registerBuiltinSkills } from './built-in-skills';
 import { SettingsService } from '../settings/settings.service';
 import { AgentService } from '../agent/agent.service';
+import { ProfileService } from '../profile/profile.service';
 import {
   listUserSkills,
   listAllUserSkills,

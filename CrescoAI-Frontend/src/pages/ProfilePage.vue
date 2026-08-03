@@ -57,6 +57,7 @@ const {
 const draftProfile = ref<ProfileRecord | null>(null);
 const isEditing = ref(false);
 const localSaveMessage = ref<string | null>(null);
+const appliedSuggestionRowId = ref<number | null>(null);
 
 type EditorProfileField = ProfileFieldConfig;
 
@@ -201,6 +202,7 @@ function cancelEditing() {
   }
 
   isEditing.value = false;
+  appliedSuggestionRowId.value = null;
   localSaveMessage.value = '已放弃草稿。';
 }
 
@@ -318,6 +320,7 @@ function applySuggestion(suggestion: ProfileSuggestion) {
 
   const baseProfile = draftProfile.value ? cloneProfile(draftProfile.value) : cloneProfile(profile.value);
   draftProfile.value = mergeProfilePatch(baseProfile, suggestion.patch);
+  appliedSuggestionRowId.value = suggestion.rowId ?? null;
   isEditing.value = true;
   localSaveMessage.value = `已应用建议：${suggestion.title}。请先检查草稿，再决定是否正式保存。`;
 }
@@ -336,9 +339,13 @@ async function saveProfile() {
   }
 
   try {
-    const savedProfile = await workspaceStore.saveProfileDraft(cloneProfile(draftProfile.value));
+    const savedProfile = await workspaceStore.saveProfileDraft(
+      cloneProfile(draftProfile.value),
+      appliedSuggestionRowId.value ?? undefined,
+    );
     draftProfile.value = cloneProfile(savedProfile);
     isEditing.value = false;
+    appliedSuggestionRowId.value = null;
     localSaveMessage.value = '画像已保存。';
   } catch {
     localSaveMessage.value = '画像保存失败。当前草稿仍保留在本地，可以继续重试。';
@@ -574,7 +581,7 @@ function formatSuggestionStatus(status: typeof profileSuggestionsStatus.value) {
             </section>
             <ProfileSuggestionCard
               v-for="suggestion in profileSuggestions"
-              :key="suggestion.id"
+              :key="suggestion.rowId || suggestion.id"
               :suggestion="suggestion"
               :source-label="resolveSourceLabel(suggestion)"
             />

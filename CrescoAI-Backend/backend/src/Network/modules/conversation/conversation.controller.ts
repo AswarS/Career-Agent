@@ -24,10 +24,16 @@ import { CreateConversationDto } from './dto/create-conversation.dto';
 import { SendMultimodalMessageDto } from './dto/send-multimodal-message.dto';
 import { RespondToToolDto } from './dto/respond-to-tool.dto';
 import { OwnershipGuard } from '../auth/ownership.guard';
+import type { AuthenticatedRequest } from '../auth/auth.types';
 
 @Controller('api/career-agent/threads')
 export class ConversationController {
   constructor(private readonly conversationService: ConversationService) {}
+
+  @Get()
+  listForCurrentUser(@Req() req: AuthenticatedRequest) {
+    return this.conversationService.listConversations(req.userId!);
+  }
 
   @Post()
   create(@Req() req: Request, @Body() dto: CreateConversationDto) {
@@ -35,19 +41,6 @@ export class ConversationController {
       throw new ForbiddenException('Missing user identity');
     }
     return this.conversationService.createConversation(dto, req.userId);
-  }
-
-  @Get(':id')
-  getByUserId(@Req() req: Request, @Param('id') uid: string) {
-    const requestedUserId = Number(uid);
-    const currentUserId = req.userId;
-    if (!currentUserId) {
-      throw new ForbiddenException('Missing user identity');
-    }
-    if (Number.isInteger(requestedUserId) && requestedUserId !== currentUserId) {
-      throw new ForbiddenException('You do not have access to this user conversations');
-    }
-    return this.conversationService.listConversations(currentUserId);
   }
 
   @Delete(':id')

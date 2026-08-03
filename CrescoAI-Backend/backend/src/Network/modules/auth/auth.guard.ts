@@ -34,7 +34,10 @@ export class AuthGuard implements CanActivate {
     if (!token) {
       const downloadUser = this.getDownloadTokenUser(request);
       if (downloadUser) {
-        request.user = { id: String(downloadUser.userId) };
+        request.user = {
+          id: String(downloadUser.userId),
+          internalUserId: downloadUser.userId,
+        };
         request.userId = downloadUser.userId;
         return true;
       }
@@ -46,8 +49,8 @@ export class AuthGuard implements CanActivate {
     }
 
     request.user = await this.authService.verifyAccessToken(token);
-    // Also set req.userId (number) for controllers that use this pattern
-    request.userId = Number(request.user.id);
+    // Controllers and database relations continue to use the internal integer.
+    request.userId = request.user.internalUserId;
     return true;
   }
 

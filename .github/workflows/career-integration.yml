@@ -1,0 +1,96 @@
+name: Career Integration
+
+on:
+  pull_request:
+    branches:
+      - master
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+concurrency:
+  group: career-integration-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend integration
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: CrescoAI-Backend/backend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.5
+
+      - name: Install backend dependencies
+        # bun.lock was produced behind a regional mirror. Force the canonical
+        # registry so CI is not coupled to mirror-specific package retention.
+        run: bun install --frozen-lockfile --registry https://registry.npmjs.org
+
+      - name: Run Network integration tests
+        run: >-
+          bun test
+          tests/profile-version.test.ts
+          tests/praxis-integration.test.ts
+          tests/profile-v2-snapshot-integration.test.ts
+          tests/public-user-id.test.ts
+          tests/career-agent-http-smoke.test.ts
+          --timeout 30000
+
+      - name: Type-check changed Network paths
+        run: >-
+          bun x tsc
+          --noEmit
+          --target ESNext
+          --module ESNext
+          --moduleResolution node
+          --experimentalDecorators
+          --emitDecoratorMetadata
+          --skipLibCheck
+          --esModuleInterop
+          --allowSyntheticDefaultImports
+          --types node
+          src/Network/migrations/1785128062000-AddPraxisIntegrationDelivery.ts
+          src/Network/modules/integration/account-publication.ts
+          src/Network/modules/integration/praxis-integration.config.ts
+          src/Network/modules/integration/praxis-integration.service.ts
+          src/Network/modules/integration/praxis-sso.service.ts
+          src/Network/modules/profile/profile-legacy-adapter.service.ts
+          src/Network/modules/profile/profile-v2.service.ts
+          src/Network/modules/settings/settings.service.ts
+          src/Network/modules/user/user.service.ts
+
+  frontend:
+    name: Frontend test and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: CrescoAI-Frontend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: CrescoAI-Frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Run frontend tests
+        run: npm run test
+
+      - name: Type-check and build frontend
+        run: npm run build

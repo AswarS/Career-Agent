@@ -6,7 +6,7 @@
  */
 
 import { describe, test, expect } from 'bun:test';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 // Import the pure validation helpers via their re-export from the controller.
 // The controller itself is not instantiated here — only the exported functions are called.
 import { resolveGeneratedPath } from '../src/Network/modules/generated/generated.utils.js';
@@ -98,7 +98,7 @@ describe('resolveGeneratedPath – path resolves outside user dir', () => {
     const result = resolveGeneratedPath('/base/root', '42', 'image', 'photo.png');
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.path.startsWith('/base/root/42/')).toBe(true);
+    expect(result.path.startsWith(`${join('/base/root', '42')}${sep}`)).toBe(true);
   });
 
   test('filename that is only dots is caught by the filename guard', () => {
@@ -114,7 +114,7 @@ describe('resolveGeneratedPath – path resolves outside user dir', () => {
     expect(r2.ok).toBe(true);
     if (!r1.ok || !r2.ok) return;
     expect(r1.path).not.toBe(r2.path);
-    expect(r1.path.includes('/10/')).toBe(true);
-    expect(r2.path.includes('/20/')).toBe(true);
+    expect(r1.path.includes(`${sep}10${sep}`)).toBe(true);
+    expect(r2.path.includes(`${sep}20${sep}`)).toBe(true);
   });
 });

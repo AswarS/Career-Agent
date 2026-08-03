@@ -19,6 +19,10 @@ import type { ProfileMemoryRecord, ProfileMutationMeta } from './profile-v2.type
 import type { ProfileMemoryCandidate } from './profile-v2.types';
 import { ProfileV2Service } from './profile-v2.service';
 import { containsSensitiveProfileData } from './profile-policy.service';
+import {
+  formatProfileIndex,
+  normalizeProfileIndex,
+} from './profile-index.utils';
 
 @Injectable()
 export class ProfileMemoryService {
@@ -364,8 +368,8 @@ export class ProfileMemoryService {
     meta: ProfileMutationMeta,
   ) {
     if (!profileFeatureFlags.v2Write()) throw profileAccessDenied('Profile V2 writes are disabled');
-    const normalizedIndex = profileIndex.trim().toUpperCase();
-    if (!/^P\d{6,}$/.test(normalizedIndex)) {
+    const normalizedIndex = normalizeProfileIndex(profileIndex);
+    if (!normalizedIndex) {
       throw profileValidationError('profileIndex must match P followed by at least 6 digits');
     }
     const target = await this.memoryRepo.findOne({
@@ -519,7 +523,7 @@ export class ProfileMemoryService {
   private allocateProfileIndex(state: ProfileStateEntity) {
     const sequence = Math.max(state.nextProfileIndex ?? 1, 1);
     state.nextProfileIndex = sequence + 1;
-    return `P${String(sequence).padStart(6, '0')}`;
+    return formatProfileIndex(sequence);
   }
 
   private persistentLevel(

@@ -1,6 +1,16 @@
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  Index,
+  PrimaryGeneratedColumn,
+} from 'typeorm';
 
 @Entity('resources')
+@Index(
+  'IDX_resources_user_conversation_created',
+  ['userId', 'conversationId', 'createdAt'],
+)
 export class ResourceEntity {
   @PrimaryGeneratedColumn({ type: 'integer' })
   id!: number;

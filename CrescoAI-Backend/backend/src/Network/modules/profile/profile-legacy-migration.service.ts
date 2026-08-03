@@ -4,7 +4,7 @@ import { Repository } from 'typeorm';
 import { UserEntity } from '../user/entities/user.entity';
 import { ProfileSuggestionEntity } from './entities/profile-suggestion.entity';
 import { profileFeatureFlags } from './profile-feature-flags';
-import { ProfileMemoryService } from './profile-memory.service';
+import { ProfileLegacyAdapterService } from './profile-legacy-adapter.service';
 import { ProfileProposalService } from './profile-proposal.service';
 import { normalizeProfileRecord } from './profile.types';
 import type { ProfileMemoryCandidate } from './profile-v2.types';
@@ -19,7 +19,7 @@ export class ProfileLegacyMigrationService implements OnModuleInit, OnModuleDest
     @InjectRepository(UserEntity) private readonly userRepo: Repository<UserEntity>,
     @InjectRepository(ProfileSuggestionEntity)
     private readonly legacySuggestionRepo: Repository<ProfileSuggestionEntity>,
-    private readonly memoryService: ProfileMemoryService,
+    private readonly legacyAdapter: ProfileLegacyAdapterService,
     private readonly proposalService: ProfileProposalService,
   ) {}
 
@@ -54,23 +54,7 @@ export class ProfileLegacyMigrationService implements OnModuleInit, OnModuleDest
 
   private async migrateUser(user: UserEntity) {
     const legacy = normalizeProfileRecord(this.parseObject(user.profileJson), user.displayName ?? '');
-    let migratedOrExisting = await this.memoryService.listAllForProjection(user.id);
-    for (const candidate of this.toMemoryCandidates(legacy)) {
-      const duplicate = migratedOrExisting.some((item) =>
-        item.category === candidate.category
-        && item.content.trim().toLowerCase() === candidate.content.trim().toLowerCase());
-      if (duplicate) continue;
-      const slotConflicts = candidate.slotKey
-        ? migratedOrExisting
-            .filter((item) => item.status === 'active' && item.slotKey === candidate.slotKey)
-        : [];
-      if (slotConflicts.some((item) => item.sourceType !== 'system_migration')) continue;
-      const conflictIds = slotConflicts.map((item) => item.id);
-      await this.memoryService.applyCandidate(user.id, candidate, conflictIds, {
-        sourceType: 'system_migration', actorType: 'system', userConfirmed: false, updateLevel: 'L2',
-      });
-      migratedOrExisting = await this.memoryService.listAllForProjection(user.id);
-    }
+    await this.legacyAdapter.apply(user.id, legacy);
     const suggestions = await this.legacySuggestionRepo.find({ where: { userId: user.id, status: 'pending' } });
     for (const suggestion of suggestions) {
       const patch = this.parseObject(suggestion.patchJson);
@@ -87,27 +71,6 @@ export class ProfileLegacyMigrationService implements OnModuleInit, OnModuleDest
         });
       }
     }
-  }
-
-  private toMemoryCandidates(legacy: ReturnType<typeof normalizeProfileRecord>) {
-    const intent = legacy.intentConstraints;
-    const rows: ProfileMemoryCandidate[] = [];
-    const add = (content: string, category: string, slotKey: string, timeScope: 'long_term' | 'short_term', priority: 'high' | 'normal', appliesTo: string[]) => {
-      if (content.trim()) rows.push({ content: content.trim(), category, level: 'L2', slotKey, timeScope, priority, appliesTo, sourceType: 'system_migration' });
-    };
-    add(intent.targetRole, 'goal', 'career.target_role', 'short_term', 'high', ['job', 'resume', 'interview']);
-    add(intent.targetIndustry, 'goal', 'career.target_industry', 'short_term', 'high', ['job', 'career']);
-    for (const industry of intent.targetIndustries) {
-      add(industry, 'goal', '', 'short_term', 'normal', ['job', 'career']);
-    }
-    add(intent.targetCity, 'constraint', 'work.location', 'short_term', 'high', ['job', 'location']);
-    add(intent.expectedSalary, 'compensation', 'work.compensation', 'short_term', 'normal', ['job', 'compensation']);
-    add(intent.jobSearchStatus, 'goal', 'career.search_status', 'short_term', 'high', ['job', 'career']);
-    add(intent.careerGoal, 'goal', 'career.direction', 'long_term', 'high', ['career', 'job']);
-    for (const value of intent.constraints) add(value, 'constraint', '', 'long_term', 'normal', ['job', 'career']);
-    for (const value of intent.workPreferences) add(value, 'preference', '', 'long_term', 'normal', ['job', 'work']);
-    for (const value of intent.learningPreferences) add(value, 'preference', '', 'long_term', 'normal', ['learning']);
-    return rows;
   }
 
   private patchToCandidates(patch: Record<string, unknown>, sourceConversationId: string | null) {

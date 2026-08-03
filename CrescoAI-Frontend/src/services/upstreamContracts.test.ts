@@ -774,6 +774,7 @@ describe('normalizeProfileSuggestion', () => {
   it('copies array patches into a new suggestion object', () => {
     const incomingArray = ['Frontend implementation', 'AI-assisted delivery'];
     const suggestion = normalizeProfileSuggestion({
+      row_id: 42,
       id: 'suggestion-strengths',
       title: 'Sharpen strengths',
       rationale: 'Use clearer phrasing.',
@@ -783,6 +784,7 @@ describe('normalizeProfileSuggestion', () => {
       },
     });
 
+    expect(suggestion.rowId).toBe(42);
     expect(suggestion.sourceThreadId).toBe('thread-002');
     expect(suggestion.patch.careerProfile?.skills).toEqual(incomingArray);
     expect(suggestion.patch.careerProfile?.skills).not.toBe(incomingArray);

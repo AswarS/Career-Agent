@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { careerAgentFileDownloadTokenSecret } from '../security.config.js';
 
 const tokenType = 'career-agent-file-download';
 const tokenVersion = 'v1';
@@ -105,20 +106,13 @@ function safeEqualBase64Url(value: string, expected: string) {
 }
 
 function sign(value: string) {
-  return createHmac('sha256', fileDownloadTokenSecret()).update(value).digest('base64url');
+  return createHmac('sha256', careerAgentFileDownloadTokenSecret())
+    .update(value)
+    .digest('base64url');
 }
 
 function base64UrlJson(value: unknown) {
   return Buffer.from(JSON.stringify(value), 'utf8').toString('base64url');
-}
-
-function fileDownloadTokenSecret() {
-  return (
-    process.env.CAREER_AGENT_FILE_DOWNLOAD_TOKEN_SECRET ??
-    process.env.CAREER_AGENT_JWT_SECRET ??
-    process.env.JWT_SECRET ??
-    'career-agent-dev-secret'
-  );
 }
 
 function fileDownloadTokenExpiresInSeconds() {

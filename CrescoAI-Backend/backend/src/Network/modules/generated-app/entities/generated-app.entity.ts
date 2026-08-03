@@ -1,6 +1,17 @@
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  Index,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 
 @Entity('generated_apps')
+@Index(
+  'IDX_generated_apps_user_conversation_created',
+  ['userId', 'conversationId', 'createdAt'],
+)
 export class GeneratedAppEntity {
   @PrimaryGeneratedColumn({ type: 'integer' })
   id!: number;

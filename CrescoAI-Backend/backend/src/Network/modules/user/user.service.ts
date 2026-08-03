@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { join } from 'node:path';
 import { rm } from 'node:fs/promises';
@@ -12,6 +12,7 @@ import { TeamEntity } from '../team/entities/team.entity';
 import { UserEntity } from './entities/user.entity';
 import { ResourceEntity } from '../resource/entities/resource.entity';
 import { GeneratedAppEntity } from '../generated-app/entities/generated-app.entity';
+import { enqueueAccountStatusChanged } from '../integration/account-publication';
 import { BaseProfileEntity } from '../profile/entities/base-profile.entity';
 import { ProfileStateEntity } from '../profile/entities/profile-state.entity';
 import { ProfileMemoryItemEntity } from '../profile/entities/profile-memory-item.entity';
@@ -27,12 +28,20 @@ export class UserService {
     @InjectDataSource() private readonly dataSource: DataSource,
     @InjectRepository(ConversationEntity)
     private readonly conversationRepo: Repository<ConversationEntity>,
+    @InjectRepository(UserEntity)
+    private readonly userRepo: Repository<UserEntity>,
   ) {}
 
-  async deleteUserCascade(targetUserId: number, requesterUserId?: number) {
+  async deleteUserCascade(targetUserIdentity: string, requesterUserId?: number) {
     if (!requesterUserId) {
       throw new ForbiddenException('Missing user identity');
     }
+
+    const targetUser = await this.findUserByPublicOrLegacyId(targetUserIdentity);
+    if (!targetUser) {
+      throw new NotFoundException('User not found');
+    }
+    const targetUserId = targetUser.id;
     if (requesterUserId !== targetUserId) {
       throw new ForbiddenException('You can only delete your own account data');
     }
@@ -42,11 +51,21 @@ export class UserService {
       select: ['id'],
     });
     const conversationIds = conversations.map((c) => c.id);
+    const occurredAt = new Date();
+    const accountVersion = (targetUser.accountVersion ?? 0) + 1;
 
     await this.dataSource.transaction(async (manager) => {
+      await enqueueAccountStatusChanged(
+        manager,
+        targetUser,
+        'disabled',
+        accountVersion,
+        occurredAt,
+      );
       if (conversationIds.length > 0) {
         await manager.delete(MessageEntity, { conversationId: In(conversationIds) });
       }
+      await manager.delete(MessageEntity, { userId: targetUserId });
       await manager.delete(ConversationEntity, { userId: targetUserId });
       await manager.delete(MemoryEntity, { userId: targetUserId });
       await manager.delete(ApiSettingsEntity, { userId: targetUserId });
@@ -68,9 +87,25 @@ export class UserService {
 
     return {
       success: true,
-      userId: targetUserId,
+      userId: targetUser.publicUserId ?? String(targetUserId),
+      publicUserId: targetUser.publicUserId ?? null,
       deletedConversations: conversationIds.length,
     };
+  }
+
+  private async findUserByPublicOrLegacyId(identity: string) {
+    const byPublicId = await this.userRepo.findOne({
+      where: { publicUserId: identity },
+    });
+    if (byPublicId) {
+      return byPublicId;
+    }
+
+    const legacyId = Number(identity);
+    if (!Number.isInteger(legacyId) || legacyId < 1) {
+      return null;
+    }
+    return this.userRepo.findOne({ where: { id: legacyId } });
   }
 
   private async cleanupUserFiles(userId: number) {

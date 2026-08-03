@@ -19,8 +19,9 @@
     "start": "bun run ./src/bootstrap-entry.ts",
     "version": "bun run ./src/bootstrap-entry.ts --version",
     "dev:restore-check": "bun run ./src/dev-entry.ts",
-    "network:dev": "bun run ./src/Network/main.ts",
-    "network:start": "bun run ./src/Network/main.ts"
+    "network:dev": "bun run network:migrate && bun run ./src/Network/main.ts",
+    "network:start": "bun run ./src/Network/main.ts",
+    "network:migrate": "bun run ./src/Network/run-migrations.ts"
   },
   "dependencies": {
     "@alcalzone/ansi-tokenize": "*",

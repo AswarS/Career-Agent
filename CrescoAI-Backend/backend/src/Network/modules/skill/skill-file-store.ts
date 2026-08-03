@@ -1,4 +1,4 @@
-import { isAbsolute, join, resolve } from 'node:path';
+import { delimiter, isAbsolute, join, resolve } from 'node:path';
 import { access, readFile, writeFile, mkdir, readdir, rm } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { parseFrontmatter } from '../../../utils/frontmatterParser.js';
@@ -109,7 +109,7 @@ export async function listExternalSkillDirs(): Promise<string[]> {
   }
 
   const dirs: string[] = [];
-  for (const rawDir of configured.split(':')) {
+  for (const rawDir of configured.split(delimiter)) {
     const trimmed = rawDir.trim();
     if (!trimmed) continue;
 

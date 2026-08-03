@@ -6,6 +6,8 @@ import { readStoredAuthSession, writeStoredAuthSession } from './authSessionStor
 
 interface UpstreamAuthUser {
   id?: string | number;
+  public_user_id?: string | number;
+  publicUserId?: string | number;
   user_id?: string | number;
   userId?: string | number;
   email?: string | null;
@@ -48,12 +50,19 @@ function normalizeExpiresIn(value: unknown) {
   return Number.isFinite(numericValue) ? numericValue : null;
 }
 
-function normalizeAuthSession(input: UpstreamAuthSession, fallbackIdentifier = ''): AuthSession {
+export function normalizeAuthSession(input: UpstreamAuthSession, fallbackIdentifier = ''): AuthSession {
   const user = input.user ?? {};
   const email = normalizeOptionalString(user.email);
   const username = normalizeOptionalString(user.username);
   const fallbackName = fallbackIdentifier.includes('@') ? fallbackIdentifier.split('@')[0] : fallbackIdentifier;
-  const id = String(user.userId ?? user.user_id ?? user.id ?? fallbackIdentifier).trim();
+  const id = String(
+    user.publicUserId
+    ?? user.public_user_id
+    ?? user.userId
+    ?? user.user_id
+    ?? user.id
+    ?? '',
+  ).trim();
   if (!id) {
     throw new Error('Authentication response is missing the user identity.');
   }

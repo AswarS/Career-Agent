@@ -190,6 +190,8 @@ export interface UpstreamMessageStreamEvent {
 }
 
 export interface UpstreamProfileSuggestion {
+  rowId?: number;
+  row_id?: number;
   id: string;
   title: string;
   rationale: string;
@@ -1297,8 +1299,12 @@ export function normalizeMessageStreamEvent(
 
 export function normalizeProfileSuggestion(input: UpstreamProfileSuggestion): ProfileSuggestion {
   const patch = sanitizeProfileRecord(input.patch);
+  const rowId = input.rowId ?? input.row_id;
 
   return {
+    ...(Number.isInteger(rowId) && Number(rowId) > 0
+      ? { rowId: Number(rowId) }
+      : {}),
     id: input.id,
     title: input.title,
     rationale: input.rationale,

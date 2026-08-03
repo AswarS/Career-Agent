@@ -19,18 +19,22 @@ import { ProfilePolicyService } from './profile-policy.service';
 import { ProfileRecallService } from './profile-recall.service';
 import { ProfileMaintenanceService } from './profile-maintenance.service';
 import { ProfileLegacyMigrationService } from './profile-legacy-migration.service';
+import { ProfileExternalSnapshotService } from './profile-external-snapshot.service';
+import { ProfileLegacyAdapterService } from './profile-legacy-adapter.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([
-    UserEntity,
-    ProfileSuggestionEntity,
-    BaseProfileEntity,
-    ProfileStateEntity,
-    ProfileRevisionEntity,
-    ProfileMemoryItemEntity,
-    ProfileProjectionJobEntity,
-    ProfileChangeProposalEntity,
-  ])],
+  imports: [
+    TypeOrmModule.forFeature([
+      UserEntity,
+      ProfileSuggestionEntity,
+      BaseProfileEntity,
+      ProfileStateEntity,
+      ProfileRevisionEntity,
+      ProfileMemoryItemEntity,
+      ProfileProjectionJobEntity,
+      ProfileChangeProposalEntity,
+    ]),
+  ],
   controllers: [ProfileController],
   providers: [
     ProfileService,
@@ -43,6 +47,8 @@ import { ProfileLegacyMigrationService } from './profile-legacy-migration.servic
     ProfileRecallService,
     ProfileMaintenanceService,
     ProfileLegacyMigrationService,
+    ProfileExternalSnapshotService,
+    ProfileLegacyAdapterService,
   ],
   exports: [
     ProfileService,
@@ -52,6 +58,7 @@ import { ProfileLegacyMigrationService } from './profile-legacy-migration.servic
     ProfileProposalService,
     ProfileRecallService,
     ProfileMaintenanceService,
+    ProfileExternalSnapshotService,
   ],
 })
 export class ProfileModule {}

@@ -1,6 +1,10 @@
-import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
 
 @Entity('messages')
+@Index(
+  'IDX_messages_user_conversation_created',
+  ['userId', 'conversationId', 'createdAt'],
+)
 export class MessageEntity {
   @PrimaryGeneratedColumn({ type: 'integer' })
   id!: number;
