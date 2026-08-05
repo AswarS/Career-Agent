@@ -5,7 +5,10 @@ import { storeToRefs } from 'pinia';
 import { useAuthStore } from '../../stores/auth';
 import { useWorkspaceStore } from '../../stores/workspace';
 import { runtimeConfig } from '../../config/runtime';
-import { createPraxisSsoClient } from '../../services/praxisSsoClient';
+import {
+  createPraxisSsoClient,
+  praxisSsoErrorMessage,
+} from '../../services/praxisSsoClient';
 
 const props = withDefaults(defineProps<{
   layoutMode?: 'desktop' | 'mobile';
@@ -208,9 +211,7 @@ async function launchPraxis() {
     await praxisSsoClient.launch();
   } catch (error) {
     praxisLaunchStatus.value = 'error';
-    praxisLaunchError.value = error instanceof Error
-      ? error.message
-      : '无法进入 Praxis。';
+    praxisLaunchError.value = praxisSsoErrorMessage(error);
   }
 }
 
