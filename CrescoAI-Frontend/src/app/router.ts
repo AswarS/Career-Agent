@@ -5,8 +5,10 @@ import AuthPage from '../pages/AuthPage.vue';
 import ConversationLandingPage from '../pages/ConversationLandingPage.vue';
 import ConversationWorkspacePage from '../pages/ConversationWorkspacePage.vue';
 import ProfilePage from '../pages/ProfilePage.vue';
+import PraxisSsoPage from '../pages/PraxisSsoPage.vue';
 import SettingsPage from '../pages/SettingsPage.vue';
 import { useAuthStore } from '../stores/auth';
+import { PRAXIS_SSO_ENTRY_PATH, resolveAuthNavigation } from './authNavigation';
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -18,6 +20,11 @@ export const router = createRouter({
       meta: {
         public: true,
       },
+    },
+    {
+      path: PRAXIS_SSO_ENTRY_PATH,
+      name: 'praxis-sso',
+      component: PraxisSsoPage,
     },
     {
       path: '/',
@@ -58,18 +65,10 @@ router.beforeEach(async (to) => {
   const authStore = useAuthStore();
   await authStore.initialize();
 
-  if (to.meta.public) {
-    return authStore.isAuthenticated ? '/' : true;
-  }
-
-  if (!authStore.isAuthenticated) {
-    return {
-      name: 'auth',
-      query: {
-        redirect: to.fullPath,
-      },
-    };
-  }
-
-  return true;
+  return resolveAuthNavigation({
+    isAuthenticated: authStore.isAuthenticated,
+    isPublic: Boolean(to.meta.public),
+    fullPath: to.fullPath,
+    redirect: to.query.redirect,
+  });
 });

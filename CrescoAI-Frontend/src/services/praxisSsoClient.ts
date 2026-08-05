@@ -30,6 +30,12 @@ export interface SsoDocumentLike {
   createElement(tagName: 'input'): InputLike;
 }
 
+export function praxisSsoErrorMessage(error: unknown) {
+  return error instanceof Error && error.message.trim()
+    ? error.message
+    : '无法进入 Praxis，请稍后重试。';
+}
+
 export function submitPraxisTicket(
   response: PraxisTicketResponse,
   documentRef: SsoDocumentLike = document as unknown as SsoDocumentLike,

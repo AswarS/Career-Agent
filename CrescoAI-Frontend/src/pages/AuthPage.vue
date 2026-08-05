@@ -3,6 +3,7 @@ import { computed, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
 import { useAuthStore } from '../stores/auth';
+import { resolvePostAuthRedirect } from '../app/authNavigation';
 
 type AuthMode = 'login' | 'register';
 
@@ -88,8 +89,7 @@ async function handleSubmit() {
       });
     }
 
-    const redirectPath = typeof route.query.redirect === 'string' ? route.query.redirect : '/';
-    await router.replace(redirectPath.startsWith('/auth') ? '/' : redirectPath);
+    await router.replace(resolvePostAuthRedirect(route.query.redirect));
   } catch {
     // Store-level errorMessage owns the visible failure state.
   }
