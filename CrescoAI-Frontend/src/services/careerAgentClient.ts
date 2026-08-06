@@ -21,6 +21,13 @@ import type {
   CreateProfileMemoryInput,
   ReplaceProfileMemoryInput,
 } from '../modules/profile/profileV2Types';
+import type {
+  CareerProfileProductView,
+  ProfileProductMutationInput,
+  ProfileRefreshJob,
+  ProfileEvidenceView,
+  ProfileEvidenceNavigation,
+} from '../modules/profile/profileProductTypes';
 
 export interface CreateThreadInput {
   title?: string;
@@ -61,6 +68,13 @@ export interface CareerAgentClient {
     options?: { suggestionRowId?: number },
   ): Promise<ProfileRecord>;
   listProfileSuggestions(): Promise<ProfileSuggestion[]>;
+  getProductProfile?(): Promise<CareerProfileProductView>;
+  mutateProductProfile?(input: ProfileProductMutationInput): Promise<CareerProfileProductView>;
+  createProfileRefreshJob?(clientRequestId?: string): Promise<ProfileRefreshJob>;
+  getCurrentProfileRefreshJob?(): Promise<ProfileRefreshJob | null>;
+  getProfileRefreshJob?(jobId: string): Promise<ProfileRefreshJob>;
+  getProfileEvidence?(evidenceRef: string): Promise<ProfileEvidenceView>;
+  getProfileEvidenceNavigation?(evidenceRef: string): Promise<ProfileEvidenceNavigation>;
   getBaseProfile?(): Promise<BaseProfileRecord>;
   updateBaseProfile?(patch: BaseProfilePatch, expectedVersion: number): Promise<BaseProfileRecord>;
   listProfileMemories?(filters?: Record<string, string>): Promise<ProfileMemoryRecord[]>;

@@ -157,6 +157,7 @@ export interface ProfileContextRecord {
 export interface ProfileMutationMeta {
   sourceType: ProfileSourceType;
   expectedVersion?: number;
+  expectedAggregateVersion?: number;
   sourceConversationId?: string | null;
   sourceMessageId?: string | null;
   userConfirmed?: boolean;

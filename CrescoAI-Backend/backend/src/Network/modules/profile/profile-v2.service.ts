@@ -61,7 +61,20 @@ export class ProfileV2Service {
 
     await this.ensureProfileInitialized(userId);
     return this.dataSource.transaction(async (manager) => {
-      const entity = await manager.findOneOrFail(BaseProfileEntity, { where: { userId } });
+      const [entity, existingState] = await Promise.all([
+        manager.findOneOrFail(BaseProfileEntity, { where: { userId } }),
+        manager.findOneOrFail(ProfileStateEntity, { where: { userId } }),
+      ]);
+
+      if (
+        meta.expectedAggregateVersion !== undefined
+        && meta.expectedAggregateVersion !== existingState.aggregateVersion
+      ) {
+        throw profileVersionConflict(
+          meta.expectedAggregateVersion,
+          existingState.aggregateVersion,
+        );
+      }
 
       const expectedVersion = meta.expectedVersion ?? (input as UpdateBaseProfileDto).expectedVersion;
       if (expectedVersion !== undefined && expectedVersion !== entity.version) {
@@ -73,16 +86,7 @@ export class ProfileV2Service {
       entity.version += 1;
       const saved = await manager.save(entity);
 
-      let state = await manager.findOne(ProfileStateEntity, { where: { userId } });
-      if (!state) {
-        state = manager.create(ProfileStateEntity, {
-          userId,
-          aggregateVersion: 1,
-          projectionVersion: 0,
-          projectionStatus: 'pending',
-          nextProfileIndex: 1,
-        });
-      }
+      const state = existingState;
       state.aggregateVersion += 1;
       state.projectionStatus = 'pending';
       await manager.save(state);

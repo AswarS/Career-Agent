@@ -14,6 +14,8 @@ import { ProfileProjectionJobEntity } from './modules/profile/entities/profile-p
 import { ProfileRevisionEntity } from './modules/profile/entities/profile-revision.entity.js';
 import { ProfileStateEntity } from './modules/profile/entities/profile-state.entity.js';
 import { ProfileSuggestionEntity } from './modules/profile/entities/profile-suggestion.entity.js';
+import { ProfileEvidenceLinkEntity } from './modules/profile/entities/profile-evidence-link.entity.js';
+import { ProfileRefreshJobEntity } from './modules/profile/entities/profile-refresh-job.entity.js';
 import { ResourceEntity } from './modules/resource/entities/resource.entity.js';
 import { ApiSettingsEntity } from './modules/settings/entities/api-settings.entity.js';
 import { TeamEntity } from './modules/team/entities/team.entity.js';
@@ -43,5 +45,7 @@ export const careerAgentEntities = [
   ProfileMemoryItemEntity,
   ProfileProjectionJobEntity,
   ProfileChangeProposalEntity,
+  ProfileEvidenceLinkEntity,
+  ProfileRefreshJobEntity,
   IntegrationOutboxEntity,
 ];

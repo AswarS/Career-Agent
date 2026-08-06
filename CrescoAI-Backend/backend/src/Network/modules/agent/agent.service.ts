@@ -68,7 +68,17 @@ import { ProfileMemoryService } from '../profile/profile-memory.service';
 import { ProfileProposalService } from '../profile/profile-proposal.service';
 import { createProfileTools } from '../profile/profile.tools';
 import { ProfileRecallService } from '../profile/profile-recall.service';
+import { ProfileProductProjectionService } from '../profile/profile-product-projection.service';
+import { ProfileProductMutationService } from '../profile/profile-product-mutation.service';
+import { ProfileEvidenceService } from '../profile/profile-evidence.service';
+import {
+  decodeProfileProductMemoryValue,
+  isListProfileProductCodec,
+  listProfileProductFieldDefinitions,
+} from '../profile/profile-product-field.registry';
+import { listProfileEvidenceCandidates } from '../../memory/conversationMemoryIndex.js';
 import { loadAgentSessionHistory } from './agent-session-recovery.js';
+import type { Tool } from '../../../Tool.js';
 
 // ---------------------------------------------------------------------------
 // JSONL helpers
@@ -552,7 +562,84 @@ export class AgentService {
     @Optional() private readonly profileMemoryService?: ProfileMemoryService,
     @Optional() private readonly profileProposalService?: ProfileProposalService,
     @Optional() private readonly profileRecallService?: ProfileRecallService,
+    @Optional() private readonly profileProductProjectionService?: ProfileProductProjectionService,
+    @Optional() private readonly profileProductMutationService?: ProfileProductMutationService,
+    @Optional() private readonly profileEvidenceService?: ProfileEvidenceService,
   ) {}
+
+  /**
+   * Run a service-owned Profile maintenance loop with no conversation,
+   * transcript, Conversation Memory checkpoint, generated-file scan, or SSE.
+   * The caller supplies an exact allowlist containing only profile_read and
+   * profile_update; the final model reply is deliberately discarded.
+   */
+  async runEphemeralProfileRefresh(input: {
+    userId: number;
+    prompt: string;
+    tools: Tool[];
+    abortSignal?: AbortSignal;
+  }): Promise<void> {
+    if (input.tools.length !== 2
+      || new Set(input.tools.map((tool) => tool.name)).size !== 2
+      || !input.tools.every((tool) => tool.name === 'profile_read' || tool.name === 'profile_update')) {
+      throw new Error('Profile refresh runner requires the exact Profile tool allowlist');
+    }
+    const saved = await this.settingsService?.getApiSettings(input.userId);
+    const jobSessionId = `profile-refresh-${randomUUID()}`;
+    const ctx = this.buildSessionContext(jobSessionId, String(input.userId), {
+      apiKey: saved?.apiKey,
+      baseUrl: saved?.baseUrl,
+      provider: saved?.provider,
+      model: saved?.model,
+    });
+    ctx.state.sessionPersistenceDisabled = true;
+    ctx.config.appendSystemPrompt = input.prompt;
+    ctx.config.conversationMemoryDir = undefined;
+    ctx.config.conversationMemorySessionFile = undefined;
+    const timeout = setTimeout(() => ctx.abortController.abort(), 600_000);
+    const externalAbort = () => ctx.abortController.abort();
+    input.abortSignal?.addEventListener('abort', externalAbort, { once: true });
+
+    const previous = {
+      apiKey: process.env.ANTHROPIC_API_KEY,
+      baseUrl: process.env.ANTHROPIC_BASE_URL,
+      model: process.env.ANTHROPIC_MODEL,
+    };
+    try {
+      if (saved?.apiKey) process.env.ANTHROPIC_API_KEY = saved.apiKey;
+      if (saved?.baseUrl) process.env.ANTHROPIC_BASE_URL = saved.baseUrl;
+      if (saved?.model) process.env.ANTHROPIC_MODEL = saved.model;
+      await runWithSessionContext(ctx, async () => {
+        const queryEngine = createQueryEngineForSession(ctx, {
+          initialMessages: [],
+          commands: [],
+          exactTools: input.tools,
+        });
+        ctx.queryEngine = queryEngine;
+        const stream = queryEngine.submitMessage(
+          'Review the supplied evidence catalog and refresh the Profile now.',
+          { uuid: randomUUID() },
+        );
+        for await (const _event of stream) {
+          if (ctx.abortController.signal.aborted) break;
+        }
+      });
+      if (ctx.abortController.signal.aborted) throw new Error('PROFILE_REFRESH_TIMEOUT');
+    } finally {
+      clearTimeout(timeout);
+      input.abortSignal?.removeEventListener('abort', externalAbort);
+      ctx.abortController.abort();
+      ctx.queryEngine = null;
+      this.restoreEnvironment('ANTHROPIC_API_KEY', previous.apiKey);
+      this.restoreEnvironment('ANTHROPIC_BASE_URL', previous.baseUrl);
+      this.restoreEnvironment('ANTHROPIC_MODEL', previous.model);
+    }
+  }
+
+  private restoreEnvironment(name: string, value: string | undefined) {
+    if (value === undefined) delete process.env[name];
+    else process.env[name] = value;
+  }
 
   async runIsolatedPrompt(input: {
     userId: string;
@@ -1364,6 +1451,7 @@ export class AgentService {
               conversationId,
               messageInput.attachments ?? [],
             );
+            ctx.state.currentProfileSourceMessageId = userMessageId;
             const conversationMemoryTurnPrompt =
               await prepareConversationMemoryTurn(
                 ctx,
@@ -1625,6 +1713,7 @@ export class AgentService {
       }
 
       await flushSessionStorage();
+      await this.linkCurrentTurnProfileEvidence(Number(userId), conversationId, userMessageId);
 
       const generatedFiles = await this.scanGeneratedFiles(
         getNetworkUserWorkspaceDir(userId),
@@ -1742,6 +1831,7 @@ export class AgentService {
               conversationId,
               attachments,
             );
+            ctx.state.currentProfileSourceMessageId = userMessageId;
             const conversationMemoryTurnPrompt =
               await prepareConversationMemoryTurn(
                 ctx,
@@ -1896,6 +1986,7 @@ export class AgentService {
       }
 
       await flushSessionStorage();
+      await this.linkCurrentTurnProfileEvidence(Number(userId), conversationId, userMessageId);
 
       const generatedFiles = await this.scanGeneratedFiles(
         getNetworkUserWorkspaceDir(userId),
@@ -1925,6 +2016,57 @@ export class AgentService {
     sinceMs: number,
   ): Promise<GeneratedFile[]> {
     return discoverGeneratedFiles(workspaceDir, sinceMs);
+  }
+
+  private async linkCurrentTurnProfileEvidence(
+    userId: number,
+    conversationId: string,
+    sourceMessageId: string,
+  ) {
+    if (!this.profileEvidenceService || !this.profileMemoryService) return;
+    try {
+      const [memories, units] = await Promise.all([
+        this.profileMemoryService.findActiveEntities(userId),
+        listProfileEvidenceCandidates(
+          getNetworkConversationMemoryDir(String(userId)),
+          { limit: 100, maxChars: 50_000 },
+        ),
+      ]);
+      const currentUnits = units.filter((unit) =>
+        unit.conversationId === conversationId
+        && unit.sourcePrecision === 'turn'
+        && unit.sourceTurnId === sourceMessageId);
+      if (!currentUnits.length) return;
+      const definitions = listProfileProductFieldDefinitions();
+      for (const memory of memories) {
+        if (memory.sourceConversationId !== conversationId
+          || memory.sourceMessageId !== sourceMessageId) continue;
+        const definition = definitions.find((candidate) =>
+          candidate.storage === 'memory'
+          && (candidate.slotKey === memory.slotKey || candidate.aliases?.includes(memory.slotKey)));
+        if (!definition) continue;
+        const decoded = decodeProfileProductMemoryValue(definition, memory.content);
+        const values: Array<string | undefined> = isListProfileProductCodec(definition.codec)
+          ? (Array.isArray(decoded) ? decoded : [])
+          : [undefined];
+        for (const value of values) {
+          for (const unit of currentUnits) {
+            await this.profileEvidenceService.attach(userId, {
+              fieldKey: definition.fieldKey,
+              value,
+              targetType: 'memory_value',
+              profileMemoryItemId: memory.id,
+              profileItemVersion: memory.itemVersion,
+            }, unit, { origin: 'current_turn' });
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('[AgentService] current-turn Profile evidence linking failed', {
+        userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   private buildSessionContext(
@@ -2135,10 +2277,14 @@ export class AgentService {
     return createProfileTools({
       userId: Number(userId),
       conversationId,
+      sourceMessageId: () => this.sessionContexts.get(conversationId)
+        ?.state.currentProfileSourceMessageId ?? null,
       baseService: this.profileV2Service,
       memoryService: this.profileMemoryService,
       proposalService: this.profileProposalService,
       recallService: this.profileRecallService,
+      productProjectionService: this.profileProductProjectionService,
+      productMutationService: this.profileProductMutationService,
     });
   }
 

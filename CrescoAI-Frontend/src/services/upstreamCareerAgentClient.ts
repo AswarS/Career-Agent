@@ -15,6 +15,13 @@ import type {
   CreateProfileMemoryInput,
   ReplaceProfileMemoryInput,
 } from '../modules/profile/profileV2Types';
+import type {
+  CareerProfileProductView,
+  ProfileProductMutationInput,
+  ProfileRefreshJob,
+  ProfileEvidenceView,
+  ProfileEvidenceNavigation,
+} from '../modules/profile/profileProductTypes';
 import { rememberUploadedAssetPresentation } from './uploadedAssetPresentationCache';
 import type {
   UpstreamArtifactRecord,
@@ -454,6 +461,32 @@ export function createUpstreamCareerAgentClient(
       );
 
       return (payload ?? []).map(normalizeProfileSuggestion);
+    },
+    async getProductProfile() {
+      return requestJson<CareerProfileProductView>(CAREER_AGENT_API_ROUTES.profileProduct());
+    },
+    async mutateProductProfile(input: ProfileProductMutationInput) {
+      return requestJson<CareerProfileProductView>(CAREER_AGENT_API_ROUTES.profileProduct(), {
+        method: 'PATCH',
+        data: input,
+      });
+    },
+    async createProfileRefreshJob(clientRequestId?: string) {
+      return requestJson<ProfileRefreshJob>(CAREER_AGENT_API_ROUTES.profileRefreshJobs(), {
+        method: 'POST', data: { clientRequestId },
+      });
+    },
+    async getCurrentProfileRefreshJob() {
+      return requestJson<ProfileRefreshJob | null>(CAREER_AGENT_API_ROUTES.profileRefreshJobCurrent());
+    },
+    async getProfileRefreshJob(jobId: string) {
+      return requestJson<ProfileRefreshJob>(CAREER_AGENT_API_ROUTES.profileRefreshJob(jobId));
+    },
+    async getProfileEvidence(evidenceRef: string) {
+      return requestJson<ProfileEvidenceView>(CAREER_AGENT_API_ROUTES.profileEvidence(evidenceRef));
+    },
+    async getProfileEvidenceNavigation(evidenceRef: string) {
+      return requestJson<ProfileEvidenceNavigation>(CAREER_AGENT_API_ROUTES.profileEvidenceNavigation(evidenceRef));
     },
     async getBaseProfile() {
       return requestJson<BaseProfileRecord>(CAREER_AGENT_API_ROUTES.profileBase());

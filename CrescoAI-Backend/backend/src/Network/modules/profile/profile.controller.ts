@@ -29,6 +29,9 @@ import { ProfileMaintenanceService } from './profile-maintenance.service';
 import { profileAccessDenied, profileValidationError } from './profile.errors';
 import { profileFeatureFlags } from './profile-feature-flags';
 import { ProfileExternalSnapshotService } from './profile-external-snapshot.service';
+import { ProfileProductProjectionService } from './profile-product-projection.service';
+import { ProfileProductMutationService } from './profile-product-mutation.service';
+import { MutateProfileProductDto } from './dto/profile-product.dto';
 
 @Controller('api/career-agent/profile')
 export class ProfileController {
@@ -39,7 +42,36 @@ export class ProfileController {
     private readonly profileProposalService: ProfileProposalService,
     private readonly profileMaintenanceService: ProfileMaintenanceService,
     private readonly externalSnapshotService: ProfileExternalSnapshotService,
+    private readonly productProjectionService: ProfileProductProjectionService,
+    private readonly productMutationService: ProfileProductMutationService,
   ) {}
+
+  @Get('product')
+  getProductProfile(@Req() req: Request) {
+    if (!profileFeatureFlags.productView()) {
+      throw profileAccessDenied('Profile product view is disabled');
+    }
+    return this.productProjectionService.getProductProfile(req.userId!);
+  }
+
+  @Patch('product')
+  mutateProductProfile(
+    @Req() req: Request,
+    @Body() dto: MutateProfileProductDto,
+  ) {
+    if (!profileFeatureFlags.productMutations()) {
+      throw profileAccessDenied('Profile product mutations are disabled');
+    }
+    return this.productMutationService.mutate(req.userId!, {
+      expectedVersion: dto.expectedVersion,
+      fieldKey: dto.fieldKey,
+      operation: dto.operation,
+      value: dto.value,
+    }, {
+      actorType: 'user',
+      sourceType: 'user_ui',
+    });
+  }
 
   @Get()
   getProfile(@Req() req: Request) {

@@ -39,7 +39,7 @@ const navItems = computed(() => [
   { label: '设置', icon: 'settings' as const, to: '/settings' },
 ]);
 
-const isThreadRoute = computed(() => route.name === 'thread');
+const isThreadRoute = computed(() => route.name === 'thread' || route.name === 'related-thread');
 const sideRailContentId = 'side-rail-content';
 const isMobileLayout = computed(() => props.layoutMode === 'mobile');
 const isVisible = computed(() => !isMobileLayout.value || mobileSideRailOpen.value);

@@ -42,6 +42,11 @@ export const router = createRouter({
           props: true,
         },
         {
+          path: 'related/:evidenceRef',
+          name: 'related-thread',
+          component: ConversationWorkspacePage,
+        },
+        {
           path: 'profile',
           name: 'profile',
           component: ProfilePage,

@@ -10,14 +10,20 @@ import type { ProfileMemoryService } from './profile-memory.service';
 import type { ProfileProposalService } from './profile-proposal.service';
 import type { ProfileV2Service } from './profile-v2.service';
 import type { ProfileRecallService } from './profile-recall.service';
+import type { ProfileProductProjectionService } from './profile-product-projection.service';
+import type { ProfileProductMutationService } from './profile-product-mutation.service';
+import { PROFILE_PRODUCT_FIELD_KEYS } from './profile-product.types';
 
 export interface ProfileToolRuntime {
   userId: number;
   conversationId: string;
+  sourceMessageId?: string | (() => string | null | undefined);
   baseService: ProfileV2Service;
   memoryService: ProfileMemoryService;
   proposalService: ProfileProposalService;
   recallService?: ProfileRecallService;
+  productProjectionService?: ProfileProductProjectionService;
+  productMutationService?: ProfileProductMutationService;
 }
 
 type ProfileReadMode = 'summary' | 'relevant';
@@ -77,6 +83,13 @@ async function readMemory(
 }
 
 export function createCompactProfileTools(runtime: ProfileToolRuntime): Tool[] {
+  if (
+    profileFeatureFlags.productAgentWorkflow()
+    && runtime.productProjectionService
+    && runtime.productMutationService
+  ) {
+    return createProductProfileTools(runtime);
+  }
   const readInput = lazySchema(() => z.union([
     z.strictObject({ source: z.literal('basic') }),
     z.strictObject({
@@ -252,6 +265,121 @@ export function createCompactProfileTools(runtime: ProfileToolRuntime): Tool[] {
           reasons: update.decision.reasons,
           proposalId: update.proposal?.id,
           data,
+        } } };
+      },
+    } satisfies ToolDef<any, any>),
+  ];
+}
+
+export function createProductProfileTools(runtime: ProfileToolRuntime): Tool[] {
+  const readInput = lazySchema(() => z.union([
+    z.strictObject({ source: z.literal('product') }),
+    z.strictObject({
+      source: z.literal('relevant'),
+      query: z.string().min(1).max(2_000),
+    }),
+  ]));
+  const updateInput = lazySchema(() => z.strictObject({
+    fieldKey: z.enum(PROFILE_PRODUCT_FIELD_KEYS),
+    operation: z.enum(['set', 'clear', 'add', 'remove']),
+    value: z.union([
+      z.string().max(2_000),
+      z.array(z.string().max(500)).max(50),
+      z.number().min(0).max(80),
+      z.null(),
+    ]).optional(),
+    evidence: z.enum([
+      'current_user_explicit',
+      'recalled_user_explicit',
+      'grounded_summary',
+    ]),
+    rationale: z.string().min(1).max(1_000),
+  }));
+
+  return [
+    buildTool({
+      ...common,
+      name: 'profile_read',
+      isReadOnly: () => true,
+      searchHint: 'read the authenticated user product career profile',
+      async description() {
+        return 'Read the current product career and learning Profile. Use source=product before Profile management; use source=relevant when the current career task only needs relevant Profile context.';
+      },
+      async prompt() {
+        return `${PROFILE_MEMORY_SCOPE_PROMPT}\n\nThe product view uses stable fieldKey values and never exposes internal Profile levels, indexes, source ids, or storage paths. Read before changing an existing field when its current value matters.`;
+      },
+      get inputSchema() { return readInput(); },
+      get outputSchema() { return resultSchema(); },
+      async call(input) {
+        if (input.source === 'relevant' && runtime.recallService) {
+          return { data: { result: {
+            source: 'relevant',
+            data: await runtime.recallService.buildContext(runtime.userId, input.query),
+          } } };
+        }
+        return { data: { result: {
+          source: 'product',
+          data: await runtime.productProjectionService!.getProductProfile(runtime.userId),
+        } } };
+      },
+    } satisfies ToolDef<any, any>),
+    buildTool({
+      ...common,
+      name: 'profile_update',
+      searchHint: 'automatically update one grounded product career profile field',
+      async description() {
+        return 'Automatically set or clear one stable product Profile field after the user explicitly provides a durable career or learning fact. The server owns internal levels, slots, versioning, and audit.';
+      },
+      async prompt() {
+        return `${PROFILE_MEMORY_SCOPE_PROMPT}\n\nUpdate exactly one field per call. For list fields, prefer add/remove so an incremental fact cannot erase existing items; set replaces the full field and requires explicit complete replacement evidence. Use current_user_explicit only for facts stated in the current user turn, recalled_user_explicit only for a recalled attributable user statement, and grounded_summary only for a conservative synthesis supported by saved facts. Temporary task filters, assistant suggestions, questions asked, and content merely read are not Profile changes. Do not narrate the update after the tool returns.`;
+      },
+      get inputSchema() { return updateInput(); },
+      get outputSchema() { return resultSchema(); },
+      async call(input) {
+        const before = await runtime.productProjectionService!.getProductProfile(runtime.userId);
+        const sourceType = input.evidence === 'current_user_explicit'
+          ? 'user_explicit' as const
+          : input.evidence === 'recalled_user_explicit'
+            ? 'multi_conversation_summary' as const
+            : 'agent_summary' as const;
+        let after;
+        try {
+          after = await runtime.productMutationService!.mutate(runtime.userId, {
+            expectedVersion: before.version,
+            fieldKey: input.fieldKey,
+            operation: input.operation,
+            value: input.value,
+          }, {
+            actorType: 'agent',
+            sourceType,
+            sourceConversationId: runtime.conversationId,
+            sourceMessageId: typeof runtime.sourceMessageId === 'function'
+              ? runtime.sourceMessageId() ?? null
+              : runtime.sourceMessageId ?? null,
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          if (!message.toLowerCase().includes('version')) throw error;
+          const latest = await runtime.productProjectionService!.getProductProfile(runtime.userId);
+          after = await runtime.productMutationService!.mutate(runtime.userId, {
+            expectedVersion: latest.version,
+            fieldKey: input.fieldKey,
+            operation: input.operation,
+            value: input.value,
+          }, {
+            actorType: 'agent',
+            sourceType,
+            sourceConversationId: runtime.conversationId,
+            sourceMessageId: typeof runtime.sourceMessageId === 'function'
+              ? runtime.sourceMessageId() ?? null
+              : runtime.sourceMessageId ?? null,
+          });
+        }
+        return { data: { result: {
+          target: 'product_profile',
+          field: input.fieldKey,
+          outcome: after.version === before.version ? 'no_change' : 'applied',
+          profileVersion: after.version,
         } } };
       },
     } satisfies ToolDef<any, any>),

@@ -21,6 +21,11 @@ import { ProfileMaintenanceService } from './profile-maintenance.service';
 import { ProfileLegacyMigrationService } from './profile-legacy-migration.service';
 import { ProfileExternalSnapshotService } from './profile-external-snapshot.service';
 import { ProfileLegacyAdapterService } from './profile-legacy-adapter.service';
+import { ProfileProductProjectionService } from './profile-product-projection.service';
+import { ProfileProductMutationService } from './profile-product-mutation.service';
+import { ProfileEvidenceLinkEntity } from './entities/profile-evidence-link.entity';
+import { ProfileEvidenceService } from './profile-evidence.service';
+import { ConversationEntity } from '../conversation/entities/conversation.entity';
 
 @Module({
   imports: [
@@ -33,6 +38,8 @@ import { ProfileLegacyAdapterService } from './profile-legacy-adapter.service';
       ProfileMemoryItemEntity,
       ProfileProjectionJobEntity,
       ProfileChangeProposalEntity,
+      ProfileEvidenceLinkEntity,
+      ConversationEntity,
     ]),
   ],
   controllers: [ProfileController],
@@ -49,6 +56,9 @@ import { ProfileLegacyAdapterService } from './profile-legacy-adapter.service';
     ProfileLegacyMigrationService,
     ProfileExternalSnapshotService,
     ProfileLegacyAdapterService,
+    ProfileProductProjectionService,
+    ProfileProductMutationService,
+    ProfileEvidenceService,
   ],
   exports: [
     ProfileService,
@@ -59,6 +69,9 @@ import { ProfileLegacyAdapterService } from './profile-legacy-adapter.service';
     ProfileRecallService,
     ProfileMaintenanceService,
     ProfileExternalSnapshotService,
+    ProfileProductProjectionService,
+    ProfileProductMutationService,
+    ProfileEvidenceService,
   ],
 })
 export class ProfileModule {}

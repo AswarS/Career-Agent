@@ -34,3 +34,26 @@ export type ConversationMemorySearchResult = {
   content: string
   score: number
 }
+
+export type ConversationMemoryEvidencePrecision = 'turn' | 'summary'
+
+/** Internal-only Profile evidence unit. Never expose path/conversationId directly. */
+export type ConversationMemoryEvidenceUnit = {
+  unitId: string
+  path: string
+  conversationId: string
+  heading: string
+  content: string
+  contentHash: string
+  summaryRevision: number
+  summaryUpdatedAt: string
+  sourceTurnId: string | null
+  sourcePrecision: ConversationMemoryEvidencePrecision
+  score: number
+}
+
+export type ProfileEvidenceSearchOptions = {
+  limit?: number
+  maxChars?: number
+  excludeConversationIds?: Iterable<string>
+}

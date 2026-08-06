@@ -10,6 +10,12 @@ export const CAREER_AGENT_API_ROUTE_PATTERNS = {
   threadFiles: `${CAREER_AGENT_API_BASE_PATH}/threads/:threadId/files`,
   threadFile: `${CAREER_AGENT_API_BASE_PATH}/threads/:threadId/files/:fileName`,
   profile: `${CAREER_AGENT_API_BASE_PATH}/profile`,
+  profileProduct: `${CAREER_AGENT_API_BASE_PATH}/profile/product`,
+  profileRefreshJobs: `${CAREER_AGENT_API_BASE_PATH}/profile/refresh-jobs`,
+  profileRefreshJobCurrent: `${CAREER_AGENT_API_BASE_PATH}/profile/refresh-jobs/current`,
+  profileRefreshJob: `${CAREER_AGENT_API_BASE_PATH}/profile/refresh-jobs/:jobId`,
+  profileEvidence: `${CAREER_AGENT_API_BASE_PATH}/profile/evidence/:evidenceRef`,
+  profileEvidenceNavigation: `${CAREER_AGENT_API_BASE_PATH}/profile/evidence/:evidenceRef/navigation`,
   profileSuggestions: `${CAREER_AGENT_API_BASE_PATH}/profile/suggestions`,
   profileBase: `${CAREER_AGENT_API_BASE_PATH}/profile/base`,
   profileState: `${CAREER_AGENT_API_BASE_PATH}/profile/state`,
@@ -84,6 +90,11 @@ export const CAREER_AGENT_API_ROUTE_DESCRIPTORS = [
     method: 'PUT',
     path: CAREER_AGENT_API_ROUTE_PATTERNS.profile,
     purpose: '持久化前端显式提交的画像编辑。',
+  },
+  {
+    method: 'GET/PATCH',
+    path: CAREER_AGENT_API_ROUTE_PATTERNS.profileProduct,
+    purpose: '读取或按聚合版本更新统一的职业与学习画像。',
   },
   {
     method: 'GET',
@@ -181,6 +192,20 @@ export const CAREER_AGENT_API_ROUTES = {
   },
   profile() {
     return CAREER_AGENT_API_ROUTE_PATTERNS.profile;
+  },
+  profileProduct() {
+    return CAREER_AGENT_API_ROUTE_PATTERNS.profileProduct;
+  },
+  profileRefreshJobs() { return CAREER_AGENT_API_ROUTE_PATTERNS.profileRefreshJobs; },
+  profileRefreshJobCurrent() { return CAREER_AGENT_API_ROUTE_PATTERNS.profileRefreshJobCurrent; },
+  profileRefreshJob(jobId: string) {
+    return CAREER_AGENT_API_ROUTE_PATTERNS.profileRefreshJob.replace(':jobId', encodeURIComponent(jobId));
+  },
+  profileEvidence(evidenceRef: string) {
+    return CAREER_AGENT_API_ROUTE_PATTERNS.profileEvidence.replace(':evidenceRef', encodeURIComponent(evidenceRef));
+  },
+  profileEvidenceNavigation(evidenceRef: string) {
+    return CAREER_AGENT_API_ROUTE_PATTERNS.profileEvidenceNavigation.replace(':evidenceRef', encodeURIComponent(evidenceRef));
   },
   profileSuggestions() {
     return CAREER_AGENT_API_ROUTE_PATTERNS.profileSuggestions;

@@ -26,6 +26,7 @@ import { SkillService } from '../skill/skill.service';
 import type { SkillHandlerResult, SkillProgressEvent } from '../skill/skill.registry';
 import { ArtifactService } from '../artifact/artifact.service';
 import { ProfileService } from '../profile/profile.service';
+import { ProfileEvidenceLinkEntity } from '../profile/entities/profile-evidence-link.entity';
 import { ConversationTranscriptProjectionService } from './transcript-projection.service.js';
 import {
   createSkillLoadedBlock,
@@ -549,6 +550,14 @@ export class ConversationService implements OnModuleInit {
     try {
       await this.dataSource.transaction(async (manager) => {
         await manager.save(ConversationCleanupTaskEntity, cleanupTask);
+        await manager.update(ProfileEvidenceLinkEntity, {
+          userId: conversation.userId,
+          conversationId: conversation.id,
+          status: 'active',
+        }, {
+          status: 'invalidated',
+          invalidatedReason: 'conversation_deleted',
+        });
         await manager.delete(MessageEntity, {
           userId: conversation.userId,
           conversationId: conversation.id,

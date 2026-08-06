@@ -2,9 +2,14 @@ import { createHash } from 'node:crypto'
 import { mkdir, readFile, readdir } from 'node:fs/promises'
 import { join, relative, resolve, sep } from 'node:path'
 import sqlite3 from 'sqlite3'
-import type { ConversationMemorySearchResult } from './conversationMemoryTypes.js'
+import { parse as parseYaml } from 'yaml'
+import type {
+  ConversationMemoryEvidenceUnit,
+  ConversationMemorySearchResult,
+  ProfileEvidenceSearchOptions,
+} from './conversationMemoryTypes.js'
 
-const INDEX_SCHEMA_VERSION = '1'
+const INDEX_SCHEMA_VERSION = '2'
 const MAX_RECALL_TERMS = 48
 const CJK_RECALL_STOP_TERMS = new Set([
   '一下',
@@ -36,6 +41,8 @@ type Chunk = {
   hash: string
 }
 
+type EvidenceUnit = Omit<ConversationMemoryEvidenceUnit, 'score'>
+
 type ConversationMemorySearchOptions = {
   excludePaths?: Iterable<string>
 }
@@ -49,11 +56,35 @@ export async function syncConversationMemoryIndex(
   const db = await openDatabase(join(indexDir, 'conversation-memory.sqlite'))
   try {
     await initializeSchema(db)
-    const chunks = await collectChunks(canonicalRoot)
+    const documents = await collectDocuments(canonicalRoot)
+    const chunks = documents.flatMap((document) =>
+      chunkMarkdown(canonicalRoot, document.path, document.content),
+    )
+    const evidenceUnits = documents.flatMap((document) =>
+      extractEvidenceUnits(canonicalRoot, document.path, document.content),
+    )
+    const previousEvidenceRows = await all(
+      db,
+      'SELECT unit_id, source_turn_id, source_precision FROM evidence_units',
+    )
+    const previousEvidence = new Map(previousEvidenceRows.map((row) => [String(row.unit_id), row]))
+    const isFirstEvidenceBuild = previousEvidenceRows.length === 0
+    for (const unit of evidenceUnits) {
+      const previous = previousEvidence.get(unit.unitId)
+      if (previous) {
+        unit.sourceTurnId = previous.source_turn_id ? String(previous.source_turn_id) : null
+        unit.sourcePrecision = previous.source_precision === 'turn' ? 'turn' : 'summary'
+      } else if (isFirstEvidenceBuild) {
+        unit.sourceTurnId = null
+        unit.sourcePrecision = 'summary'
+      }
+    }
     await run(db, 'BEGIN IMMEDIATE')
     try {
       await run(db, 'DELETE FROM chunks')
       await run(db, 'DELETE FROM chunks_fts')
+      await run(db, 'DELETE FROM evidence_units')
+      await run(db, 'DELETE FROM evidence_units_fts')
       for (const chunk of chunks) {
         await run(
           db,
@@ -77,6 +108,25 @@ export async function syncConversationMemoryIndex(
           [chunk.content, chunk.heading, chunk.path, chunk.id],
         )
       }
+      for (const unit of evidenceUnits) {
+        await run(
+          db,
+          `INSERT INTO evidence_units
+            (unit_id, path, conversation_id, heading, content, content_hash,
+             summary_revision, summary_updated_at, source_turn_id, source_precision)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [unit.unitId, unit.path, unit.conversationId, unit.heading, unit.content,
+            unit.contentHash, unit.summaryRevision, unit.summaryUpdatedAt,
+            unit.sourceTurnId, unit.sourcePrecision],
+        )
+        await run(
+          db,
+          `INSERT INTO evidence_units_fts
+            (content, heading, conversation_id, unit_id)
+           VALUES (?, ?, ?, ?)`,
+          [unit.content, unit.heading, unit.conversationId, unit.unitId],
+        )
+      }
       await run(
         db,
         `INSERT OR REPLACE INTO metadata (key, value) VALUES
@@ -88,6 +138,107 @@ export async function syncConversationMemoryIndex(
       await run(db, 'ROLLBACK').catch(() => {})
       throw error
     }
+  } finally {
+    await closeDatabase(db)
+  }
+}
+
+/**
+ * Internal bounded candidate search for Profile refresh. It intentionally
+ * returns service-only metadata; callers must replace it with job-local refs
+ * before placing candidates in model context.
+ */
+export async function searchProfileEvidenceCandidates(
+  rootDir: string,
+  queries: string[],
+  options: ProfileEvidenceSearchOptions = {},
+): Promise<ConversationMemoryEvidenceUnit[]> {
+  await syncConversationMemoryIndex(rootDir)
+  const db = await openDatabase(
+    join(resolve(rootDir), '.index', 'conversation-memory.sqlite'),
+  )
+  try {
+    const limit = Math.max(1, Math.min(Math.trunc(options.limit ?? 60), 100))
+    const maxChars = Math.max(2_000, Math.min(options.maxChars ?? 28_000, 50_000))
+    const excluded = new Set(options.excludeConversationIds ?? [])
+    const terms = extractConversationMemoryRecallTerms(queries.join(' '))
+    let rows: Array<Record<string, unknown>>
+    if (terms.length) {
+      const ranks: string[] = []
+      const params: unknown[] = []
+      for (const term of terms.slice(0, 32)) {
+        const weight = recallTermWeight(term)
+        ranks.push(`(CASE WHEN content LIKE ? ESCAPE '\\' THEN ${weight} ELSE 0 END + CASE WHEN heading LIKE ? ESCAPE '\\' THEN ${weight * 2} ELSE 0 END)`)
+        const pattern = `%${escapeLikeTerm(term)}%`
+        params.push(pattern, pattern)
+      }
+      rows = await all(
+        db,
+        `SELECT *, ${ranks.join(' + ')} AS relevance
+           FROM evidence_units
+          WHERE (${ranks.join(' + ')}) > 0
+          ORDER BY relevance DESC, summary_updated_at DESC
+          LIMIT ?`,
+        [...params, ...params, limit * 3],
+      )
+    } else {
+      rows = await all(
+        db,
+        `SELECT *, 0 AS relevance FROM evidence_units
+          ORDER BY summary_updated_at DESC LIMIT ?`,
+        [limit * 3],
+      )
+    }
+    const results: ConversationMemoryEvidenceUnit[] = []
+    let usedChars = 0
+    for (const row of rows) {
+      if (excluded.has(String(row.conversation_id))) continue
+      const content = String(row.content)
+      if (usedChars + content.length > maxChars && results.length) break
+      results.push(mapEvidenceRow(row))
+      usedChars += content.length
+      if (results.length >= limit) break
+    }
+    return results
+  } finally {
+    await closeDatabase(db)
+  }
+}
+
+export async function listProfileEvidenceCandidates(
+  rootDir: string,
+  options: ProfileEvidenceSearchOptions = {},
+): Promise<ConversationMemoryEvidenceUnit[]> {
+  return searchProfileEvidenceCandidates(rootDir, [], options)
+}
+
+export async function resolveConversationEvidenceUnit(
+  rootDir: string,
+  unitId: string,
+): Promise<ConversationMemoryEvidenceUnit | null> {
+  const units = await resolveConversationEvidenceUnits(rootDir, [unitId])
+  return units.get(unitId) ?? null
+}
+
+export async function resolveConversationEvidenceUnits(
+  rootDir: string,
+  unitIds: Iterable<string>,
+): Promise<Map<string, ConversationMemoryEvidenceUnit>> {
+  await syncConversationMemoryIndex(rootDir)
+  const db = await openDatabase(join(resolve(rootDir), '.index', 'conversation-memory.sqlite'))
+  try {
+    const ids = [...new Set(unitIds)].filter(Boolean).slice(0, 100)
+    if (!ids.length) return new Map()
+    const rows = await all(
+      db,
+      `SELECT *, 0 AS relevance FROM evidence_units
+        WHERE unit_id IN (${ids.map(() => '?').join(', ')})`,
+      ids,
+    )
+    return new Map(rows.map((row) => {
+      const unit = mapEvidenceRow(row)
+      return [unit.unitId, unit] as const
+    }))
   } finally {
     await closeDatabase(db)
   }
@@ -157,7 +308,7 @@ export async function searchConversationMemory(
   }
 }
 
-async function collectChunks(rootDir: string): Promise<Chunk[]> {
+async function collectDocuments(rootDir: string): Promise<Array<{ path: string; content: string }>> {
   // MEMORY.md is a server-generated aggregate of sessions/*.md. Index only
   // the canonical session sources so duplicate projections do not consume the
   // recall limit or prompt budget.
@@ -175,7 +326,7 @@ async function collectChunks(rootDir: string): Promise<Chunk[]> {
     // The layout bootstrap will repair the directory on the next turn.
   }
 
-  const chunks: Chunk[] = []
+  const documents: Array<{ path: string; content: string }> = []
   for (const path of paths) {
     let content: string
     try {
@@ -183,9 +334,110 @@ async function collectChunks(rootDir: string): Promise<Chunk[]> {
     } catch {
       continue
     }
-    chunks.push(...chunkMarkdown(rootDir, path, content))
+    documents.push({ path, content })
   }
-  return chunks
+  return documents
+}
+
+export function extractConversationMemoryEvidenceUnits(
+  relativePath: string,
+  content: string,
+): EvidenceUnit[] {
+  return extractEvidenceUnits('', relativePath, content, true)
+}
+
+function extractEvidenceUnits(
+  rootDir: string,
+  path: string,
+  content: string,
+  pathIsRelative = false,
+): EvidenceUnit[] {
+  const normalized = content.replaceAll('\r\n', '\n')
+  const frontmatterMatch = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/.exec(normalized)
+  if (!frontmatterMatch) return []
+  let metadata: Record<string, unknown>
+  try {
+    metadata = parseYaml(frontmatterMatch[1]) as Record<string, unknown>
+  } catch {
+    return []
+  }
+  const conversationId = String(metadata.conversation_id ?? '').trim()
+  if (!conversationId) return []
+  const revision = Number(metadata.revision ?? 0)
+  const updatedAt = String(metadata.updated_at ?? '')
+  const lastTurn = String(metadata.last_processed_turn ?? '').trim()
+  const relativePath = pathIsRelative
+    ? path.split(sep).join('/')
+    : relative(rootDir, path).split(sep).join('/')
+  const lines = frontmatterMatch[2].split('\n')
+  const units: EvidenceUnit[] = []
+  const occurrences = new Map<string, number>()
+  let heading = '(document)'
+  let paragraph: string[] = []
+  const flushParagraph = () => {
+    const text = paragraph.join(' ').trim()
+    paragraph = []
+    if (text) addUnit(text)
+  }
+  const addUnit = (raw: string) => {
+    const text = raw.replace(/^[-*+]\s+/, '').trim()
+    if (!text || /^No durable session facts/i.test(text)) return
+    const contentHash = sha256(text)
+    const occurrenceKey = `${heading}\0${contentHash}`
+    const occurrence = (occurrences.get(occurrenceKey) ?? 0) + 1
+    occurrences.set(occurrenceKey, occurrence)
+    units.push({
+      unitId: sha256(`${conversationId}:${heading}:${contentHash}:${occurrence}`),
+      path: relativePath,
+      conversationId,
+      heading,
+      content: text,
+      contentHash,
+      summaryRevision: Number.isFinite(revision) ? revision : 0,
+      summaryUpdatedAt: updatedAt,
+      // syncConversationMemoryIndex downgrades the first full rebuild. On a
+      // later checkpoint, a new/changed unit can be attributed to the summary's
+      // last processed turn while unchanged units retain their prior lineage.
+      sourceTurnId: lastTurn && lastTurn !== 'bootstrap' ? lastTurn : null,
+      sourcePrecision: lastTurn && lastTurn !== 'bootstrap' ? 'turn' : 'summary',
+    })
+  }
+  for (const line of lines) {
+    const h2 = /^##\s+(.+?)\s*$/.exec(line)
+    if (h2) {
+      flushParagraph()
+      heading = h2[1]
+      continue
+    }
+    if (/^[-*+]\s+/.test(line)) {
+      flushParagraph()
+      addUnit(line)
+      continue
+    }
+    if (!line.trim()) {
+      flushParagraph()
+      continue
+    }
+    if (!/^#/.test(line)) paragraph.push(line.trim())
+  }
+  flushParagraph()
+  return units
+}
+
+function mapEvidenceRow(row: Record<string, unknown>): ConversationMemoryEvidenceUnit {
+  return {
+    unitId: String(row.unit_id),
+    path: String(row.path),
+    conversationId: String(row.conversation_id),
+    heading: String(row.heading),
+    content: String(row.content),
+    contentHash: String(row.content_hash),
+    summaryRevision: Number(row.summary_revision ?? 0),
+    summaryUpdatedAt: String(row.summary_updated_at ?? ''),
+    sourceTurnId: row.source_turn_id ? String(row.source_turn_id) : null,
+    sourcePrecision: row.source_precision === 'turn' ? 'turn' : 'summary',
+    score: Number(row.relevance ?? 0),
+  }
 }
 
 export function chunkConversationMemoryMarkdown(
@@ -404,6 +656,32 @@ async function initializeSchema(db: sqlite3.Database): Promise<void> {
       heading,
       path UNINDEXED,
       chunk_id UNINDEXED,
+      tokenize = 'unicode61'
+    )`,
+  )
+  await run(
+    db,
+    `CREATE TABLE IF NOT EXISTS evidence_units (
+      unit_id TEXT PRIMARY KEY,
+      path TEXT NOT NULL,
+      conversation_id TEXT NOT NULL,
+      heading TEXT NOT NULL,
+      content TEXT NOT NULL,
+      content_hash TEXT NOT NULL,
+      summary_revision INTEGER NOT NULL,
+      summary_updated_at TEXT NOT NULL,
+      source_turn_id TEXT,
+      source_precision TEXT NOT NULL
+    )`,
+  )
+  await run(db, 'CREATE INDEX IF NOT EXISTS idx_evidence_units_conversation ON evidence_units(conversation_id)')
+  await run(
+    db,
+    `CREATE VIRTUAL TABLE IF NOT EXISTS evidence_units_fts USING fts5(
+      content,
+      heading,
+      conversation_id UNINDEXED,
+      unit_id UNINDEXED,
       tokenize = 'unicode61'
     )`,
   )

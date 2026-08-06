@@ -7,11 +7,13 @@ import ConversationMessageCard from '../modules/conversation/ConversationMessage
 import MobileRailTrigger from '../modules/navigation/MobileRailTrigger.vue';
 import { shouldUseMultiAgentPresentation } from '../modules/conversation/messagePresentation';
 import { useWorkspaceStore } from '../stores/workspace';
+import { useProfileProductStore } from '../modules/profile/profileProductStore';
 import type { AskQuestionResponse, DraftMessageSubmission, MessageAction } from '../types/entities';
 
 const route = useRoute();
 const router = useRouter();
 const workspaceStore = useWorkspaceStore();
+const profileProductStore = useProfileProductStore();
 const {
   activeThread,
   errorMessage,
@@ -22,7 +24,10 @@ const {
 } = storeToRefs(workspaceStore);
 const minimumRunningIndicatorMs = 360;
 
-const threadId = computed(() => String(route.params.threadId ?? 'thread-001'));
+const relatedThreadId = ref<string | null>(null);
+const threadId = computed(() => route.params.threadId
+  ? String(route.params.threadId)
+  : relatedThreadId.value ?? '');
 const multiAgentMode = computed(() => shouldUseMultiAgentPresentation(messages.value));
 const localSubmitRunning = ref(false);
 const localSubmitThreadId = ref<string | null>(null);
@@ -48,10 +53,26 @@ async function scrollConversationToBottom(behavior: ScrollBehavior = 'auto') {
 }
 
 watch(
+  () => route.params.evidenceRef,
+  async (evidenceRef) => {
+    relatedThreadId.value = null;
+    if (!evidenceRef) return;
+    try {
+      const navigation = await profileProductStore.resolveEvidenceNavigation(String(evidenceRef));
+      relatedThreadId.value = navigation.threadId;
+    } catch {
+      workspaceStore.errorMessage = '对应的相关会话已不可用';
+    }
+  },
+  { immediate: true },
+);
+
+watch(
   threadId,
   async (value) => {
+    if (!value) return;
     const activeThreadId = await workspaceStore.setActiveThread(value);
-    if (activeThreadId && activeThreadId !== value) {
+    if (activeThreadId && activeThreadId !== value && route.name !== 'related-thread') {
       await router.replace(`/threads/${activeThreadId}`);
     }
 

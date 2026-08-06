@@ -434,6 +434,8 @@ export function createQueryEngineForSession(
     initialMessages?: any[]
     readFileCache?: FileStateCache
     mcpTools?: any[]
+    /** Exact service-owned tool pool for restricted ephemeral runners. */
+    exactTools?: Tool[]
   } = {},
 ): QueryEngine {
   const { getAppState, setAppState } = createServerAppState(context.config.permissions)
@@ -446,9 +448,10 @@ export function createQueryEngineForSession(
 
   // Merge MCP tools if provided
   const mcpTools = options.mcpTools ?? []
-  const tools = mcpTools.length > 0
-    ? assembleToolPool(toolPermissionContext, mcpTools)
-    : builtInTools
+  const tools = options.exactTools
+    ?? (mcpTools.length > 0
+      ? assembleToolPool(toolPermissionContext, mcpTools)
+      : builtInTools)
   const appendSystemPrompt = [
     CAREER_AGENT_LEARNING_SYSTEM_PROMPT,
     getProfileAgentSystemPrompt(),
@@ -460,14 +463,14 @@ export function createQueryEngineForSession(
     cwd: context.config.cwd,
     tools,
     commands: options.commands ?? [],
-    mcpClients: context.mcpClients ?? [],
+    mcpClients: (context.mcpClients ?? []) as unknown as QueryEngineConfig['mcpClients'],
     agents: [],
     canUseTool,
     requireCanUseTool: true,
     getAppState,
     setAppState,
     initialMessages: options.initialMessages ?? [],
-    readFileCache: options.readFileCache ?? new Map() as FileStateCache,
+    readFileCache: options.readFileCache ?? new Map() as unknown as FileStateCache,
     appendSystemPrompt,
     userSpecifiedModel: context.config.model,
     // TODO: read thinking config from SessionContext.config.thinkingMode once the

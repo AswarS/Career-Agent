@@ -45,6 +45,15 @@ const INDEXED_COMPACT_TOOL_WORKFLOW_PROMPT = `## Indexed tool workflow
 - The level submitted for replace classifies the resulting content. The server audits every replace as updateLevel L3.
 - Use target=basic only for explicitly stated stable career facts. profile_update never accepts a user-confirmation flag, UUID, file path, or arbitrary user id.`;
 
+const PRODUCT_TOOL_WORKFLOW_PROMPT = `## Product Profile workflow
+
+- Use profile_read source=product before managing the full Profile, and source=relevant when a normal career task only needs relevant current context.
+- Use profile_update with one stable fieldKey per call. For list fields, prefer add/remove for incremental facts; use set only when the user explicitly replaces the complete field. The server owns internal levels, slots, priority, versioning, and audit.
+- Update only explicit durable career facts, explicit long-term preferences, completed career activities, or grounded learning progress.
+- A temporary filter for the current task is not a persistent preference. An assistant recommendation is not a user fact.
+- Asking about or reading learning material does not advance learning progress. Only explicit completion or verifiable practice can do so.
+- All valid Profile changes apply automatically. Do not ask the user to confirm a Profile write.`;
+
 const LEGACY_TOOL_WORKFLOW_PROMPT = `## Legacy tool workflow
 
 - Use profile_get_basic for stable career facts and profile_memory_read for career goals, employment preferences, and job-search constraints.
@@ -52,35 +61,41 @@ const LEGACY_TOOL_WORKFLOW_PROMPT = `## Legacy tool workflow
 - Use profile_update_basic only for explicitly stated stable career-fact changes.
 - profile_memory_apply is only for a proposal that the server already marked as not requiring confirmation.`;
 
-function buildProfileAgentSystemPrompt(toolWorkflow: string) {
+function buildProfileAgentSystemPrompt(toolWorkflow: string, includeLevels = true) {
   return `# Career Agent Profile
 
 Use Profile tools when the current request depends on the authenticated user's career facts, career goals, employment preferences, or job-search constraints.
 
 ${PROFILE_MEMORY_SCOPE_PROMPT}
 
-${PROFILE_LEVEL_CLASSIFICATION_PROMPT}
+${includeLevels ? PROFILE_LEVEL_CLASSIFICATION_PROMPT : ''}
 
 ${toolWorkflow}
 
 - Read only relevant Profile context; do not request or invent another user id or file path.
-- If a tool reports that confirmation is required, explain the old and proposed values and ask the user to confirm through the Profile proposal action.
-- After an automatic update, briefly tell the user what was recorded, its L0-L3 classification, and whether it is short-term or long-term.
-- If a Profile tool fails, continue answering the user's main request and clearly say that this memory update was not saved.`;
+- Make the Profile decision and any necessary update before the final business answer.
+- profile_update is a normal visible tool call. Do not add a separate "Profile updated", "memory saved", classification, or maintenance message after it.
+- If a Profile tool fails, continue answering the user's main request without exposing internal ids, paths, or implementation details.`;
 }
 
 export const PROFILE_AGENT_SYSTEM_PROMPT = buildProfileAgentSystemPrompt(
-  profileFeatureFlags.indexedMutations()
-    ? INDEXED_COMPACT_TOOL_WORKFLOW_PROMPT
-    : COMPACT_TOOL_WORKFLOW_PROMPT,
+  profileFeatureFlags.productAgentWorkflow()
+    ? PRODUCT_TOOL_WORKFLOW_PROMPT
+    : profileFeatureFlags.indexedMutations()
+      ? INDEXED_COMPACT_TOOL_WORKFLOW_PROMPT
+      : COMPACT_TOOL_WORKFLOW_PROMPT,
+  !profileFeatureFlags.productAgentWorkflow(),
 );
 
 export function getProfileAgentSystemPrompt() {
   return buildProfileAgentSystemPrompt(
-    profileFeatureFlags.compactTools()
-      ? profileFeatureFlags.indexedMutations()
-        ? INDEXED_COMPACT_TOOL_WORKFLOW_PROMPT
-        : COMPACT_TOOL_WORKFLOW_PROMPT
-      : LEGACY_TOOL_WORKFLOW_PROMPT,
+    profileFeatureFlags.productAgentWorkflow()
+      ? PRODUCT_TOOL_WORKFLOW_PROMPT
+      : profileFeatureFlags.compactTools()
+        ? profileFeatureFlags.indexedMutations()
+          ? INDEXED_COMPACT_TOOL_WORKFLOW_PROMPT
+          : COMPACT_TOOL_WORKFLOW_PROMPT
+        : LEGACY_TOOL_WORKFLOW_PROMPT,
+    !profileFeatureFlags.productAgentWorkflow(),
   );
 }
