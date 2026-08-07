@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router';
 import ConversationComposer from '../modules/conversation/ConversationComposer.vue';
 import ConversationMessageCard from '../modules/conversation/ConversationMessageCard.vue';
 import MobileRailTrigger from '../modules/navigation/MobileRailTrigger.vue';
+import { findInteractiveReplyBoundary } from '../modules/conversation/interactiveReplyScroll';
 import { shouldUseMultiAgentPresentation } from '../modules/conversation/messagePresentation';
 import { useWorkspaceStore } from '../stores/workspace';
 import { useProfileProductStore } from '../modules/profile/profileProductStore';
@@ -29,6 +30,21 @@ const threadId = computed(() => route.params.threadId
   ? String(route.params.threadId)
   : relatedThreadId.value ?? '');
 const multiAgentMode = computed(() => shouldUseMultiAgentPresentation(messages.value));
+const messageRenderRevision = computed(() => messages.value.map((message) => [
+  message.id,
+  message.streaming ? 'streaming' : 'complete',
+  message.content.length,
+  message.stopReason ?? '',
+  (message.blocks ?? []).map((block) => [
+    block.id,
+    block.type,
+    block.status ?? '',
+    block.toolUseId ?? '',
+    block.text?.length ?? 0,
+    block.questions?.length ?? 0,
+    block.answers ? JSON.stringify(block.answers) : '',
+  ].join(':')).join(','),
+].join('|')).join('||'));
 const localSubmitRunning = ref(false);
 const localSubmitThreadId = ref<string | null>(null);
 const isConversationRunning = computed(() => (
@@ -36,10 +52,23 @@ const isConversationRunning = computed(() => (
   || (localSubmitRunning.value && localSubmitThreadId.value === threadId.value)
 ));
 const conversationScrollRegion = ref<HTMLElement | null>(null);
+const interactiveScrollAnchor = ref<{ threadId: string; toolUseId: string } | null>(null);
 let submitRunToken = 0;
+let scrollRequestToken = 0;
+let interactiveScrollAttemptToken = 0;
+
+function cancelInteractiveScrollAttempt() {
+  interactiveScrollAttemptToken += 1;
+}
 
 async function scrollConversationToBottom(behavior: ScrollBehavior = 'auto') {
+  const requestToken = ++scrollRequestToken;
   await nextTick();
+
+  if (requestToken !== scrollRequestToken) {
+    return;
+  }
+
   const scrollRegion = conversationScrollRegion.value;
 
   if (!scrollRegion) {
@@ -50,6 +79,114 @@ async function scrollConversationToBottom(behavior: ScrollBehavior = 'auto') {
     top: scrollRegion.scrollHeight,
     behavior,
   });
+}
+
+function findMessageElement(messageId: string) {
+  const scrollRegion = conversationScrollRegion.value;
+  if (!scrollRegion) {
+    return null;
+  }
+
+  return [...scrollRegion.querySelectorAll<HTMLElement>('[data-message-id]')]
+    .find((element) => element.dataset.messageId === messageId) ?? null;
+}
+
+function findQuestionElement(messageElement: HTMLElement, toolUseId: string) {
+  return [...messageElement.querySelectorAll<HTMLElement>('[data-ask-question-tool-use-id]')]
+    .find((element) => element.dataset.askQuestionToolUseId === toolUseId) ?? null;
+}
+
+function findQuestionReplyUnit(questionElement: HTMLElement) {
+  return questionElement.closest<HTMLElement>('[data-message-reply-unit]');
+}
+
+function findReplyUnitBeforeQuestion(questionElement: HTMLElement) {
+  const questionReplyUnit = questionElement.closest<HTMLElement>('[data-message-reply-unit]');
+  const previousReplyUnit = questionReplyUnit?.previousElementSibling;
+
+  return previousReplyUnit instanceof HTMLElement
+    && previousReplyUnit.matches('[data-message-reply-unit]')
+    ? previousReplyUnit
+    : null;
+}
+
+async function scrollToInteractiveReplyBoundary(
+  boundary: ReturnType<typeof findInteractiveReplyBoundary>,
+  toolUseId: string,
+  options: { allowWhileRunning?: boolean } = {},
+) {
+  if (!boundary) {
+    return false;
+  }
+
+  const requestToken = ++scrollRequestToken;
+  await nextTick();
+
+  if (requestToken !== scrollRequestToken) {
+    return false;
+  }
+
+  if (!options.allowWhileRunning && isConversationRunning.value) {
+    return false;
+  }
+
+  const scrollRegion = conversationScrollRegion.value;
+  const questionElement = findMessageElement(boundary.questionMessageId);
+  const questionCardElement = questionElement
+    ? findQuestionElement(questionElement, toolUseId)
+    : null;
+  const questionReplyUnit = questionCardElement
+    ? findQuestionReplyUnit(questionCardElement)
+    : null;
+  const previousReplyUnit = questionCardElement
+    ? findReplyUnitBeforeQuestion(questionCardElement)
+    : null;
+  const continuationElement = boundary.continuationMessageId
+    ? findMessageElement(boundary.continuationMessageId)
+    : null;
+  const targetElement = previousReplyUnit
+    ?? questionReplyUnit
+    ?? questionCardElement
+    ?? continuationElement
+    ?? questionElement;
+
+  if (!scrollRegion || !targetElement) {
+    return false;
+  }
+
+  const regionRect = scrollRegion.getBoundingClientRect();
+  const targetRect = targetElement.getBoundingClientRect();
+  const targetOffset = previousReplyUnit || questionReplyUnit || continuationElement
+    ? Math.min(96, Math.max(32, scrollRegion.clientHeight * 0.12))
+    : Math.max(24, (scrollRegion.clientHeight - targetRect.height) / 2);
+  const top = scrollRegion.scrollTop + targetRect.top - regionRect.top - targetOffset;
+
+  scrollRegion.scrollTo({
+    top: Math.max(0, top),
+    behavior: 'auto',
+  });
+  return true;
+}
+
+function restoreInteractiveScrollAnchorSoon() {
+  const scrollAnchor = interactiveScrollAnchor.value;
+  if (!scrollAnchor) {
+    return;
+  }
+
+  window.setTimeout(() => {
+    const currentAnchor = interactiveScrollAnchor.value;
+    if (
+      !currentAnchor
+      || currentAnchor.threadId !== scrollAnchor.threadId
+      || currentAnchor.toolUseId !== scrollAnchor.toolUseId
+    ) {
+      return;
+    }
+
+    const boundary = findInteractiveReplyBoundary(messages.value, scrollAnchor.toolUseId);
+    void scrollToInteractiveReplyBoundary(boundary, scrollAnchor.toolUseId, { allowWhileRunning: true });
+  }, 0);
 }
 
 watch(
@@ -71,6 +208,8 @@ watch(
   threadId,
   async (value) => {
     if (!value) return;
+    cancelInteractiveScrollAttempt();
+    interactiveScrollAnchor.value = null;
     const activeThreadId = await workspaceStore.setActiveThread(value);
     if (activeThreadId && activeThreadId !== value && route.name !== 'related-thread') {
       await router.replace(`/threads/${activeThreadId}`);
@@ -82,9 +221,39 @@ watch(
 );
 
 watch(
-  [messagesStatus, () => messages.value.length, isConversationRunning],
-  async ([status]) => {
+  [messagesStatus, messageRenderRevision, isConversationRunning],
+  async ([status, , running]) => {
     if (status !== 'ready') {
+      cancelInteractiveScrollAttempt();
+      return;
+    }
+
+    const scrollAnchor = interactiveScrollAnchor.value;
+    if (scrollAnchor && scrollAnchor.threadId === threadId.value) {
+      const attemptToken = ++interactiveScrollAttemptToken;
+      if (running) {
+        await nextTick();
+      } else {
+        await new Promise((resolve) => {
+          window.setTimeout(resolve, 240);
+        });
+      }
+
+      if (
+        attemptToken !== interactiveScrollAttemptToken
+        || interactiveScrollAnchor.value?.toolUseId !== scrollAnchor.toolUseId
+        || (!running && isConversationRunning.value)
+      ) {
+        return;
+      }
+
+      const boundary = findInteractiveReplyBoundary(messages.value, scrollAnchor.toolUseId);
+      await scrollToInteractiveReplyBoundary(
+        boundary,
+        scrollAnchor.toolUseId,
+        { allowWhileRunning: running },
+      );
+
       return;
     }
 
@@ -108,6 +277,9 @@ function waitForMinimumRunningTime(startedAt: number) {
 async function handleSubmit(submission: DraftMessageSubmission) {
   const currentToken = ++submitRunToken;
   const startedAt = Date.now();
+  cancelInteractiveScrollAttempt();
+  scrollRequestToken += 1;
+  interactiveScrollAnchor.value = null;
   localSubmitRunning.value = true;
   localSubmitThreadId.value = threadId.value;
 
@@ -132,7 +304,27 @@ async function handleMessageAction(action: MessageAction) {
 }
 
 async function handleQuestionResponse(toolUseId: string, response: AskQuestionResponse) {
-  await workspaceStore.respondToInteractiveTool(threadId.value, toolUseId, response);
+  cancelInteractiveScrollAttempt();
+  scrollRequestToken += 1;
+  if (
+    !interactiveScrollAnchor.value
+    || interactiveScrollAnchor.value.threadId !== threadId.value
+  ) {
+    interactiveScrollAnchor.value = {
+      threadId: threadId.value,
+      toolUseId,
+    };
+  }
+
+  try {
+    await workspaceStore.respondToInteractiveTool(threadId.value, toolUseId, response);
+    restoreInteractiveScrollAnchorSoon();
+  } catch (error) {
+    if (interactiveScrollAnchor.value?.toolUseId === toolUseId) {
+      interactiveScrollAnchor.value = null;
+    }
+    throw error;
+  }
 }
 </script>
 
@@ -167,6 +359,7 @@ async function handleQuestionResponse(toolUseId: string, response: AskQuestionRe
           <ConversationMessageCard
             v-for="message in messages"
             :key="message.id"
+            :data-message-id="message.id"
             :message="message"
             :multi-agent-mode="multiAgentMode"
             :respond-to-question="handleQuestionResponse"
@@ -214,6 +407,7 @@ async function handleQuestionResponse(toolUseId: string, response: AskQuestionRe
 .conversation-scroll-region {
   min-height: 0;
   overflow-y: auto;
+  overflow-anchor: none;
   scrollbar-gutter: stable;
   scroll-padding-bottom: 10px;
 }
