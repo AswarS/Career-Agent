@@ -12,10 +12,16 @@ import { PraxisIntegrationService } from './praxis-integration.service';
 import { PraxisServiceAuthGuard } from './praxis-service-auth.guard';
 import { PraxisSsoService } from './praxis-sso.service';
 import { PraxisOutboxPublisherService } from './praxis-outbox-publisher.service';
+import { PraxisBehaviorEventEntity } from './entities/praxis-behavior-event.entity';
+import { PraxisBehaviorEventService } from './praxis-behavior-event.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([UserEntity, IntegrationOutboxEntity]),
+    TypeOrmModule.forFeature([
+      UserEntity,
+      IntegrationOutboxEntity,
+      PraxisBehaviorEventEntity,
+    ]),
     ProfileModule,
   ],
   controllers: [
@@ -28,6 +34,7 @@ import { PraxisOutboxPublisherService } from './praxis-outbox-publisher.service'
     PraxisServiceAuthGuard,
     PraxisSsoService,
     PraxisOutboxPublisherService,
+    PraxisBehaviorEventService,
   ],
   exports: [PraxisIntegrationService, PraxisSsoService],
 })

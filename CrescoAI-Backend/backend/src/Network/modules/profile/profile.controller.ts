@@ -11,7 +11,7 @@ import {
   Query,
   Req,
 } from '@nestjs/common';
-import type { Request } from 'express';
+import type { AuthenticatedRequest } from '../auth/auth.types';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ProfileService } from './profile.service';
 import { ProfileV2Service } from './profile-v2.service';
@@ -47,7 +47,7 @@ export class ProfileController {
   ) {}
 
   @Get('product')
-  getProductProfile(@Req() req: Request) {
+  getProductProfile(@Req() req: AuthenticatedRequest) {
     if (!profileFeatureFlags.productView()) {
       throw profileAccessDenied('Profile product view is disabled');
     }
@@ -56,7 +56,7 @@ export class ProfileController {
 
   @Patch('product')
   mutateProductProfile(
-    @Req() req: Request,
+    @Req() req: AuthenticatedRequest,
     @Body() dto: MutateProfileProductDto,
   ) {
     if (!profileFeatureFlags.productMutations()) {
@@ -74,43 +74,46 @@ export class ProfileController {
   }
 
   @Get()
-  getProfile(@Req() req: Request) {
+  getProfile(@Req() req: AuthenticatedRequest) {
     return this.profileService.getProfile(req.userId!);
   }
 
   @Put()
-  updateProfile(@Req() req: Request, @Body() dto: UpdateProfileDto) {
+  updateProfile(
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: UpdateProfileDto,
+  ) {
     return this.profileService.updateProfile(req.userId!, dto);
   }
 
   @Get('suggestions')
-  listSuggestions(@Req() req: Request) {
+  listSuggestions(@Req() req: AuthenticatedRequest) {
     return this.profileService.listSuggestions(req.userId!);
   }
 
   @Post('suggestions/:rowId/reject')
   rejectSuggestion(
-    @Req() req: Request,
+    @Req() req: AuthenticatedRequest,
     @Param('rowId', ParseIntPipe) rowId: number,
   ) {
     return this.profileService.rejectSuggestion(req.userId!, rowId);
   }
 
   @Get('snapshot')
-  getExternalSnapshot(@Req() req: Request) {
+  getExternalSnapshot(@Req() req: AuthenticatedRequest) {
     this.assertV2Read();
     return this.externalSnapshotService.getCurrentSnapshot(req.userId!);
   }
 
   @Get('base')
-  getBaseProfile(@Req() req: Request) {
+  getBaseProfile(@Req() req: AuthenticatedRequest) {
     this.assertV2Read();
     return this.profileV2Service.getBaseProfile(req.userId!);
   }
 
   @Patch('base')
   updateBaseProfile(
-    @Req() req: Request,
+    @Req() req: AuthenticatedRequest,
     @Body() dto: UpdateBaseProfileDto,
   ) {
     return this.profileV2Service.updateBaseProfile(req.userId!, dto, {
@@ -123,7 +126,7 @@ export class ProfileController {
   }
 
   @Get('state')
-  async getProfileState(@Req() req: Request) {
+  async getProfileState(@Req() req: AuthenticatedRequest) {
     this.assertV2Read();
     const state = await this.profileV2Service.getState(req.userId!);
     return {
@@ -134,13 +137,19 @@ export class ProfileController {
   }
 
   @Get('memories')
-  listMemories(@Req() req: Request, @Query() query: QueryProfileMemoryDto) {
+  listMemories(
+    @Req() req: AuthenticatedRequest,
+    @Query() query: QueryProfileMemoryDto,
+  ) {
     this.assertV2Read();
     return this.profileMemoryService.list(req.userId!, query);
   }
 
   @Post('memories')
-  createMemory(@Req() req: Request, @Body() dto: CreateProfileMemoryDto) {
+  createMemory(
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: CreateProfileMemoryDto,
+  ) {
     return this.profileMemoryService.create(req.userId!, dto, {
       sourceType: 'user_ui',
       actorType: 'user',
@@ -151,7 +160,7 @@ export class ProfileController {
 
   @Patch('memories/:id')
   updateMemory(
-    @Req() req: Request,
+    @Req() req: AuthenticatedRequest,
     @Param('id') id: string,
     @Body() dto: UpdateProfileMemoryDto,
   ) {
@@ -165,7 +174,7 @@ export class ProfileController {
 
   @Put('memories/by-index/:profileIndex')
   replaceMemory(
-    @Req() req: Request,
+    @Req() req: AuthenticatedRequest,
     @Param('profileIndex') profileIndex: string,
     @Body() dto: ReplaceProfileMemoryDto,
   ) {
@@ -180,7 +189,7 @@ export class ProfileController {
 
   @Delete('memories/:id')
   async deleteMemory(
-    @Req() req: Request,
+    @Req() req: AuthenticatedRequest,
     @Param('id') id: string,
     @Query('expectedVersion') expectedVersion: string,
   ) {
@@ -193,14 +202,14 @@ export class ProfileController {
   }
 
   @Get('history')
-  history(@Req() req: Request, @Query('limit') limit?: string) {
+  history(@Req() req: AuthenticatedRequest, @Query('limit') limit?: string) {
     this.assertV2Read();
     return this.profileMemoryService.history(req.userId!, Number(limit) || 100);
   }
 
   @Get('proposals')
   listProposals(
-    @Req() req: Request,
+    @Req() req: AuthenticatedRequest,
     @Query('status') status?: 'pending' | 'applied' | 'rejected' | 'expired',
   ) {
     this.assertV2Read();
@@ -208,28 +217,40 @@ export class ProfileController {
   }
 
   @Post('proposals/memory')
-  proposeMemory(@Req() req: Request, @Body() dto: ProposeProfileMemoryDto) {
+  proposeMemory(
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: ProposeProfileMemoryDto,
+  ) {
     return this.profileProposalService.proposeMemory(req.userId!, dto);
   }
 
   @Post('proposals/base')
-  proposeBase(@Req() req: Request, @Body() dto: ProposeBaseProfileDto) {
+  proposeBase(
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: ProposeBaseProfileDto,
+  ) {
     return this.profileProposalService.proposeBase(req.userId!, dto);
   }
 
   @Post('proposals/:id/accept')
-  async acceptProposal(@Req() req: Request, @Param('id') id: string) {
+  async acceptProposal(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+  ) {
     const result = await this.profileProposalService.accept(req.userId!, id);
     return result.proposal;
   }
 
   @Post('proposals/:id/reject')
-  rejectProposal(@Req() req: Request, @Param('id') id: string) {
+  rejectProposal(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+  ) {
     return this.profileProposalService.reject(req.userId!, id);
   }
 
   @Get('health')
-  health(@Req() req: Request) {
+  health(@Req() req: AuthenticatedRequest) {
     this.assertV2Read();
     return this.profileMaintenanceService.health(req.userId!);
   }

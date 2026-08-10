@@ -41,6 +41,7 @@ jobs:
           bun test
           tests/profile-version.test.ts
           tests/praxis-integration.test.ts
+          tests/praxis-behavior-events.test.ts
           tests/profile-v2-snapshot-integration.test.ts
           tests/public-user-id.test.ts
           tests/career-agent-http-smoke.test.ts
@@ -60,12 +61,21 @@ jobs:
           --allowSyntheticDefaultImports
           --types node
           src/Network/migrations/1785128062000-AddPraxisIntegrationDelivery.ts
+          src/Network/migrations/1785128065000-PraxisBehaviorEvents.ts
           src/Network/modules/integration/account-publication.ts
+          src/Network/modules/integration/entities/praxis-behavior-event.entity.ts
+          src/Network/modules/integration/praxis-behavior-event.types.ts
+          src/Network/modules/integration/praxis-behavior-event.validation.ts
+          src/Network/modules/integration/praxis-behavior-evidence.policy.ts
+          src/Network/modules/integration/praxis-behavior-event.service.ts
+          src/Network/modules/integration/praxis-integration.controller.ts
+          src/Network/modules/integration/praxis-integration.module.ts
           src/Network/modules/integration/praxis-integration.config.ts
           src/Network/modules/integration/praxis-integration.service.ts
           src/Network/modules/integration/praxis-sso.service.ts
           src/Network/modules/profile/profile-legacy-adapter.service.ts
           src/Network/modules/profile/profile-v2.service.ts
+          src/Network/modules/profile/profile.controller.ts
           src/Network/modules/settings/settings.service.ts
           src/Network/modules/user/user.service.ts
 
