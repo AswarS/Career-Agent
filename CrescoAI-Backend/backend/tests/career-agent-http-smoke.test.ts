@@ -84,11 +84,14 @@ describe('Career Agent HTTP smoke flow', () => {
   const previousSchemaSync = process.env.CAREER_AGENT_SCHEMA_SYNC;
   const previousPraxisEnabled =
     process.env.CAREER_AGENT_PRAXIS_INTEGRATION_ENABLED;
+  const previousLegacyProfileSuggestions =
+    process.env.CAREER_AGENT_PROFILE_LEGACY_SUGGESTIONS;
 
   beforeAll(async () => {
     process.env.CAREER_AGENT_JWT_SECRET = 'career-agent-http-smoke-secret';
     process.env.CAREER_AGENT_SCHEMA_SYNC = 'true';
     process.env.CAREER_AGENT_PRAXIS_INTEGRATION_ENABLED = 'true';
+    process.env.CAREER_AGENT_PROFILE_LEGACY_SUGGESTIONS = 'true';
     tempDatabaseDir = await mkdtemp(join(tmpdir(), 'career-agent-http-smoke-'));
     process.env.CAREER_AGENT_DATABASE_PATH = join(tempDatabaseDir, 'smoke.sqlite');
     const { AppModule } = await import('../src/Network/app.module.js');
@@ -125,6 +128,12 @@ describe('Career Agent HTTP smoke flow', () => {
       delete process.env.CAREER_AGENT_PRAXIS_INTEGRATION_ENABLED;
     } else {
       process.env.CAREER_AGENT_PRAXIS_INTEGRATION_ENABLED = previousPraxisEnabled;
+    }
+    if (previousLegacyProfileSuggestions === undefined) {
+      delete process.env.CAREER_AGENT_PROFILE_LEGACY_SUGGESTIONS;
+    } else {
+      process.env.CAREER_AGENT_PROFILE_LEGACY_SUGGESTIONS =
+        previousLegacyProfileSuggestions;
     }
     if (tempDatabaseDir) {
       await rm(tempDatabaseDir, { recursive: true, force: true });
@@ -181,6 +190,51 @@ describe('Career Agent HTTP smoke flow', () => {
       const initialAccountVersion = BigInt(
         accountIntegration.body.sourceVersion,
       );
+
+      const behaviorEventId = `pbe_${suffix.replaceAll('-', '')}`;
+      const behaviorTraceId = `trace_${suffix}`;
+      const behaviorEvent = {
+        eventId: behaviorEventId,
+        schemaVersion: '1.10.0',
+        eventType: 'profile.complete',
+        externalUserId: userId,
+        actorType: 'authenticated_user',
+        occurredAt: new Date().toISOString(),
+        traceId: behaviorTraceId,
+        sourceSystem: 'praxis',
+        outcome: 'succeeded',
+        resourceRefs: [{
+          resourceType: 'ProfileSession',
+          resourceId: `profile_${suffix}`,
+        }],
+        facts: { completeness: 100, status: 'locked' },
+      };
+      const acceptedBehavior = await request(server)
+        .post('/integration/praxis/v1/behavior-events')
+        .set(
+          'Authorization',
+          'Bearer praxis-dev.praxis-development-service-secret',
+        )
+        .set('X-Trace-Id', behaviorTraceId)
+        .set('Idempotency-Key', behaviorEventId)
+        .send(behaviorEvent)
+        .expect(202);
+      expect(acceptedBehavior.body).toEqual({
+        eventId: behaviorEventId,
+        status: 'accepted',
+        traceId: behaviorTraceId,
+      });
+      const duplicateBehavior = await request(server)
+        .post('/integration/praxis/v1/behavior-events')
+        .set(
+          'Authorization',
+          'Bearer praxis-dev.praxis-development-service-secret',
+        )
+        .set('X-Trace-Id', behaviorTraceId)
+        .set('Idempotency-Key', behaviorEventId)
+        .send(behaviorEvent)
+        .expect(202);
+      expect(duplicateBehavior.body.status).toBe('duplicate');
 
       await request(server)
         .patch('/api/career-agent/settings/username')

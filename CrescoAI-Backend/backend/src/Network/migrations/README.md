@@ -35,6 +35,13 @@ still needs the compatibility import, enable
 `CAREER_AGENT_PROFILE_LEGACY_MIGRATION=true` for one controlled migration run,
 verify the snapshot, and disable it again.
 
+Praxis behavior facts are accepted into the idempotent
+`praxis_behavior_events` Inbox. Receiving an event never mutates Profile V2
+directly: the stored evidence disposition is only an audit decision or a
+future Profile review signal. See
+`docs/praxis-behavior-event-receiver.md` for the closed contract and evidence
+policy.
+
 Production startup also requires `CAREER_AGENT_JWT_SECRET` (or the legacy
 `JWT_SECRET`) to contain at least 32 characters. Set
 `CAREER_AGENT_FILE_DOWNLOAD_TOKEN_SECRET` separately when file download tokens
