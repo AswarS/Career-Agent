@@ -35,7 +35,6 @@ import {
 import { buildPluginCommandTelemetryFields } from 'src/utils/telemetry/pluginTelemetry.js'
 import { z } from 'zod/v4'
 import {
-  addInvokedSkill,
   clearInvokedSkillsForAgent,
   getSessionId,
 } from '../../bootstrap/state.js'
@@ -60,6 +59,14 @@ import { resolveSkillModelOverride } from '../../utils/model/model.js'
 import { recordSkillUsage } from '../../utils/suggestions/skillUsageTracking.js'
 import { createAgentId } from '../../utils/uuid.js'
 import { runAgent } from '../AgentTool/runAgent.js'
+import {
+  beginSkillInvocation,
+  buildSkillInvocationEnvelope,
+  failSkillInvocationLoading,
+  finalizeActiveSkillInvocations,
+  isLifecycleManagedSkill,
+  markSkillInvocationRunning,
+} from '../../skills/skillLifecycle.js'
 import { registerSessionSkillReadOnlyRoot } from '../../server/SessionContext.js'
 import {
   getToolUseIDFromParentMessage,
@@ -203,8 +210,38 @@ async function executeForkedSkill(
     }),
   })
 
-  const { modifiedGetAppState, baseAgent, promptMessages, skillContent } =
-    await prepareForkedCommandContext(command, args || '', context)
+  const lifecycleInvocation = isLifecycleManagedSkill(command)
+    ? beginSkillInvocation(
+        commandName,
+        agentId,
+        context.agentId ?? getAgentContext()?.agentId ?? null,
+      )
+    : null
+  let preparedContext: Awaited<ReturnType<typeof prepareForkedCommandContext>>
+  try {
+    preparedContext = await prepareForkedCommandContext(command, args || '', context)
+  } catch (error) {
+    if (lifecycleInvocation) {
+      failSkillInvocationLoading(lifecycleInvocation.skillCallId, error)
+    }
+    throw error
+  }
+  const skillContent = lifecycleInvocation
+    ? `${preparedContext.skillContent}${buildSkillInvocationEnvelope(lifecycleInvocation)}`
+    : preparedContext.skillContent
+  const promptMessages = lifecycleInvocation
+    ? [createUserMessage({ content: skillContent })]
+    : preparedContext.promptMessages
+  const { modifiedGetAppState, baseAgent } = preparedContext
+  if (lifecycleInvocation) {
+    markSkillInvocationRunning({
+      skillCallId: lifecycleInvocation.skillCallId,
+      injectedContent: skillContent,
+      skillPath: command.source
+        ? `${command.source}:${command.name}`
+        : command.name,
+    })
+  }
 
   // Merge skill's effort into the agent definition so runAgent applies it
   const agentDefinition =
@@ -284,6 +321,10 @@ async function executeForkedSkill(
       },
     }
   } finally {
+    finalizeActiveSkillInvocations(
+      agentId,
+      context.abortController.signal.aborted ? 'cancelled' : 'unreported',
+    )
     // Release skill content from invokedSkills state
     clearInvokedSkillsForAgent(agentId)
   }
@@ -965,8 +1006,7 @@ function extractUrlScheme(url: string): 'gs' | 'http' | 'https' | 's3' {
  * for !command / $ARGUMENTS expansion), remote skills are declarative markdown
  * — we wrap the content directly in a user message.
  *
- * The skill is also registered with addInvokedSkill so it survives compaction
- * (same as local skills).
+ * The lifecycle manager also registers the active prompt for compaction.
  *
  * Only called from within a feature('EXPERIMENTAL_SKILL_SEARCH') guard in
  * call() — remoteSkillModules is non-null here.
@@ -983,11 +1023,17 @@ async function executeRemoteSkill(
   // validateInput already confirmed this slug is in session state, but we
   // re-fetch here to get the URL. If it's somehow gone (e.g., state cleared
   // mid-session), fail with a clear error rather than crashing.
+  const lifecycleInvocation = beginSkillInvocation(
+    commandName,
+    context.agentId ?? getAgentContext()?.agentId ?? null,
+  )
   const meta = getDiscoveredRemoteSkill(slug)
   if (!meta) {
-    throw new Error(
+    const error = new Error(
       `Remote skill ${slug} was not discovered in this session. Use DiscoverSkills to find remote skills first.`,
     )
+    failSkillInvocationLoading(lifecycleInvocation.skillCallId, error)
+    throw error
   }
 
   const urlScheme = extractUrlScheme(meta.url)
@@ -1003,7 +1049,9 @@ async function executeRemoteSkill(
       urlScheme,
       error: msg,
     })
-    throw new Error(`Failed to load remote skill ${slug}: ${msg}`)
+    const error = new Error(`Failed to load remote skill ${slug}: ${msg}`)
+    failSkillInvocationLoading(lifecycleInvocation.skillCallId, error)
+    throw error
   }
 
   const {
@@ -1070,33 +1118,36 @@ async function executeRemoteSkill(
   // Strip YAML frontmatter (---\nname: x\n---) before prepending the header
   // (matches loadSkillsDir.ts:333). parseFrontmatter returns the original
   // content unchanged if no frontmatter is present.
-  const { content: bodyContent } = parseFrontmatter(content, skillPath)
+  let finalContent: string
+  try {
+    const { content: bodyContent } = parseFrontmatter(content, skillPath)
 
-  // Inject base directory header + ${CLAUDE_SKILL_DIR}/${CLAUDE_SESSION_ID}
-  // substitution (matches loadSkillsDir.ts) so the model can resolve relative
-  // refs like ./schemas/foo.json against the cache dir.
-  const skillDir = dirname(skillPath)
-  await registerSessionSkillReadOnlyRoot(skillDir)
-  const normalizedDir =
-    process.platform === 'win32' ? skillDir.replace(/\\/g, '/') : skillDir
-  let finalContent = `Base directory for this skill: ${normalizedDir}\n\n${bodyContent}`
-  finalContent = finalContent.replace(/\$\{CLAUDE_SKILL_DIR\}/g, normalizedDir)
-  finalContent = finalContent.replace(
-    /\$\{CLAUDE_SESSION_ID\}/g,
-    getSessionId(),
-  )
+    // Inject base directory header + ${CLAUDE_SKILL_DIR}/${CLAUDE_SESSION_ID}
+    // substitution (matches loadSkillsDir.ts) so the model can resolve relative
+    // refs like ./schemas/foo.json against the cache dir.
+    const skillDir = dirname(skillPath)
+    await registerSessionSkillReadOnlyRoot(skillDir)
+    const normalizedDir =
+      process.platform === 'win32' ? skillDir.replace(/\\/g, '/') : skillDir
+    finalContent = `Base directory for this skill: ${normalizedDir}\n\n${bodyContent}`
+    finalContent = finalContent.replace(/\$\{CLAUDE_SKILL_DIR\}/g, normalizedDir)
+    finalContent = finalContent.replace(
+      /\$\{CLAUDE_SESSION_ID\}/g,
+      getSessionId(),
+    )
+    finalContent += buildSkillInvocationEnvelope(lifecycleInvocation)
 
-  // Register with compaction-preservation state. Use the cached file path so
-  // post-compact restoration knows where the content came from. Must use
-  // finalContent (not raw content) so the base directory header and
-  // ${CLAUDE_SKILL_DIR} substitutions survive compaction — matches how local
-  // skills store their already-transformed content via processSlashCommand.
-  addInvokedSkill(
-    commandName,
-    skillPath,
-    finalContent,
-    getAgentContext()?.agentId ?? null,
-  )
+    // Register with compaction-preservation state. Use the cached file path so
+    // post-compact restoration knows where the content came from.
+    markSkillInvocationRunning({
+      skillCallId: lifecycleInvocation.skillCallId,
+      injectedContent: finalContent,
+      skillPath,
+    })
+  } catch (error) {
+    failSkillInvocationLoading(lifecycleInvocation.skillCallId, error)
+    throw error
+  }
 
   // Direct injection — wrap SKILL.md content in a meta user message. Matches
   // the shape of what processPromptSlashCommand produces for simple skills.

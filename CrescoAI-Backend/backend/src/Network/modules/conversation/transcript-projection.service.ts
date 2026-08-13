@@ -127,6 +127,7 @@ export class ConversationTranscriptProjectionService {
     const map = new Map<string, ProjectedConversationMessage>();
     let activeAssistantMessageId: string | null = null;
     const hiddenSkillToolUseIds = new Set<string>();
+    const returnSkillResultToolUseIds = new Set<string>();
     const hiddenConversationMemoryToolUseIds = new Set<string>();
     const privateConversationIds =
       collectConversationMemoryPrivateIdentifiers(events, sessionId);
@@ -157,6 +158,10 @@ export class ConversationTranscriptProjectionService {
 
       if (event.type === 'assistant') {
         this.collectHiddenSkillToolUseIds(event, hiddenSkillToolUseIds);
+        this.collectReturnSkillResultToolUseIds(
+          event,
+          returnSkillResultToolUseIds,
+        );
         const message = (event as any).message as Record<string, unknown> | undefined;
         if (
           isConversationMemoryMaintenanceMessage(
@@ -170,6 +175,19 @@ export class ConversationTranscriptProjectionService {
       }
 
       if (event.type === 'user') {
+        const skillResults = this.extractReturnSkillResultsFromUserMessage(
+          event,
+          returnSkillResultToolUseIds,
+        );
+        if (skillResults.length && activeAssistantMessageId) {
+          const existing = map.get(activeAssistantMessageId);
+          if (existing) {
+            map.set(activeAssistantMessageId, {
+              ...existing,
+              raw: this.mergeProjectedRaw(existing.raw, { skillResults }),
+            });
+          }
+        }
         const toolResultBlocks = this.projectToolResultBlocksFromUserMessage(
           event,
           hiddenSkillToolUseIds,
@@ -627,6 +645,107 @@ export class ConversationTranscriptProjectionService {
     }
   }
 
+  private collectReturnSkillResultToolUseIds(
+    event: TranscriptMessage,
+    hiddenToolUseIds: Set<string>,
+  ) {
+    const message = (event as any).message as Record<string, unknown> | undefined;
+    const content = message?.content;
+    if (!Array.isArray(content)) {
+      return;
+    }
+
+    for (const item of content) {
+      if (!this.isRecord(item) || !this.isReturnSkillResultAssistantBlock(item)) {
+        continue;
+      }
+      const toolUseId = this.readToolUseId(item);
+      if (toolUseId) {
+        hiddenToolUseIds.add(toolUseId);
+      }
+    }
+  }
+
+  private isReturnSkillResultAssistantBlock(
+    block: Record<string, unknown>,
+  ): boolean {
+    return this.readToolName(block)?.toLowerCase() === 'returnskillresult';
+  }
+
+  private extractReturnSkillResultsFromUserMessage(
+    event: TranscriptMessage,
+    hiddenToolUseIds: Set<string>,
+  ): Array<Record<string, unknown>> {
+    const message = (event as any).message as Record<string, unknown> | undefined;
+    const content = message?.content;
+    if (!Array.isArray(content)) {
+      return [];
+    }
+
+    const results: Array<Record<string, unknown>> = [];
+    for (const item of content) {
+      if (!this.isRecord(item) || !this.isToolResultContentBlock(item)) {
+        continue;
+      }
+      const toolUseId = this.readToolUseId(item);
+      if (!toolUseId || !hiddenToolUseIds.has(toolUseId)) {
+        continue;
+      }
+      const value = this.parseJsonRecord(
+        this.stringifyAssistantToolResultValue(
+          item.content ?? item.result ?? item.output ?? '',
+        ),
+      );
+      const skillCallId = value?.skill_call_id;
+      const skillName = value?.skill_name;
+      const outcome = value?.outcome;
+      const summary = value?.summary;
+      const completedAt = value?.completed_at;
+      const durationMs = Number(value?.duration_ms);
+      if (
+        value?.accepted !== true
+        || typeof skillCallId !== 'string'
+        || typeof skillName !== 'string'
+        || (outcome !== 'success'
+          && outcome !== 'insufficient_input'
+          && outcome !== 'error')
+        || typeof summary !== 'string'
+        || typeof completedAt !== 'string'
+        || !Number.isFinite(durationMs)
+      ) {
+        continue;
+      }
+      const completedAtMs = Date.parse(completedAt);
+      const normalizedDurationMs = Math.max(0, durationMs);
+      const startedAt = Number.isFinite(completedAtMs)
+        ? new Date(completedAtMs - normalizedDurationMs).toISOString()
+        : completedAt;
+      results.push({
+        skillCallId,
+        skillName,
+        outcome,
+        summary: sanitizeServerPhysicalPaths(summary),
+        ...(value.result !== undefined
+          ? { result: sanitizeServerPhysicalPathsInValue(value.result) }
+          : {}),
+        startedAt,
+        completedAt,
+        durationMs: normalizedDurationMs,
+        source: 'agent',
+      });
+    }
+    return results;
+  }
+
+  private parseJsonRecord(value: string): Record<string, unknown> | null {
+    try {
+      const parsed = JSON.parse(value);
+      return this.isRecord(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+
   private isInternalSkillAssistantBlock(block: Record<string, unknown>): boolean {
     const toolName = this.readToolName(block)?.toLowerCase();
     if (toolName === 'skill') {
@@ -752,9 +871,37 @@ export class ConversationTranscriptProjectionService {
       think: reasoning ?? undefined,
       actions: this.mergeMessageActions(existing.actions, message.actions),
       blocks: this.mergeBlocks(existing.blocks, message.blocks),
+      raw: this.mergeProjectedRaw(existing.raw, message.raw),
       created_at: existing.created_at,
       createdAt: existing.createdAt,
     });
+  }
+
+  private mergeProjectedRaw(
+    existing: Record<string, unknown> | undefined,
+    incoming: Record<string, unknown> | undefined,
+  ): Record<string, unknown> | undefined {
+    if (!existing && !incoming) {
+      return undefined;
+    }
+    const merged = { ...(existing ?? {}), ...(incoming ?? {}) };
+    const skillResultsByCallId = new Map<string, Record<string, unknown>>();
+    for (const raw of [existing, incoming]) {
+      const skillResults = raw?.skillResults;
+      if (!Array.isArray(skillResults)) {
+        continue;
+      }
+      for (const result of skillResults) {
+        if (!this.isRecord(result) || typeof result.skillCallId !== 'string') {
+          continue;
+        }
+        skillResultsByCallId.set(result.skillCallId, result);
+      }
+    }
+    if (skillResultsByCallId.size) {
+      merged.skillResults = Array.from(skillResultsByCallId.values());
+    }
+    return merged;
   }
 
   private attachMedia(

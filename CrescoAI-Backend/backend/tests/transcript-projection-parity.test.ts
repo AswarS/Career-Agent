@@ -122,4 +122,102 @@ describe('conversation transcript trajectory projection', () => {
       text: '这是完整最终回复。',
     })
   })
+
+  test('projects ReturnSkillResult as a normal tool and restores its lifecycle result', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'career-agent-skill-result-'))
+    tempDirs.push(dir)
+    const filePath = join(dir, 'session.jsonl')
+    const events = [
+      {
+        type: 'user',
+        uuid: 'user-1',
+        timestamp: '2026-08-13T00:00:00.000Z',
+        sessionId: 'session-1',
+        message: { id: 'user-message-1', role: 'user', content: '/learning-plan test' },
+      },
+      {
+        type: 'assistant',
+        uuid: 'assistant-1',
+        timestamp: '2026-08-13T00:00:01.000Z',
+        sessionId: 'session-1',
+        message: {
+          id: 'assistant-message-1',
+          role: 'assistant',
+          content: [{
+            type: 'tool_use',
+            id: 'return-1',
+            name: 'ReturnSkillResult',
+            input: {
+              skill_call_id: 'skill-call-1',
+              skill_name: 'learning-plan',
+              outcome: 'success',
+              summary: 'plan created',
+            },
+          }],
+        },
+      },
+      {
+        type: 'user',
+        uuid: 'return-result-1',
+        timestamp: '2026-08-13T00:00:02.000Z',
+        sessionId: 'session-1',
+        message: {
+          role: 'user',
+          content: [{
+            type: 'tool_result',
+            tool_use_id: 'return-1',
+            content: JSON.stringify({
+              accepted: true,
+              duplicate: false,
+              skill_call_id: 'skill-call-1',
+              skill_name: 'learning-plan',
+              outcome: 'success',
+              summary: 'plan created',
+              result: { output: 'learning_plan.json' },
+              completed_at: '2026-08-13T00:00:02.000Z',
+              duration_ms: 1000,
+            }),
+          }],
+        },
+      },
+      {
+        type: 'assistant',
+        uuid: 'assistant-2',
+        timestamp: '2026-08-13T00:00:03.000Z',
+        sessionId: 'session-1',
+        message: {
+          id: 'assistant-message-2',
+          role: 'assistant',
+          content: [{ type: 'text', text: '计划已生成。' }],
+        },
+      },
+    ]
+    await writeFile(filePath, `${events.map((event) => JSON.stringify(event)).join('\n')}\n`, 'utf8')
+
+    const messages = await new ConversationTranscriptProjectionService().projectTranscriptFile({
+      filePath,
+      sessionId: 'session-1',
+    })
+
+    expect(messages).toHaveLength(2)
+    expect(messages[1]?.blocks?.map((block) => ({
+      type: block.type,
+      name: block.name,
+    }))).toEqual([
+      { type: 'tool_call', name: 'ReturnSkillResult' },
+      { type: 'tool_result', name: null },
+      { type: 'text', name: undefined },
+    ])
+    expect(messages[1]?.raw?.skillResults).toEqual([{
+      skillCallId: 'skill-call-1',
+      skillName: 'learning-plan',
+      outcome: 'success',
+      summary: 'plan created',
+      result: { output: 'learning_plan.json' },
+      startedAt: '2026-08-13T00:00:01.000Z',
+      completedAt: '2026-08-13T00:00:02.000Z',
+      durationMs: 1000,
+      source: 'agent',
+    }])
+  })
 })

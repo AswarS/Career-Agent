@@ -6,24 +6,25 @@ import {
   USER_DEFINED_SKILLS_ENABLED,
 } from '../src/Network/modules/skill/skill.service.js'
 import { SkillRegistry } from '../src/Network/modules/skill/skill.registry.js'
+import { registerBuiltinSkills } from '../src/Network/modules/skill/built-in-skills.js'
 
 const CAREER_AGENT_SKILL_NAMES = [
   'career_direction_exploration',
   'career_path_simulation',
   'code-analysis',
   'develop-web-game',
-  'image-generation',
   'industry_opportunity_analysis',
   'learning-plan',
   'role_cognition_analysis',
   'target_role_positioning',
-  'video-generation',
 ].sort()
 
 const PACKAGED_GLOBAL_SKILL_NAMES = [
   'career_direction_exploration',
   'career_path_simulation',
+  'develop-web-game',
   'industry_opportunity_analysis',
+  'learning-plan',
   'role_cognition_analysis',
   'target_role_positioning',
 ]
@@ -67,6 +68,19 @@ describe('CareerAgent skills on the native CC skill chain', () => {
     for (const name of PACKAGED_GLOBAL_SKILL_NAMES) {
       expect(names).toContain(name)
     }
+
+    expect(names).not.toContain('image-generation')
+    expect(names).not.toContain('video-generation')
+    expect(names).not.toContain('help')
+    expect(skills.find(skill => skill.name === 'learning-plan')?.category).toBe('utility')
+    expect(skills.find(skill => skill.name === 'develop-web-game')?.category).toBe('generation')
+  })
+
+  test('keeps only actual code-defined skills in the Network built-in registry', () => {
+    const registry = new SkillRegistry()
+    registerBuiltinSkills(entry => registry.register(entry))
+
+    expect(registry.getAll().map(skill => skill.name)).toEqual(['code-analysis'])
   })
 
   test('loads a packaged root skill prompt with its reference-file base directory', async () => {

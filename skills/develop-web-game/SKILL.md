@@ -1,6 +1,9 @@
 ---
 name: "develop-web-game"
 description: "TRIGGER FIRST: 互动/可视化/模拟/动画/小游戏/图解/交互练习/仪表盘/算法演示/数据结构/流程/时间线 -> use this skill before plain text. Also trigger for 介绍/了解/解释/科普/explain/what is when showing beats telling. Build HTML apps, games, simulations, dashboards, visual demos."
+category: generation
+arguments: description
+argument-hint: "[description]"
 ---
 
 

@@ -433,7 +433,10 @@ export function createQueryEngineForSession(
     commands?: Command[]
     initialMessages?: any[]
     readFileCache?: FileStateCache
-    mcpTools?: any[]
+    /** Service-owned tools such as Profile tools. */
+    extraTools?: Tool[]
+    /** Tools discovered from connected MCP servers. */
+    mcpTools?: Tool[]
     /** Exact service-owned tool pool for restricted ephemeral runners. */
     exactTools?: Tool[]
   } = {},
@@ -448,10 +451,20 @@ export function createQueryEngineForSession(
 
   // Merge MCP tools if provided
   const mcpTools = options.mcpTools ?? []
+  const extraTools = options.extraTools ?? []
+  const extensionTools = [...extraTools, ...mcpTools]
   const tools = options.exactTools
-    ?? (mcpTools.length > 0
-      ? assembleToolPool(toolPermissionContext, mcpTools)
+    ?? (extensionTools.length > 0
+      ? assembleToolPool(toolPermissionContext, extensionTools)
       : builtInTools)
+  setAppState(prev => ({
+    ...prev,
+    mcp: {
+      ...prev.mcp,
+      clients: context.mcpClients ?? [],
+      tools: mcpTools,
+    },
+  }))
   const appendSystemPrompt = [
     CAREER_AGENT_LEARNING_SYSTEM_PROMPT,
     getProfileAgentSystemPrompt(),
@@ -478,6 +491,9 @@ export function createQueryEngineForSession(
     // When enabling thinking, also remove DISABLE_INTERLEAVED_THINKING from main.ts.
     // Options: { type: 'disabled' } | { type: 'adaptive' } | { type: 'enabled', budgetTokens: N }
     thinkingConfig: { type: 'disabled' },
+    // A malformed or incompatible model/tool loop must not hold an HTTP/SSE
+    // request forever. This is deliberately generous for multi-step Skills.
+    maxTurns: 40,
     abortController: context.abortController,
   }
 

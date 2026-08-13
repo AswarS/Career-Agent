@@ -1,6 +1,9 @@
 ---
 name: learning-plan
 description: "TRIGGER FIRST: 学习计划/学习路线/怎么学/系统学习/从零开始/备考/面试准备/求职准备/技能提升/考试复习/课程规划/知识体系梳理 -> use this skill. 生成结构化长期学习计划 JSON + HTML 交互学习应用需求文档，拆分阶段、活动、练习和评估。"
+category: utility
+arguments: topic
+argument-hint: "[topic]"
 allowed-tools: read, write, exec
 ---
 
