@@ -16,6 +16,7 @@ import {
   validateReturnSkillResult,
 } from '../src/skills/skillLifecycle.js'
 import { ReturnSkillResultTool } from '../src/tools/ReturnSkillResultTool/ReturnSkillResultTool.js'
+import { BaselineAssessmentTool } from '../src/tools/BaselineAssessmentTool/BaselineAssessmentTool.js'
 import { getEmptyToolPermissionContext } from '../src/Tool.js'
 import { getAllBaseTools, getTools } from '../src/tools.js'
 
@@ -43,6 +44,12 @@ describe('Prompt Skill invocation lifecycle', () => {
     expect(ReturnSkillResultTool.name).toBe('ReturnSkillResult')
     expect(ReturnSkillResultTool.alwaysLoad).toBe(true)
     expect(getAllBaseTools()).toContain(ReturnSkillResultTool)
+  })
+
+  test('registers BaselineAssessment as a normal always-loaded base tool', () => {
+    expect(BaselineAssessmentTool.name).toBe('BaselineAssessment')
+    expect(BaselineAssessmentTool.alwaysLoad).toBe(true)
+    expect(getAllBaseTools()).toContain(BaselineAssessmentTool)
   })
 
   test('keeps ReturnSkillResult available through mode and deny filtering', () => {

@@ -5,6 +5,7 @@ import {
   loadTranscriptFile,
 } from '../../../utils/sessionStorage.js';
 import type { TranscriptMessage } from '../../../types/logs.js';
+import { generatedSkillActionToolNames } from '../../../tools/generatedSkillActionTools.js';
 import {
   looksLikeServerPhysicalPath,
   sanitizeServerPhysicalPaths,
@@ -127,7 +128,8 @@ export class ConversationTranscriptProjectionService {
     const map = new Map<string, ProjectedConversationMessage>();
     let activeAssistantMessageId: string | null = null;
     const hiddenSkillToolUseIds = new Set<string>();
-    const returnSkillResultToolUseIds = new Set<string>();
+    const skillResultToolUseIds = new Set<string>();
+    let pendingSkillResults: Array<Record<string, unknown>> = [];
     const hiddenConversationMemoryToolUseIds = new Set<string>();
     const privateConversationIds =
       collectConversationMemoryPrivateIdentifiers(events, sessionId);
@@ -148,6 +150,27 @@ export class ConversationTranscriptProjectionService {
           continue;
         }
       }
+      const metaSkillResult = this.normalizeSkillResult(
+        (event as any).toolUseResult,
+      );
+      if (metaSkillResult) {
+        if (activeAssistantMessageId) {
+          const existing = map.get(activeAssistantMessageId);
+          if (existing) {
+            map.set(activeAssistantMessageId, {
+              ...existing,
+              raw: this.mergeProjectedRaw(existing.raw, {
+                skillResults: [metaSkillResult],
+              }),
+            });
+          }
+        } else {
+          pendingSkillResults = this.mergeProjectedRaw(
+            { skillResults: pendingSkillResults },
+            { skillResults: [metaSkillResult] },
+          )?.skillResults as Array<Record<string, unknown>>;
+        }
+      }
       if (isInternalTranscriptMessage(event)) {
         // Internal prompts are part of the model chain, not the public chat.
         // Other internal prompts do not split the active public trajectory.
@@ -158,9 +181,9 @@ export class ConversationTranscriptProjectionService {
 
       if (event.type === 'assistant') {
         this.collectHiddenSkillToolUseIds(event, hiddenSkillToolUseIds);
-        this.collectReturnSkillResultToolUseIds(
+        this.collectSkillResultToolUseIds(
           event,
-          returnSkillResultToolUseIds,
+          skillResultToolUseIds,
         );
         const message = (event as any).message as Record<string, unknown> | undefined;
         if (
@@ -175,9 +198,9 @@ export class ConversationTranscriptProjectionService {
       }
 
       if (event.type === 'user') {
-        const skillResults = this.extractReturnSkillResultsFromUserMessage(
+        const skillResults = this.extractSkillResultsFromUserMessage(
           event,
-          returnSkillResultToolUseIds,
+          skillResultToolUseIds,
         );
         if (skillResults.length && activeAssistantMessageId) {
           const existing = map.get(activeAssistantMessageId);
@@ -217,11 +240,20 @@ export class ConversationTranscriptProjectionService {
       }
       if (projected.role === 'assistant') {
         const targetMessageId = activeAssistantMessageId ?? projected.id;
+        const projectedWithSkillResults = pendingSkillResults.length
+          ? {
+              ...projected,
+              raw: this.mergeProjectedRaw(projected.raw, {
+                skillResults: pendingSkillResults,
+              }),
+            }
+          : projected;
         this.upsertProjectedMessage(
-          { ...projected, id: targetMessageId },
+          { ...projectedWithSkillResults, id: targetMessageId },
           map,
           order,
         );
+        pendingSkillResults = [];
         activeAssistantMessageId = targetMessageId;
       } else {
         this.upsertProjectedMessage(projected, map, order);
@@ -645,9 +677,9 @@ export class ConversationTranscriptProjectionService {
     }
   }
 
-  private collectReturnSkillResultToolUseIds(
+  private collectSkillResultToolUseIds(
     event: TranscriptMessage,
-    hiddenToolUseIds: Set<string>,
+    skillResultToolUseIds: Set<string>,
   ) {
     const message = (event as any).message as Record<string, unknown> | undefined;
     const content = message?.content;
@@ -656,25 +688,29 @@ export class ConversationTranscriptProjectionService {
     }
 
     for (const item of content) {
-      if (!this.isRecord(item) || !this.isReturnSkillResultAssistantBlock(item)) {
+      if (!this.isRecord(item) || !this.isSkillResultAssistantBlock(item)) {
         continue;
       }
       const toolUseId = this.readToolUseId(item);
       if (toolUseId) {
-        hiddenToolUseIds.add(toolUseId);
+        skillResultToolUseIds.add(toolUseId);
       }
     }
   }
 
-  private isReturnSkillResultAssistantBlock(
+  private isSkillResultAssistantBlock(
     block: Record<string, unknown>,
   ): boolean {
-    return this.readToolName(block)?.toLowerCase() === 'returnskillresult';
+    const toolName = this.readToolName(block)?.toLowerCase();
+    return (
+      toolName === 'returnskillresult' ||
+      (toolName !== undefined && generatedSkillActionToolNames.has(toolName))
+    );
   }
 
-  private extractReturnSkillResultsFromUserMessage(
+  private extractSkillResultsFromUserMessage(
     event: TranscriptMessage,
-    hiddenToolUseIds: Set<string>,
+    skillResultToolUseIds: Set<string>,
   ): Array<Record<string, unknown>> {
     const message = (event as any).message as Record<string, unknown> | undefined;
     const content = message?.content;
@@ -688,7 +724,7 @@ export class ConversationTranscriptProjectionService {
         continue;
       }
       const toolUseId = this.readToolUseId(item);
-      if (!toolUseId || !hiddenToolUseIds.has(toolUseId)) {
+      if (!toolUseId || !skillResultToolUseIds.has(toolUseId)) {
         continue;
       }
       const value = this.parseJsonRecord(
@@ -696,45 +732,53 @@ export class ConversationTranscriptProjectionService {
           item.content ?? item.result ?? item.output ?? '',
         ),
       );
-      const skillCallId = value?.skill_call_id;
-      const skillName = value?.skill_name;
-      const outcome = value?.outcome;
-      const summary = value?.summary;
-      const completedAt = value?.completed_at;
-      const durationMs = Number(value?.duration_ms);
-      if (
-        value?.accepted !== true
-        || typeof skillCallId !== 'string'
-        || typeof skillName !== 'string'
-        || (outcome !== 'success'
-          && outcome !== 'insufficient_input'
-          && outcome !== 'error')
-        || typeof summary !== 'string'
-        || typeof completedAt !== 'string'
-        || !Number.isFinite(durationMs)
-      ) {
-        continue;
-      }
-      const completedAtMs = Date.parse(completedAt);
-      const normalizedDurationMs = Math.max(0, durationMs);
-      const startedAt = Number.isFinite(completedAtMs)
-        ? new Date(completedAtMs - normalizedDurationMs).toISOString()
-        : completedAt;
-      results.push({
-        skillCallId,
-        skillName,
-        outcome,
-        summary: sanitizeServerPhysicalPaths(summary),
-        ...(value.result !== undefined
-          ? { result: sanitizeServerPhysicalPathsInValue(value.result) }
-          : {}),
-        startedAt,
-        completedAt,
-        durationMs: normalizedDurationMs,
-        source: 'agent',
-      });
+      const normalized = this.normalizeSkillResult(value);
+      if (normalized) results.push(normalized);
     }
     return results;
+  }
+
+  private normalizeSkillResult(
+    value: unknown,
+  ): Record<string, unknown> | null {
+    if (!this.isRecord(value)) return null;
+    const skillCallId = value.skill_call_id;
+    const skillName = value.skill_name;
+    const outcome = value.outcome;
+    const summary = value.summary;
+    const completedAt = value.completed_at;
+    const durationMs = Number(value.duration_ms);
+    if (
+      (value.accepted !== true && value.execution_status !== 'completed')
+      || typeof skillCallId !== 'string'
+      || typeof skillName !== 'string'
+      || (outcome !== 'success'
+        && outcome !== 'insufficient_input'
+        && outcome !== 'error')
+      || typeof summary !== 'string'
+      || typeof completedAt !== 'string'
+      || !Number.isFinite(durationMs)
+    ) {
+      return null;
+    }
+    const completedAtMs = Date.parse(completedAt);
+    const normalizedDurationMs = Math.max(0, durationMs);
+    const startedAt = Number.isFinite(completedAtMs)
+      ? new Date(completedAtMs - normalizedDurationMs).toISOString()
+      : completedAt;
+    return {
+      skillCallId,
+      skillName,
+      outcome,
+      summary: sanitizeServerPhysicalPaths(summary),
+      ...(value.result !== undefined
+        ? { result: sanitizeServerPhysicalPathsInValue(value.result) }
+        : {}),
+      startedAt,
+      completedAt,
+      durationMs: normalizedDurationMs,
+      source: 'agent',
+    };
   }
 
   private parseJsonRecord(value: string): Record<string, unknown> | null {

@@ -53,10 +53,48 @@ import {
   isLifecycleManagedSkill,
   markSkillInvocationRunning,
 } from '../../skills/skillLifecycle.js';
+import { executeBaselineAssessmentAction } from '../../skills/baselineAssessmentAction.js';
 import type { ProcessUserInputBaseResult, ProcessUserInputContext } from './processUserInput.js';
 type SlashCommandResult = ProcessUserInputBaseResult & {
   command: Command;
 };
+
+export async function executeBaselineAssessmentSlashCommand(
+  command: CommandBase & PromptCommand,
+  args: string,
+  context: ProcessUserInputContext,
+  precedingInputBlocks: ContentBlockParam[],
+  canUseTool: CanUseToolFn,
+  executeAction: typeof executeBaselineAssessmentAction = executeBaselineAssessmentAction,
+): Promise<SlashCommandResult> {
+  const result = await executeAction({
+    assessmentTarget: args,
+    context,
+    canUseTool,
+  });
+  const originalInput = createUserMessage({
+    content: prepareUserContent({
+      inputString: `/${getCommandName(command)} ${args}`.trim(),
+      precedingInputBlocks,
+    }),
+  });
+  const executedResult = createUserMessage({
+    isMeta: true,
+    toolUseResult: result,
+    content: [
+      '<skill-action-result skill="baseline-assessment" already_executed="true">',
+      JSON.stringify(result),
+      'This action has already executed. Do not call BaselineAssessment again for this slash invocation. Continue the original task using this result.',
+      '</skill-action-result>',
+    ].join('\n'),
+  });
+  return {
+    messages: [originalInput, executedResult],
+    shouldQuery: true,
+    command,
+    resultText: JSON.stringify(result),
+  };
+}
 
 // Poll interval and deadline for MCP settle before launching a background
 // forked subagent. MCP servers typically connect within 1-3s of startup;
@@ -764,6 +802,18 @@ async function getMessagesForSlashCommand(commandName: string, args: string, set
       case 'prompt':
         {
           try {
+            if (
+              command.name === 'baseline-assessment' &&
+              command.modelEntry === 'action-tool'
+            ) {
+              return await executeBaselineAssessmentSlashCommand(
+                command,
+                args,
+                context,
+                precedingInputBlocks,
+                canUseTool ?? hasPermissionsToUseTool,
+              );
+            }
             // Check if command should run as forked sub-agent
             if (command.context === 'fork') {
               return await executeForkedSlashCommand(command, args, context, precedingInputBlocks, setToolJSX, canUseTool ?? hasPermissionsToUseTool);

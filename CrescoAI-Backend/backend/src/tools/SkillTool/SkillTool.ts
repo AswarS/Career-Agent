@@ -34,10 +34,7 @@ import {
 } from 'src/utils/plugins/pluginIdentifier.js'
 import { buildPluginCommandTelemetryFields } from 'src/utils/telemetry/pluginTelemetry.js'
 import { z } from 'zod/v4'
-import {
-  clearInvokedSkillsForAgent,
-  getSessionId,
-} from '../../bootstrap/state.js'
+import { getSessionId } from '../../bootstrap/state.js'
 import { COMMAND_MESSAGE_TAG } from '../../constants/xml.js'
 import type { CanUseToolFn } from '../../hooks/useCanUseTool.js'
 import {
@@ -47,24 +44,17 @@ import {
 } from '../../services/analytics/index.js'
 import { getAgentContext } from '../../utils/agentContext.js'
 import { errorMessage } from '../../utils/errors.js'
-import {
-  extractResultText,
-  prepareForkedCommandContext,
-} from '../../utils/forkedAgent.js'
 import { parseFrontmatter } from '../../utils/frontmatterParser.js'
 import { lazySchema } from '../../utils/lazySchema.js'
 import { createUserMessage, normalizeMessages } from '../../utils/messages.js'
-import type { ModelAlias } from '../../utils/model/aliases.js'
 import { resolveSkillModelOverride } from '../../utils/model/model.js'
 import { recordSkillUsage } from '../../utils/suggestions/skillUsageTracking.js'
 import { createAgentId } from '../../utils/uuid.js'
-import { runAgent } from '../AgentTool/runAgent.js'
+import { executeForkedPromptSkill } from '../../skills/forkedSkillExecutor.js'
 import {
   beginSkillInvocation,
   buildSkillInvocationEnvelope,
   failSkillInvocationLoading,
-  finalizeActiveSkillInvocations,
-  isLifecycleManagedSkill,
   markSkillInvocationRunning,
 } from '../../skills/skillLifecycle.js'
 import { registerSessionSkillReadOnlyRoot } from '../../server/SessionContext.js'
@@ -210,123 +200,52 @@ async function executeForkedSkill(
     }),
   })
 
-  const lifecycleInvocation = isLifecycleManagedSkill(command)
-    ? beginSkillInvocation(
-        commandName,
-        agentId,
-        context.agentId ?? getAgentContext()?.agentId ?? null,
-      )
-    : null
-  let preparedContext: Awaited<ReturnType<typeof prepareForkedCommandContext>>
-  try {
-    preparedContext = await prepareForkedCommandContext(command, args || '', context)
-  } catch (error) {
-    if (lifecycleInvocation) {
-      failSkillInvocationLoading(lifecycleInvocation.skillCallId, error)
-    }
-    throw error
-  }
-  const skillContent = lifecycleInvocation
-    ? `${preparedContext.skillContent}${buildSkillInvocationEnvelope(lifecycleInvocation)}`
-    : preparedContext.skillContent
-  const promptMessages = lifecycleInvocation
-    ? [createUserMessage({ content: skillContent })]
-    : preparedContext.promptMessages
-  const { modifiedGetAppState, baseAgent } = preparedContext
-  if (lifecycleInvocation) {
-    markSkillInvocationRunning({
-      skillCallId: lifecycleInvocation.skillCallId,
-      injectedContent: skillContent,
-      skillPath: command.source
-        ? `${command.source}:${command.name}`
-        : command.name,
-    })
-  }
-
-  // Merge skill's effort into the agent definition so runAgent applies it
-  const agentDefinition =
-    command.effort !== undefined
-      ? { ...baseAgent, effort: command.effort }
-      : baseAgent
-
-  // Collect messages from the forked agent
-  const agentMessages: Message[] = []
-
-  logForDebugging(
-    `SkillTool executing forked skill ${commandName} with agent ${agentDefinition.agentType}`,
-  )
-
-  try {
-    // Run the sub-agent
-    for await (const message of runAgent({
-      agentDefinition,
-      promptMessages,
-      toolUseContext: {
-        ...context,
-        getAppState: modifiedGetAppState,
-      },
-      canUseTool,
-      isAsync: false,
-      querySource: 'agent:custom',
-      model: command.model as ModelAlias | undefined,
-      availableTools: context.options.tools,
-      override: { agentId },
-    })) {
-      agentMessages.push(message)
-
-      // Report progress for tool uses (like AgentTool does)
+  const execution = await executeForkedPromptSkill({
+    command,
+    commandName,
+    args,
+    agentId,
+    contextMode: 'isolated',
+    context,
+    canUseTool,
+    onMessage(message, details) {
       if (
-        (message.type === 'assistant' || message.type === 'user') &&
-        onProgress
+        (message.type !== 'assistant' && message.type !== 'user') ||
+        !onProgress
       ) {
-        const normalizedNew = normalizeMessages([message])
-        for (const m of normalizedNew) {
-          const hasToolContent = m.message.content.some(
-            c => c.type === 'tool_use' || c.type === 'tool_result',
-          )
-          if (hasToolContent) {
-            onProgress({
-              toolUseID: `skill_${parentMessage.message.id}`,
-              data: {
-                message: m,
-                type: 'skill_progress',
-                prompt: skillContent,
-                agentId,
-              },
-            })
-          }
-        }
+        return
       }
-    }
+      for (const normalized of normalizeMessages([message])) {
+        const hasToolContent = normalized.message.content.some(
+          content =>
+            content.type === 'tool_use' || content.type === 'tool_result',
+        )
+        if (!hasToolContent) continue
+        onProgress({
+          toolUseID: `skill_${parentMessage.message.id}`,
+          data: {
+            message: normalized,
+            type: 'skill_progress',
+            prompt: details.skillContent,
+            agentId: details.agentId,
+          },
+        })
+      }
+    },
+  })
 
-    const resultText = extractResultText(
-      agentMessages,
-      'Skill execution completed',
-    )
-    // Release message memory after extracting result
-    agentMessages.length = 0
-
-    const durationMs = Date.now() - startTime
-    logForDebugging(
-      `SkillTool forked skill ${commandName} completed in ${durationMs}ms`,
-    )
-
-    return {
-      data: {
-        success: true,
-        commandName,
-        status: 'forked',
-        agentId,
-        result: resultText,
-      },
-    }
-  } finally {
-    finalizeActiveSkillInvocations(
-      agentId,
-      context.abortController.signal.aborted ? 'cancelled' : 'unreported',
-    )
-    // Release skill content from invokedSkills state
-    clearInvokedSkillsForAgent(agentId)
+  const durationMs = Date.now() - startTime
+  logForDebugging(
+    `SkillTool forked skill ${commandName} completed in ${durationMs}ms`,
+  )
+  return {
+    data: {
+      success: true,
+      commandName,
+      status: 'forked',
+      agentId: execution.agentId,
+      result: execution.resultText,
+    },
   }
 }
 
@@ -447,6 +366,17 @@ export const SkillTool: Tool<InputSchema, Output, Progress> = buildTool({
         result: false,
         message: `Unknown skill: ${normalizedCommandName}`,
         errorCode: 2,
+      }
+    }
+
+    if (
+      foundCommand.type === 'prompt' &&
+      foundCommand.modelEntry === 'action-tool'
+    ) {
+      return {
+        result: false,
+        message: `Skill ${normalizedCommandName} has a dedicated action tool and cannot be invoked through ${SKILL_TOOL_NAME}`,
+        errorCode: 7,
       }
     }
 
@@ -656,6 +586,12 @@ export const SkillTool: Tool<InputSchema, Output, Progress> = buildTool({
 
     const commands = await getAllCommands(context)
     const command = findCommand(commandName, commands)
+
+    if (command?.type === 'prompt' && command.modelEntry === 'action-tool') {
+      throw new Error(
+        `Skill ${commandName} has a dedicated action tool and cannot be invoked through ${SKILL_TOOL_NAME}`,
+      )
+    }
 
     if (command?.type === 'prompt' && command.skillRoot) {
       await registerSessionSkillReadOnlyRoot(command.skillRoot)
@@ -931,6 +867,7 @@ const SAFE_SKILL_PROPERTIES = new Set([
   'disableNonInteractive',
   'skillRoot',
   'context',
+  'modelEntry',
   'agent',
   'getPromptForCommand',
   'frontmatterKeys',

@@ -52,10 +52,10 @@ export const ReturnSkillResultTool = buildTool({
   strict: true,
   alwaysLoad: true,
   async description() {
-    return 'Close the current Skill invocation and report its outcome. This does not end the Agent turn.'
+    return 'Close the active Skill invocation owned by this Agent and report its outcome. Do not call this for an Action Tool result that already has execution_status="completed". This does not end the Agent turn.'
   },
   async prompt() {
-    return 'Call this after finishing the current Skill invocation, or when that invocation cannot continue. Use only the current invocation ID supplied by the Harness. The tool closes the Skill invocation but does not decide what the Agent does next.'
+    return 'Call this after finishing the current Skill invocation, or when that invocation cannot continue. Use only the current invocation ID supplied directly to this Agent by the Harness. Never reuse a child Action Tool result\'s skill_call_id: execution_status="completed" means that child invocation is already closed. The tool closes the current Skill invocation but does not decide what the Agent does next.'
   },
   get inputSchema(): InputSchema {
     return inputSchema()

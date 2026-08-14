@@ -13,14 +13,21 @@ import type { PermissionConfig } from './permissions.js'
 import { checkToolPermission } from './permissions.js'
 import type { ToolPermissionContext } from '../Tool.js'
 import { getEmptyToolPermissionContext } from '../Tool.js'
-import type { AppState } from '../state/AppStateStore.js'
+import {
+  getDefaultAppState,
+  type AppState,
+} from '../state/AppStateStore.js'
 import type { DeepImmutable } from '../types/utils.js'
 import { getTools, assembleToolPool } from '../tools.js'
 import type { Command } from '../commands.js'
 import type { CanUseToolFn } from '../hooks/useCanUseTool.js'
 import type { PermissionDecision } from '../utils/permissions/PermissionResult.js'
 import type { Tool } from '../Tool.js'
-import type { FileStateCache } from '../utils/fileStateCache.js'
+import {
+  createFileStateCacheWithSizeLimit,
+  READ_FILE_STATE_CACHE_SIZE,
+  type FileStateCache,
+} from '../utils/fileStateCache.js'
 import { CAREER_AGENT_LEARNING_SYSTEM_PROMPT } from '../Network/prompts/careerAgentLearningPrompt.js'
 import { getCareerAgentMemoryRoutingPrompt } from '../Network/prompts/careerAgentMemoryRoutingPrompt.js'
 import { getProfileAgentSystemPrompt } from '../Network/modules/profile/profile-agent.prompt.js'
@@ -52,50 +59,12 @@ export function createServerAppState(
 }
 
 function createMinimalAppState(tpc: ToolPermissionContext): AppState {
+  const defaults = getDefaultAppState()
   return {
-    settings: {
-      // Minimal settings — empty defaults, server mode doesn't read user settings
-    } as any,
-    verbose: false,
-    mainLoopModel: { type: 'string', value: '' } as any,
-    mainLoopModelForSession: { type: 'string', value: '' } as any,
-    statusLineText: undefined,
-    expandedView: 'none',
-    isBriefOnly: false,
-    selectedIPAgentIndex: 0,
-    coordinatorTaskIndex: 0,
-    viewSelectionMode: 'none',
-    footerSelection: null,
+    ...defaults,
     toolPermissionContext: tpc,
-    agent: undefined,
-    kairosEnabled: false,
-    remoteSessionUrl: undefined,
     remoteConnectionStatus: 'disconnected',
-    remoteBackgroundTaskCount: 0,
-    replBridgeEnabled: false,
-    replBridgeExplicit: false,
-    replBridgeOutboundOnly: false,
-    replBridgeConnected: false,
-    replBridgeSessionActive: false,
-    replBridgeReconnecting: false,
-    replBridgeConnectUrl: undefined,
-    replBridgeSessionUrl: undefined,
-    replBridgeEnvironmentId: undefined,
-    replBridgeSessionId: undefined,
-    replBridgeError: undefined,
-    replBridgeInitialName: undefined,
-    showRemoteCallout: false,
-    tasks: {},
-    agentNameRegistry: new Map(),
-    sessionHooks: new Map(),
-    mcp: {
-      clients: [],
-      tools: [],
-      commands: [],
-      resources: {},
-      pluginReconnectKey: 0,
-    },
-  } as unknown as AppState
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -483,7 +452,9 @@ export function createQueryEngineForSession(
     getAppState,
     setAppState,
     initialMessages: options.initialMessages ?? [],
-    readFileCache: options.readFileCache ?? new Map() as unknown as FileStateCache,
+    readFileCache:
+      options.readFileCache ??
+      createFileStateCacheWithSizeLimit(READ_FILE_STATE_CACHE_SIZE),
     appendSystemPrompt,
     userSpecifiedModel: context.config.model,
     // TODO: read thinking config from SessionContext.config.thinkingMode once the
