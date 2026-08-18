@@ -17,6 +17,7 @@ import {
 } from '../src/skills/skillLifecycle.js'
 import { ReturnSkillResultTool } from '../src/tools/ReturnSkillResultTool/ReturnSkillResultTool.js'
 import { BaselineAssessmentTool } from '../src/tools/BaselineAssessmentTool/BaselineAssessmentTool.js'
+import { CareerCompetencyModelTool } from '../src/tools/CareerCompetencyModelTool/CareerCompetencyModelTool.js'
 import { getEmptyToolPermissionContext } from '../src/Tool.js'
 import { getAllBaseTools, getTools } from '../src/tools.js'
 
@@ -50,6 +51,23 @@ describe('Prompt Skill invocation lifecycle', () => {
     expect(BaselineAssessmentTool.name).toBe('BaselineAssessment')
     expect(BaselineAssessmentTool.alwaysLoad).toBe(true)
     expect(getAllBaseTools()).toContain(BaselineAssessmentTool)
+  })
+
+  test('registers CareerCompetencyModel as a generated Action Tool', () => {
+    expect(CareerCompetencyModelTool.name).toBe('CareerCompetencyModel')
+    expect(CareerCompetencyModelTool.alwaysLoad).toBe(true)
+    expect(CareerCompetencyModelTool.isReadOnly({ career_target: 'test' })).toBe(
+      false,
+    )
+    expect(
+      CareerCompetencyModelTool.inputSchema.safeParse({
+        career_target: 'Senior LLM agent engineer in China',
+      }).success,
+    ).toBe(true)
+    expect(CareerCompetencyModelTool.inputSchema.safeParse({}).success).toBe(
+      false,
+    )
+    expect(getAllBaseTools()).toContain(CareerCompetencyModelTool)
   })
 
   test('keeps ReturnSkillResult available through mode and deny filtering', () => {

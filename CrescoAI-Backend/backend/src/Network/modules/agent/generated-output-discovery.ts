@@ -3,6 +3,7 @@ import type { Dirent } from 'node:fs';
 import { basename, extname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { GeneratedFile } from './agent.runtime.js';
+import { readActionArtifactManifest } from '../../../artifacts/actionArtifactPublisher.js';
 
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp']);
 const AUDIO_EXTENSIONS = new Set(['.mp3', '.wav', '.ogg', '.flac', '.aac', '.m4a', '.wma', '.aiff', '.opus']);
@@ -44,11 +45,15 @@ export async function discoverGeneratedFiles(
           continue;
         }
 
+        const actionArtifact = kind === 'html'
+          ? await readActionArtifactManifest(filePath, workspaceDir)
+          : undefined;
         results.push({
           path: filePath,
           kind,
-          title: name,
+          title: actionArtifact?.title ?? name,
           sizeBytes: fileStats.isFile() ? fileStats.size : undefined,
+          ...(actionArtifact ? { actionArtifact } : {}),
         });
       } catch {
         continue;

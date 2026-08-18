@@ -156,6 +156,12 @@ export type CompactProgressEvent =
   | { type: 'compact_end' }
 
 export type ToolUseContext = {
+  /** Runtime identity and workspace used by Action Tools that publish artifacts. */
+  actionArtifactRuntime?: {
+    workspaceDir: string
+    sessionId: string
+    userId?: string | null
+  }
   options: {
     commands: Command[]
     debug: boolean

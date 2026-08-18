@@ -32,7 +32,11 @@ import { setSessionMultimodalConfig, removeSessionMultimodalConfig } from '../..
 import { discoverGeneratedFiles } from './generated-output-discovery.js';
 import { sanitizeServerPhysicalPaths } from '../../utils/publicOutputSanitizer.js';
 import { getCommands } from '../../../commands.js';
-import { flushSessionStorage } from '../../../utils/sessionStorage.js';
+import {
+  flushSessionStorage,
+  getProjectDir,
+} from '../../../utils/sessionStorage.js';
+import { TOOL_RESULTS_SUBDIR } from '../../../utils/toolResultStorage.js';
 import {
   appendNetworkTranscriptEvent,
   ensureNetworkUserWorkspaceDir,
@@ -1455,6 +1459,7 @@ export class AgentService {
       const prevApiKey = process.env.ANTHROPIC_API_KEY;
       const prevBaseUrl = process.env.ANTHROPIC_BASE_URL;
       const prevModel = process.env.ANTHROPIC_MODEL;
+      const prevSmallFastModel = process.env.ANTHROPIC_SMALL_FAST_MODEL;
       const profileTurnPrompt = await this.getProfileTurnPrompt(userId, content);
 
       if (config.apiKey) {
@@ -1465,6 +1470,12 @@ export class AgentService {
       }
       if (config.model) {
         process.env.ANTHROPIC_MODEL = config.model;
+        // Haiku-class utility calls (WebFetch content extraction, session
+        // titles, tool-use summaries) resolve their model through
+        // getSmallFastModel(). Point them at the user's configured model so
+        // they inherit the same gateway/model access as the main loop
+        // instead of defaulting to claude-haiku-4-5.
+        process.env.ANTHROPIC_SMALL_FAST_MODEL = config.model;
       }
 
       const result = await (async () => {
@@ -1749,6 +1760,11 @@ export class AgentService {
           } else {
             process.env.ANTHROPIC_MODEL = prevModel;
           }
+          if (prevSmallFastModel === undefined) {
+            delete process.env.ANTHROPIC_SMALL_FAST_MODEL;
+          } else {
+            process.env.ANTHROPIC_SMALL_FAST_MODEL = prevSmallFastModel;
+          }
           removeSessionMultimodalConfig(conversationId);
           if (abortHandler && messageInput.abortSignal) {
             messageInput.abortSignal.removeEventListener('abort', abortHandler);
@@ -1867,6 +1883,7 @@ export class AgentService {
       const prevApiKey = process.env.ANTHROPIC_API_KEY
       const prevBaseUrl = process.env.ANTHROPIC_BASE_URL
       const prevModel = process.env.ANTHROPIC_MODEL
+      const prevSmallFastModel = process.env.ANTHROPIC_SMALL_FAST_MODEL
       const profileTurnPrompt = await this.getProfileTurnPrompt(userId, content)
 
       if (config.apiKey) {
@@ -1877,6 +1894,12 @@ export class AgentService {
       }
       if (config.model) {
         process.env.ANTHROPIC_MODEL = config.model
+        // Haiku-class utility calls (WebFetch content extraction, session
+        // titles, tool-use summaries) resolve their model through
+        // getSmallFastModel(). Point them at the user's configured model so
+        // they inherit the same gateway/model access as the main loop
+        // instead of defaulting to claude-haiku-4-5.
+        process.env.ANTHROPIC_SMALL_FAST_MODEL = config.model
       }
 
       const result = await (async () => {
@@ -2046,6 +2069,11 @@ export class AgentService {
           } else {
             process.env.ANTHROPIC_MODEL = prevModel;
           }
+          if (prevSmallFastModel === undefined) {
+            delete process.env.ANTHROPIC_SMALL_FAST_MODEL;
+          } else {
+            process.env.ANTHROPIC_SMALL_FAST_MODEL = prevSmallFastModel;
+          }
           removeSessionMultimodalConfig(conversationId);
         }
       })();
@@ -2167,6 +2195,16 @@ export class AgentService {
     const conversationMemorySessionFile = resolve(
       getNetworkConversationMemorySessionPath(userId, conversationId),
     );
+    // Large tool outputs are persisted to this conversation's private
+    // session directory by toolResultStorage. Grant it as a read-only root so
+    // the agent can Read a persisted output back from the path printed in the
+    // tool result message.
+    const toolResultsDir = resolve(
+      getProjectDir(resolvedWorkspaceDir, userId),
+      conversationId,
+      TOOL_RESULTS_SUBDIR,
+    );
+    void mkdir(toolResultsDir, { recursive: true }).catch(() => {});
     return {
       sessionId: conversationId,
       userId,
@@ -2200,6 +2238,11 @@ export class AgentService {
             root: resolve(transcriptDir),
             allowedTools: ['Read'] as const,
             pathPolicy: 'direct-session-jsonl',
+          },
+          {
+            id: `user-${userId}-tool-results`,
+            root: toolResultsDir,
+            allowedTools: NETWORK_READ_ONLY_FILE_TOOLS,
           },
         ],
         sharedReadOnlyRoots: getNetworkSharedReadOnlyRoots(),

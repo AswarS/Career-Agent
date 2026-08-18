@@ -326,6 +326,9 @@ export interface ProfileSuggestion {
 }
 
 export type ArtifactType =
+  | 'baseline-assessment'
+  | 'career-competency-model'
+  | 'learning-plan'
   | 'weekly-plan'
   | 'profile-summary'
   | 'career-roadmap'

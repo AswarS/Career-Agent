@@ -261,7 +261,10 @@ function normalizeArtifactRenderMode(value: string | null | undefined): Artifact
 
 function normalizeArtifactType(value: string | null | undefined): ArtifactRecord['type'] {
   if (
-    value === 'weekly-plan'
+    value === 'baseline-assessment'
+    || value === 'career-competency-model'
+    || value === 'learning-plan'
+    || value === 'weekly-plan'
     || value === 'profile-summary'
     || value === 'career-roadmap'
     || value === 'mock-interview'

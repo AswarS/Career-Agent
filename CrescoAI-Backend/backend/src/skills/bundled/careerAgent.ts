@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import type { FrontmatterData } from '../../utils/frontmatterParser.js'
 import { parseFrontmatter } from '../../utils/frontmatterParser.js'
 import { substituteArguments } from '../../utils/argumentSubstitution.js'
+import { parseSlashCommandToolsFromFrontmatter } from '../../utils/markdownConfigLoader.js'
 import { registerBundledSkill } from '../bundledSkills.js'
 import {
   getGlobalSkillsRoot,
@@ -17,6 +18,7 @@ export type GlobalDiskSkillCatalogEntry = {
   whenToUse: string
   argumentHint?: string
   argumentNames: string[]
+  allowedTools: string[]
   category: 'analysis' | 'generation' | 'utility' | 'search'
   modelEntry: 'action-tool' | 'skill-catalog'
   resourceRoot: string
@@ -82,6 +84,9 @@ export function getGlobalDiskSkillCatalog(): GlobalDiskSkillCatalogEntry[] {
       }
 
       const argumentNames = parseArgumentNames(frontmatter)
+      const allowedTools = parseSlashCommandToolsFromFrontmatter(
+        frontmatter['allowed-tools'],
+      )
       const argumentHint =
         typeof frontmatter['argument-hint'] === 'string'
           ? frontmatter['argument-hint'].trim()
@@ -112,6 +117,7 @@ export function getGlobalDiskSkillCatalog(): GlobalDiskSkillCatalogEntry[] {
           whenToUse,
           argumentHint,
           argumentNames,
+          allowedTools,
           category,
           modelEntry,
           resourceRoot: skillDir,
@@ -166,6 +172,7 @@ export function registerCareerAgentSkills(): void {
       description: skill.description,
       whenToUse: skill.whenToUse,
       argumentHint: skill.argumentHint,
+      allowedTools: skill.allowedTools,
       userInvocable: true,
       resourceRoot: skill.resourceRoot,
       modelEntry: skill.modelEntry,

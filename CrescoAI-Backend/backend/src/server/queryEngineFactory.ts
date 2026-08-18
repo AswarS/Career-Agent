@@ -443,6 +443,11 @@ export function createQueryEngineForSession(
 
   const config: QueryEngineConfig = {
     cwd: context.config.cwd,
+    actionArtifactRuntime: {
+      workspaceDir: context.config.workspaceRoot ?? context.config.cwd,
+      sessionId: context.sessionId,
+      userId: context.userId ?? null,
+    },
     tools,
     commands: options.commands ?? [],
     mcpClients: (context.mcpClients ?? []) as unknown as QueryEngineConfig['mcpClients'],

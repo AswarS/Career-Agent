@@ -115,12 +115,17 @@ describe('offline Skill Action Tool factory', () => {
 
     const toolSource = await readFile(plan.entries[0]!.outputFile, 'utf8')
     const registrySource = await readFile(plan.registryFile, 'utf8')
-    expect(toolSource).toContain('request: z.string().trim().min(1)')
-    expect(registrySource).toContain(
-      'DomainMapTool } from "./DomainMapTool/DomainMapTool.js"',
+    const namesRegistrySource = await readFile(
+      plan.namesRegistryFile,
+      'utf8',
     )
-    expect(registrySource).toContain('  DomainMapTool,')
-    expect(registrySource).toContain('generatedSkillActionToolNames')
+    expect(toolSource).toContain('request: z.string().trim().min(1)')
+    expect(registrySource).toContain('getGeneratedSkillActionTools')
+    expect(registrySource).toContain(
+      'require("./DomainMapTool/DomainMapTool.js")',
+    )
+    expect(namesRegistrySource).toContain('generatedSkillActionToolNames')
+    expect(namesRegistrySource).toContain('"domainmap"')
   })
 
   test('preserves an explicitly adopted hand-written Tool while registering it', async () => {

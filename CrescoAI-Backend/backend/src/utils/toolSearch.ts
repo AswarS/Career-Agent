@@ -24,6 +24,7 @@ import {
   isDeferredTool,
   TOOL_SEARCH_TOOL_NAME,
 } from '../tools/ToolSearchTool/prompt.js'
+import { isOpenAICompatibleProvider } from '../services/api/openAICompatibility.js'
 import type { Message } from '../types/message.js'
 import {
   countToolDefinitionTokens,
@@ -268,6 +269,24 @@ export function modelSupportsToolReference(model: string): boolean {
 let loggedOptimistic = false
 
 export function isToolSearchEnabledOptimistic(): boolean {
+  // Server sessions backed by an OpenAI-compatible provider never send
+  // tool_reference blocks to a third-party proxy: the local OpenAI
+  // compatibility layer consumes and emulates them (see
+  // services/api/openAICompatibility.ts). The proxy heuristic below must not
+  // disable tool search for those sessions — otherwise normalizeMessagesForAPI
+  // strips every ToolSearch result upstream of the translation layer and the
+  // model loops on ToolSearch forever.
+  let sessionProvider: string | undefined
+  try {
+    const { getSessionContext } = require('../server/SessionContext.js') as typeof import('../server/SessionContext.js')
+    sessionProvider = getSessionContext()?.config.provider
+  } catch {
+    // Standalone CLI context: no server session.
+  }
+  if (isOpenAICompatibleProvider(sessionProvider)) {
+    return true
+  }
+
   const mode = getToolSearchMode()
   if (mode === 'standard') {
     if (!loggedOptimistic) {

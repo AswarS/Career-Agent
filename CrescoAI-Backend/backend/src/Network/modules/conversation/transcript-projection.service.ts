@@ -5,7 +5,7 @@ import {
   loadTranscriptFile,
 } from '../../../utils/sessionStorage.js';
 import type { TranscriptMessage } from '../../../types/logs.js';
-import { generatedSkillActionToolNames } from '../../../tools/generatedSkillActionTools.js';
+import { generatedSkillActionToolNames } from '../../../tools/generatedSkillActionToolNames.js';
 import {
   looksLikeServerPhysicalPath,
   sanitizeServerPhysicalPaths,

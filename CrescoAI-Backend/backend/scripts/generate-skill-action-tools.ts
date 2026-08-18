@@ -53,6 +53,8 @@ export type SkillActionToolPlan = {
   entries: SkillActionToolPlanEntry[]
   registryFile: string
   registrySource: string
+  namesRegistryFile: string
+  namesRegistrySource: string
 }
 
 export type SkillActionToolFactoryOptions = {
@@ -347,24 +349,36 @@ export function renderSkillActionToolRegistry(
   specs: readonly SkillActionToolSpec[],
   registryFile: string,
 ): string {
-  const imports = specs
+  const requires = specs
     .map(spec => {
       const modulePath = `./${relative(dirname(registryFile), spec.outputFile)
         .replaceAll('\\', '/')
         .replace(/\.ts$/, '.js')}`
-      return `import { ${spec.exportName} } from ${JSON.stringify(modulePath)}`
+      return `    (require(${JSON.stringify(modulePath)}) as typeof import(${JSON.stringify(modulePath)})).${spec.exportName},`
     })
     .join('\n')
-  const exports = specs.map(spec => `  ${spec.exportName},`).join('\n')
 
   return `${GENERATED_FILE_MARKER}
-${imports}${imports ? '\n\n' : ''}export const generatedSkillActionTools = [
-${exports}
-] as const
+/* eslint-disable @typescript-eslint/no-require-imports */
+export function getGeneratedSkillActionTools() {
+  return [
+${requires}
+  ] as const
+}
+/* eslint-enable @typescript-eslint/no-require-imports */
+`
+}
 
-export const generatedSkillActionToolNames = new Set(
-  generatedSkillActionTools.map(tool => tool.name.toLowerCase()),
-)
+export function renderSkillActionToolNamesRegistry(
+  specs: readonly SkillActionToolSpec[],
+): string {
+  const names = specs
+    .map(spec => `  ${JSON.stringify(spec.toolName.toLowerCase())},`)
+    .join('\n')
+  return `${GENERATED_FILE_MARKER}
+export const generatedSkillActionToolNames = new Set([
+${names}
+])
 `
 }
 
@@ -412,10 +426,25 @@ export async function buildSkillActionToolPlan(
   ) {
     throw new Error(`Refusing to overwrite non-generated registry ${registryFile}`)
   }
+  const namesRegistryFile = join(
+    options.toolsDir,
+    'generatedSkillActionToolNames.ts',
+  )
+  const existingNamesRegistry = await readExistingSource(namesRegistryFile)
+  if (
+    existingNamesRegistry !== null &&
+    !existingNamesRegistry.startsWith(GENERATED_FILE_MARKER)
+  ) {
+    throw new Error(
+      `Refusing to overwrite non-generated registry ${namesRegistryFile}`,
+    )
+  }
   return {
     entries,
     registryFile,
     registrySource: renderSkillActionToolRegistry(entries, registryFile),
+    namesRegistryFile,
+    namesRegistrySource: renderSkillActionToolNamesRegistry(entries),
   }
 }
 
@@ -429,6 +458,11 @@ export async function writeSkillActionToolPlan(
   }
   await mkdir(dirname(plan.registryFile), { recursive: true })
   await writeFile(plan.registryFile, plan.registrySource, 'utf8')
+  await writeFile(
+    plan.namesRegistryFile,
+    plan.namesRegistrySource,
+    'utf8',
+  )
 }
 
 function readFlagValue(args: string[], flag: string): string | undefined {
@@ -454,6 +488,7 @@ async function main(): Promise<void> {
       {
         mode: write ? 'write' : 'plan',
         registry_file: plan.registryFile,
+        names_registry_file: plan.namesRegistryFile,
         tools: plan.entries.map(entry => ({
           skill_name: entry.skillName,
           tool_name: entry.toolName,

@@ -106,6 +106,66 @@ describe('uploaded asset presentation cache integration', () => {
 });
 
 describe('normalizeArtifactRecord', () => {
+  it('preserves a BaselineAssessment HTML artifact for the dedicated viewer', () => {
+    const artifact = normalizeArtifactRecord({
+      id: '42',
+      type: 'baseline-assessment',
+      title: 'LLM Agent 工程师 · 能力基线评估',
+      status: 'ready',
+      render_mode: 'html',
+      revision: 1,
+      summary: '具备 Agent workflow 的实践证据。',
+      payload: { html: '<main>baseline</main>' },
+    });
+
+    expect(artifact.type).toBe('baseline-assessment');
+    expect(artifact.renderMode).toBe('html');
+    if (artifact.renderMode !== 'html') {
+      throw new Error('expected html artifact');
+    }
+    expect(artifact.payload.html).toBe('<main>baseline</main>');
+  });
+
+  it('preserves a CareerCompetencyModel HTML artifact for the dedicated viewer', () => {
+    const artifact = normalizeArtifactRecord({
+      id: '43',
+      type: 'career-competency-model',
+      title: 'LLM Agent 工程师 · 岗位能力模型',
+      status: 'ready',
+      render_mode: 'html',
+      revision: 1,
+      summary: '基于公开岗位与雇主材料的岗位能力模型。',
+      payload: { html: '<main>competency-model</main>' },
+    });
+
+    expect(artifact.type).toBe('career-competency-model');
+    expect(artifact.renderMode).toBe('html');
+    if (artifact.renderMode !== 'html') {
+      throw new Error('expected html artifact');
+    }
+    expect(artifact.payload.html).toBe('<main>competency-model</main>');
+  });
+
+  it('preserves a LearningPlan HTML artifact for the dedicated viewer', () => {
+    const artifact = normalizeArtifactRecord({
+      id: '44',
+      type: 'learning-plan',
+      title: 'LLM Agent 工程师 · 学习计划',
+      status: 'ready',
+      render_mode: 'html',
+      revision: 1,
+      summary: '2 项优先差距 · 2 个学习阶段。',
+      payload: { html: '<main>learning-plan</main>' },
+    });
+
+    expect(artifact.type).toBe('learning-plan');
+    expect(artifact.renderMode).toBe('html');
+    if (artifact.renderMode !== 'html') {
+      throw new Error('expected html artifact');
+    }
+    expect(artifact.payload.html).toBe('<main>learning-plan</main>');
+  });
+
   it('maps snake_case fields and queued status into the frontend artifact shape', () => {
     const artifact = normalizeArtifactRecord({
       id: 'artifact-weekly-plan',

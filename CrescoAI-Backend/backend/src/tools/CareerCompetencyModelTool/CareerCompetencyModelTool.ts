@@ -2,18 +2,18 @@ import type { ToolResultBlockParam } from '@anthropic-ai/sdk/resources/index.mjs
 import { z } from 'zod/v4'
 import { buildTool, type ToolDef } from '../../Tool.js'
 import {
-  BASELINE_ASSESSMENT_SKILL_NAME,
-  BASELINE_ASSESSMENT_TOOL_NAME,
-  executeBaselineAssessmentAction,
-  getBaselineAssessmentCommand,
-} from '../../skills/baselineAssessmentAction.js'
+  executeSkillAction,
+  getSkillActionCommand,
+} from '../../skills/skillAction.js'
 import { publishActionArtifact } from '../../artifacts/actionArtifactPublisher.js'
+import { createCareerCompetencyModelArtifactAdapter } from './artifactAdapter.js'
 import { lazySchema } from '../../utils/lazySchema.js'
-import { BaselineAssessmentArtifactAdapter } from './artifactAdapter.js'
+
+const SKILL_NAME = "career-competency-model" as const
 
 const inputSchema = lazySchema(() =>
   z.strictObject({
-    assessment_target: z.string().trim().min(1).optional(),
+    career_target: z.string().trim().min(1).describe("Clearly scoped career or job target. Include known industry, region, seniority, or specialization in the same string."),
   }),
 )
 type InputSchema = ReturnType<typeof inputSchema>
@@ -21,7 +21,7 @@ type InputSchema = ReturnType<typeof inputSchema>
 const outputSchema = lazySchema(() =>
   z.strictObject({
     skill_call_id: z.string(),
-    skill_name: z.literal(BASELINE_ASSESSMENT_SKILL_NAME),
+    skill_name: z.literal(SKILL_NAME),
     agent_id: z.string(),
     execution_status: z.literal('completed'),
     outcome: z.enum(['success', 'insufficient_input', 'error']),
@@ -46,17 +46,17 @@ const outputSchema = lazySchema(() =>
 type OutputSchema = ReturnType<typeof outputSchema>
 type Output = z.infer<OutputSchema>
 
-export const BaselineAssessmentTool = buildTool({
-  name: BASELINE_ASSESSMENT_TOOL_NAME,
-  searchHint: 'assess an existing evidence baseline for a role, domain, or task',
+export const CareerCompetencyModelTool = buildTool({
+  name: "CareerCompetencyModel",
+  searchHint: "research current role competency requirements from web evidence",
   maxResultSizeChars: 100_000,
   strict: true,
   alwaysLoad: true,
   async description() {
-    return (await getBaselineAssessmentCommand()).description
+    return (await getSkillActionCommand(SKILL_NAME)).description
   },
   async prompt() {
-    return (await getBaselineAssessmentCommand()).description
+    return (await getSkillActionCommand(SKILL_NAME)).description
   },
   get inputSchema(): InputSchema {
     return inputSchema()
@@ -65,7 +65,7 @@ export const BaselineAssessmentTool = buildTool({
     return outputSchema()
   },
   userFacingName() {
-    return 'Baseline assessment'
+    return "Career competency model"
   },
   isEnabled() {
     return true
@@ -76,46 +76,48 @@ export const BaselineAssessmentTool = buildTool({
   isReadOnly() {
     return false
   },
-  toAutoClassifierInput({ assessment_target }) {
-    return assessment_target ?? ''
+  toAutoClassifierInput(input) {
+    return JSON.stringify(input)
   },
   async checkPermissions(input) {
     return { behavior: 'allow', updatedInput: input }
   },
-  renderToolUseMessage({ assessment_target }) {
-    return assessment_target
-      ? `Assess baseline for ${assessment_target}`
-      : 'Assess baseline from existing evidence'
+  renderToolUseMessage() {
+    return "Run Career competency model"
   },
   renderToolUseRejectedMessage() {
-    return 'Baseline assessment rejected'
+    return "Career competency model rejected"
   },
   renderToolUseErrorMessage() {
-    return 'Baseline assessment failed'
+    return "Career competency model failed"
   },
   renderToolUseProgressMessage() {
-    return 'Assessing baseline'
+    return "Running Career competency model"
   },
   renderToolResultMessage(output) {
     return output.summary
   },
   async call(input, context, canUseTool) {
-    const completion = await executeBaselineAssessmentAction({
-      assessmentTarget: input.assessment_target,
+    const actionInput = Object.keys(input).length > 0 ? input : undefined
+    const completion = await executeSkillAction({
+      skillName: SKILL_NAME,
+      actionInput,
       context,
       canUseTool,
     })
+    const workspaceDir =
+      context.actionArtifactRuntime?.workspaceDir ?? process.cwd()
     const artifact = await publishActionArtifact({
       completion,
-      adapter: BaselineAssessmentArtifactAdapter,
-      workspaceDir: context.actionArtifactRuntime?.workspaceDir ?? process.cwd(),
+      adapter: createCareerCompetencyModelArtifactAdapter(workspaceDir),
+      workspaceDir,
       sessionId:
         context.actionArtifactRuntime?.sessionId ?? completion.skill_call_id,
       userId: context.actionArtifactRuntime?.userId ?? null,
     })
     const data: Output = {
       ...completion,
-      skill_name: BASELINE_ASSESSMENT_SKILL_NAME,
+      skill_name: SKILL_NAME,
       ...(artifact ? { artifact } : {}),
     }
     return {

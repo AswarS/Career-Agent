@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { readFile } from 'node:fs/promises';
 import { Repository } from 'typeorm';
 import { AgentService } from '../agent/agent.service';
 import {
@@ -33,6 +34,23 @@ export class ArtifactService {
       order: { createdAt: 'ASC' },
     });
     return artifacts.map((artifact) => this.toPublicArtifact(artifact));
+  }
+
+  async toRenderablePublicArtifact(artifact: ArtifactEntity) {
+    const publicArtifact = this.toPublicArtifact(artifact);
+    if (artifact.renderMode !== 'html' || !artifact.storagePath) {
+      return publicArtifact;
+    }
+
+    try {
+      const html = await readFile(artifact.storagePath, 'utf8');
+      return {
+        ...publicArtifact,
+        payload: { html, allowScripts: false },
+      };
+    } catch {
+      throw new NotFoundException(`Artifact ${artifact.id} content not found`);
+    }
   }
 
   toPublicArtifact(artifact: ArtifactEntity) {
