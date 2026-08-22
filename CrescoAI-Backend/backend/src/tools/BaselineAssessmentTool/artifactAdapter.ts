@@ -1,40 +1,40 @@
-import { z } from 'zod/v4'
+import { z } from "zod/v4";
 import type {
   ActionArtifactAdapter,
   ActionCompletionForArtifact,
-} from '../../artifacts/actionArtifactPublisher.js'
-import type { JsonValue } from '../../skills/skillLifecycleTypes.js'
+} from "../../artifacts/actionArtifactPublisher.js";
+import type { JsonValue } from "../../skills/skillLifecycleTypes.js";
 
 const abilityLevelSchema = z.enum([
-  'awareness',
-  'foundational',
-  'applied',
-  'independent',
-  'advanced',
-])
-const confidenceSchema = z.enum(['low', 'medium', 'high'])
+  "awareness",
+  "foundational",
+  "applied",
+  "independent",
+  "advanced",
+]);
+const confidenceSchema = z.enum(["low", "medium", "high"]);
 
 const evidenceSchema = z.object({
   summary: z.string(),
   source_type: z.enum([
-    'conversation',
-    'profile',
-    'tool_result',
-    'mcp_result',
-    'skill_result',
-    'artifact',
+    "conversation",
+    "profile",
+    "tool_result",
+    "mcp_result",
+    "skill_result",
+    "artifact",
   ]),
   source_ref: z.string().optional(),
-})
+});
 
 const baselineAssessmentSchema = z.object({
   assessment_target: z.object({
     name: z.string(),
-    basis: z.enum(['explicit', 'inferred']),
+    basis: z.enum(["explicit", "inferred"]),
     scope: z.string(),
   }),
   framework: z.object({
-    source: z.enum(['provided', 'model_derived']),
+    source: z.enum(["provided", "model_derived"]),
     summary: z.string(),
   }),
   overall: z.object({
@@ -48,7 +48,7 @@ const baselineAssessmentSchema = z.object({
       level: abilityLevelSchema,
       confidence: confidenceSchema,
       evidence_basis: z.array(
-        z.enum(['demonstrated', 'documented', 'self_reported', 'inferred']),
+        z.enum(["demonstrated", "documented", "self_reported", "inferred"]),
       ),
       evidence: z.array(evidenceSchema),
       assessment: z.string(),
@@ -68,51 +68,81 @@ const baselineAssessmentSchema = z.object({
     }),
   ),
   limitations: z.array(z.string()),
-})
+});
 
-type BaselineAssessment = z.infer<typeof baselineAssessmentSchema>
-
-export type BaselineAssessmentArtifact = {
-  schema_version: '1.0'
-  artifact_type: 'BaselineAssessment'
-  created_at: string
-  lineage: {
-    skill_call_id: string
-    skill_name: string
-    agent_id: string
+export function validateBaselineAssessmentSkillResult(
+  result: JsonValue | undefined,
+): { ok: true } | { ok: false; error: string } {
+  let candidate: unknown = result;
+  if (typeof candidate === "string") {
+    try {
+      candidate = JSON.parse(candidate);
+    } catch {
+      return {
+        ok: false,
+        error:
+          "BaselineAssessment success result must be a JSON object, not an encoded or invalid string. Correct the result and call ReturnSkillResult again.",
+      };
+    }
   }
-  assessment: BaselineAssessment
+  const parsed = baselineAssessmentSchema.safeParse(candidate);
+  if (parsed.success) return { ok: true };
+  const fields = [
+    ...new Set(
+      parsed.error.issues.map((issue) =>
+        issue.path.length ? issue.path.join(".") : "result",
+      ),
+    ),
+  ].slice(0, 8);
+  return {
+    ok: false,
+    error: `BaselineAssessment success result is incomplete or invalid at: ${fields.join(", ")}. Correct these fields and call ReturnSkillResult again.`,
+  };
 }
 
+type BaselineAssessment = z.infer<typeof baselineAssessmentSchema>;
+
+export type BaselineAssessmentArtifact = {
+  schema_version: "1.0";
+  artifact_type: "BaselineAssessment";
+  created_at: string;
+  lineage: {
+    skill_call_id: string;
+    skill_name: string;
+    agent_id: string;
+  };
+  assessment: BaselineAssessment;
+};
+
 function escapeHtml(value: unknown): string {
-  return String(value ?? '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;')
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
 
 function list(items: string[], emptyText: string): string {
-  if (!items.length) return `<p class="empty">${escapeHtml(emptyText)}</p>`
-  return `<ul>${items.map(item => `<li>${item}</li>`).join('')}</ul>`
+  if (!items.length) return `<p class="empty">${escapeHtml(emptyText)}</p>`;
+  return `<ul>${items.map((item) => `<li>${item}</li>`).join("")}</ul>`;
 }
 
 function toCanonical(
   completion: ActionCompletionForArtifact,
 ): BaselineAssessmentArtifact {
-  let result: unknown = completion.result
-  if (typeof result === 'string') {
+  let result: unknown = completion.result;
+  if (typeof result === "string") {
     try {
-      result = JSON.parse(result)
+      result = JSON.parse(result);
     } catch {
       // Preserve the original value so the schema reports the canonical error.
     }
   }
-  const assessment = baselineAssessmentSchema.parse(result)
+  const assessment = baselineAssessmentSchema.parse(result);
   return {
-    schema_version: '1.0',
-    artifact_type: 'BaselineAssessment',
+    schema_version: "1.0",
+    artifact_type: "BaselineAssessment",
     created_at: completion.completed_at,
     lineage: {
       skill_call_id: completion.skill_call_id,
@@ -120,16 +150,18 @@ function toCanonical(
       agent_id: completion.agent_id,
     },
     assessment,
-  }
+  };
 }
 
-function renderCapability(capability: BaselineAssessment['capabilities'][number]) {
-  const evidence = capability.evidence.map(item => {
+function renderCapability(
+  capability: BaselineAssessment["capabilities"][number],
+) {
+  const evidence = capability.evidence.map((item) => {
     const reference = item.source_ref
       ? ` <span class="source-ref">${escapeHtml(item.source_ref)}</span>`
-      : ''
-    return `${escapeHtml(item.summary)}${reference}`
-  })
+      : "";
+    return `${escapeHtml(item.summary)}${reference}`;
+  });
   return `
     <article class="capability">
       <div class="capability-head">
@@ -140,23 +172,24 @@ function renderCapability(capability: BaselineAssessment['capabilities'][number]
         </div>
       </div>
       <p>${escapeHtml(capability.assessment)}</p>
-      <p class="basis">证据性质：${escapeHtml(capability.evidence_basis.join(' · '))}</p>
-      ${list(evidence, '没有列出证据摘要。')}
-    </article>`
+      <p class="basis">证据性质：${escapeHtml(capability.evidence_basis.join(" · "))}</p>
+      ${list(evidence, "没有列出证据摘要。")}
+    </article>`;
 }
 
 function renderBaselineAssessmentHtml(
   artifact: BaselineAssessmentArtifact,
 ): string {
-  const assessment = artifact.assessment
+  const assessment = artifact.assessment;
   const unknowns = assessment.unknowns.map(
-    item => `<strong>${escapeHtml(item.dimension)}</strong>：${escapeHtml(item.reason)}`,
-  )
+    (item) =>
+      `<strong>${escapeHtml(item.dimension)}</strong>：${escapeHtml(item.reason)}`,
+  );
   const conflicts = assessment.conflicts.map(
-    item =>
+    (item) =>
       `<strong>${escapeHtml(item.dimension)}</strong>：${escapeHtml(item.summary)}<br><span class="muted">影响：${escapeHtml(item.impact)}</span>`,
-  )
-  const limitations = assessment.limitations.map(item => escapeHtml(item))
+  );
+  const limitations = assessment.limitations.map((item) => escapeHtml(item));
 
   return `<!doctype html>
 <html lang="zh-CN">
@@ -214,29 +247,29 @@ function renderBaselineAssessmentHtml(
     </section>
     <section>
       <h2>能力维度</h2>
-      ${assessment.capabilities.map(renderCapability).join('')}
+      ${assessment.capabilities.map(renderCapability).join("")}
     </section>
     <div class="grid">
-      <section><h2>尚未评估</h2>${list(unknowns, '没有列出关键未知项。')}</section>
-      <section><h2>冲突证据</h2>${list(conflicts, '没有发现需要保留的冲突。')}</section>
+      <section><h2>尚未评估</h2>${list(unknowns, "没有列出关键未知项。")}</section>
+      <section><h2>冲突证据</h2>${list(conflicts, "没有发现需要保留的冲突。")}</section>
     </div>
-    <section><h2>限制</h2>${list(limitations, '没有额外限制。')}</section>
+    <section><h2>限制</h2>${list(limitations, "没有额外限制。")}</section>
   </main>
 </body>
-</html>`
+</html>`;
 }
 
 export const BaselineAssessmentArtifactAdapter = {
-  artifactType: 'baseline-assessment',
-  artifactSlug: 'baseline-assessment',
-  schemaVersion: '1.0',
+  artifactType: "baseline-assessment",
+  artifactSlug: "baseline-assessment",
+  schemaVersion: "1.0",
   toCanonical,
   render(artifact) {
     return {
       title: `${artifact.assessment.assessment_target.name} · 能力基线评估`,
       summary: artifact.assessment.overall.summary,
-      renderMode: 'html',
+      renderMode: "html",
       html: renderBaselineAssessmentHtml(artifact),
-    }
+    };
   },
-} satisfies ActionArtifactAdapter<BaselineAssessmentArtifact & JsonValue>
+} satisfies ActionArtifactAdapter<BaselineAssessmentArtifact & JsonValue>;

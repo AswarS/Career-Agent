@@ -3,6 +3,10 @@ import { toolMatchesName, type Tool, type Tools } from './Tool.js'
 import { AgentTool } from './tools/AgentTool/AgentTool.js'
 import { SkillTool } from './tools/SkillTool/SkillTool.js'
 import { ReturnSkillResultTool } from './tools/ReturnSkillResultTool/ReturnSkillResultTool.js'
+import { GetLearningStateTool } from './tools/GetLearningStateTool/GetLearningStateTool.js'
+import { ActivateLearningPlanTool } from './tools/ActivateLearningPlanTool/ActivateLearningPlanTool.js'
+import { UpdateLearningProgressTool } from './tools/UpdateLearningProgressTool/UpdateLearningProgressTool.js'
+import { UpdateLearningPlanTool } from './tools/UpdateLearningPlanTool/UpdateLearningPlanTool.js'
 import { getGeneratedSkillActionTools } from './tools/generatedSkillActionTools.js'
 import { BashTool } from './tools/BashTool/BashTool.js'
 import { FileEditTool } from './tools/FileEditTool/FileEditTool.js'
@@ -216,6 +220,10 @@ export function getAllBaseTools(): Tools {
     SkillTool,
     ...getGeneratedSkillActionTools(),
     ReturnSkillResultTool,
+    GetLearningStateTool,
+    ActivateLearningPlanTool,
+    UpdateLearningProgressTool,
+    UpdateLearningPlanTool,
     EnterPlanModeTool,
     ...(process.env.USER_TYPE === 'ant' ? [ConfigTool] : []),
     ...(process.env.USER_TYPE === 'ant' ? [TungstenTool] : []),

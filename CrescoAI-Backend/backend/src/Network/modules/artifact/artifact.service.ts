@@ -33,7 +33,31 @@ export class ArtifactService {
       where: { userId },
       order: { createdAt: 'ASC' },
     });
-    return artifacts.map((artifact) => this.toPublicArtifact(artifact));
+    const parsed = artifacts.map((artifact) => ({ artifact, metadata: this.parseMetadata(artifact.metadataJson) }));
+    const superseded = new Set(
+      parsed.map(item => item.metadata?.previous_artifact_ref).filter((ref): ref is string => typeof ref === 'string')
+        .map(ref => ref.startsWith('artifact://') ? ref.slice('artifact://'.length) : ref),
+    );
+    const latestByLogicalId = new Map<string, typeof parsed[number]>();
+    for (const item of parsed) {
+      const logicalId = item.metadata?.logical_object_id;
+      if (typeof logicalId !== 'string') continue;
+      const previous = latestByLogicalId.get(logicalId);
+      if (!previous || Number(item.metadata?.version ?? 0) > Number(previous.metadata?.version ?? 0)) latestByLogicalId.set(logicalId, item);
+    }
+    return parsed
+      .filter(item => {
+        const uid = item.metadata?.artifact_uid;
+        if (typeof uid === 'string' && superseded.has(uid)) return false;
+        const logicalId = item.metadata?.logical_object_id;
+        return typeof logicalId !== 'string' || latestByLogicalId.get(logicalId) === item;
+      })
+      .map(({ artifact }) => this.toPublicArtifact(artifact));
+  }
+
+  private parseMetadata(source?: string): Record<string, unknown> | undefined {
+    if (!source) return undefined;
+    try { const value = JSON.parse(source); return value && typeof value === 'object' && !Array.isArray(value) ? value : undefined; } catch { return undefined; }
   }
 
   async toRenderablePublicArtifact(artifact: ArtifactEntity) {

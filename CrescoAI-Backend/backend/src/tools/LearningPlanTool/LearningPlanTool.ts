@@ -5,8 +5,10 @@ import {
   executeSkillAction,
   getSkillActionCommand,
 } from '../../skills/skillAction.js'
-import { publishActionArtifact } from '../../artifacts/actionArtifactPublisher.js'
+import { assertActionArtifactPublished, publishActionArtifact, toPublicActionArtifactPublication } from '../../artifacts/actionArtifactPublisher.js'
 import { createLearningPlanArtifactAdapter } from './artifactAdapter.js'
+import { resolveArtifactForWorkspace } from '../../artifacts/actionArtifactResolver.js'
+import type { JsonValue } from '../../skills/skillLifecycleTypes.js'
 import { lazySchema } from '../../utils/lazySchema.js'
 
 const SKILL_NAME = "learning-plan" as const
@@ -14,10 +16,10 @@ const SKILL_NAME = "learning-plan" as const
 const inputSchema = lazySchema(() =>
   z.strictObject({
     model_ref: z.string().trim().min(1).optional().describe(
-      "Canonical path of a CareerCompetencyModel artifact. Omit to resolve from the most recent relevant tool result in context.",
+      "Opaque artifact:// reference for a CareerCompetencyModel. Omit to resolve the most recent matching Action result in context.",
     ),
     baseline_ref: z.string().trim().min(1).optional().describe(
-      "Canonical path of a BaselineAssessment artifact. Omit to resolve from the most recent relevant tool result in context.",
+      "Opaque artifact:// reference for a BaselineAssessment. Omit to resolve the most recent matching Action result in context.",
     ),
     goal_level: z
       .enum(['working', 'independent', 'advanced'])
@@ -64,11 +66,10 @@ const outputSchema = lazySchema(() =>
     artifact: z
       .strictObject({
         artifact_uid: z.string(),
+        artifact_ref: z.string(),
         artifact_type: z.string(),
         schema_version: z.string(),
         status: z.enum(['ready', 'canonical_only', 'error']),
-        canonical_path: z.string().optional(),
-        presentation_path: z.string().optional(),
         render_mode: z.literal('html').optional(),
         error: z.string().optional(),
       })
@@ -130,15 +131,36 @@ export const LearningPlanTool = buildTool({
     return output.summary
   },
   async call(input, context, canUseTool) {
-    const actionInput = Object.keys(input).length > 0 ? input : undefined
+    const runtime = context.actionArtifactRuntime
+    if (!runtime?.userId) throw new Error('ARTIFACT_ACCESS_DENIED: Authenticated user workspace required')
+    const transcript = JSON.stringify((context as unknown as { messages?: unknown }).messages ?? [])
+    const refs = [...transcript.matchAll(/artifact:\/\/[0-9a-f-]{36}/gi)].map(match => match[0]).reverse()
+    const resolveLatest = async (explicit: string | undefined, type: string) => {
+      for (const ref of explicit ? [explicit] : refs) {
+        try { return await resolveArtifactForWorkspace({ userId: String(runtime.userId), workspaceDir: runtime.workspaceDir,
+          artifactRef: ref, expectedType: type, supportedSchemaVersions: ['1.0'] }) } catch (error) {
+          if (explicit) throw error
+        }
+      }
+      return undefined
+    }
+    const [model, baseline] = await Promise.all([
+      resolveLatest(input.model_ref, 'career-competency-model'),
+      resolveLatest(input.baseline_ref, 'baseline-assessment'),
+    ])
+    const actionInput = JSON.parse(JSON.stringify({ ...input,
+      model_ref: model?.artifactRef ?? input.model_ref ?? null,
+      baseline_ref: baseline?.artifactRef ?? input.baseline_ref ?? null,
+      model: model?.canonical ?? null,
+      baseline: baseline?.canonical ?? null,
+    })) as JsonValue
     const completion = await executeSkillAction({
       skillName: SKILL_NAME,
       actionInput,
       context,
       canUseTool,
     })
-    const workspaceDir =
-      context.actionArtifactRuntime?.workspaceDir ?? process.cwd()
+    const workspaceDir = runtime.workspaceDir
     const artifact = await publishActionArtifact({
       completion,
       adapter: createLearningPlanArtifactAdapter(workspaceDir),
@@ -147,10 +169,12 @@ export const LearningPlanTool = buildTool({
         context.actionArtifactRuntime?.sessionId ?? completion.skill_call_id,
       userId: context.actionArtifactRuntime?.userId ?? null,
     })
+    assertActionArtifactPublished(completion, artifact)
+    const { result: _internalResult, ...publicCompletion } = completion
     const data: Output = {
-      ...completion,
+      ...publicCompletion,
       skill_name: SKILL_NAME,
-      ...(artifact ? { artifact } : {}),
+      ...(artifact ? { artifact: toPublicActionArtifactPublication(artifact), result: { artifact_ref: artifact.artifact_ref } } : completion.result !== undefined ? { result: completion.result } : {}),
     }
     return {
       data,

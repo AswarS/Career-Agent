@@ -16,7 +16,7 @@ Bridge the current state to the target state: consume a `CareerCompetencyModel` 
 
 - This Skill does not rebuild the competency model and does not redo the baseline assessment. It only consumes their artifacts.
 - Use only `Read`, `Write`, and `ReturnSkillResult`. Do not use Web tools, MCP, other Skills, or shell commands.
-- Use `Read` only for two purposes: (1) reading the artifact files referenced by `model_ref` / `baseline_ref`, or resolving them from context when refs are absent; (2) reading back the artifact written by this invocation. Do not browse or discover other local files, and do not read the user's Profile, résumé, portfolio, memories, or personal files.
+- The Harness resolves opaque upstream refs and injects `model` and `baseline` snapshots. Use `Read` only to read back the artifact written by this invocation. Do not browse or discover other local files, and do not read the user's Profile, résumé, portfolio, memories, or personal files.
 - Do not ask the user questions. Constraint and goal collection happens in the main conversation before this invocation; this Skill only consumes user-stated inputs.
 - All constraints and goals must come from the user's explicit statements passed through `<skill-action-input>`. Never invent the user's weekly time, deadline, goals, or personal circumstances.
 - Do not include course recommendations, resource lists, daily schedules, or micro-task breakdowns.
@@ -28,14 +28,13 @@ Bridge the current state to the target state: consume a `CareerCompetencyModel` 
 
 Read the invocation inputs from `<skill-action-input>`:
 
-- `model_ref`: canonical path of a `CareerCompetencyModel` artifact (optional).
-- `baseline_ref`: canonical path of a `BaselineAssessment` artifact (optional).
+- `model_ref`: opaque reference of a `CareerCompetencyModel` artifact.
+- `baseline_ref`: opaque reference of a `BaselineAssessment` artifact.
+- `model` and `baseline`: canonical snapshots already resolved and ownership-checked by the Harness.
 - `goal_level`: optional user goal on the depth ladder (`working`, `independent`, or `advanced`). Absent means market-aligned.
 - `constraints`: user-stated planning constraints. `available_time_per_week` and `deadline` are required fields; `deadline` is `null` only when the user explicitly said they have no deadline. Remaining fields (`resource_constraints`, `explicit_goals`, `notes`) may be absent.
 
-When a ref is absent, resolve it from the conversation context: find the most recent `CareerCompetencyModel` / `BaselineAssessment` tool result and take its `artifact.canonical_path`. If a baseline canonical file is unavailable but the baseline result JSON is already visible in context, that inline result may be used and its `skill_call_id` recorded as the baseline ref.
-
-Then `Read` the referenced files and validate:
+If either snapshot is absent, return `insufficient_input`; do not attempt filesystem discovery. Validate the injected snapshots:
 
 - **Target correspondence**: the model's `target.role` and the baseline's `assessment_target.name` must semantically refer to the same career target. Exact string equality is not required, but materially different targets invalidate the pair.
 - **Freshness**: judge whether the artifacts are usable for this plan. Consider the model's `methodology.as_of` and the baseline's completion timestamp, plus any context signals that the user's situation has materially changed (new job, changed target, invalidated evidence). There is no fixed age threshold — record the judgment.
@@ -124,10 +123,19 @@ The JSON must use this top-level structure:
   "schema_version": "1.0",
   "artifact_type": "LearningPlan",
   "created_at": "ISO-8601 timestamp",
+  "version": 1,
+  "updated_at": "same ISO-8601 timestamp as created_at",
+  "planning_constraints": {
+    "available_time_per_week": "verbatim user-stated value",
+    "deadline": "verbatim user-stated value or null",
+    "resource_constraints": "optional verbatim user-stated value",
+    "explicit_goals": "optional verbatim user-stated value",
+    "notes": "optional verbatim user-stated value"
+  },
   "lineage": {
-    "model_ref": "string path or null",
+    "model_ref": "artifact://UUID or null",
     "model_as_of": "YYYY-MM-DD or null",
-    "baseline_ref": "string path or skill_call_id or null",
+    "baseline_ref": "artifact://UUID or null",
     "baseline_completed_at": "ISO-8601 or null",
     "validation": {
       "target_correspondence": "string",

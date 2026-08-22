@@ -2249,6 +2249,10 @@ export class AgentService {
         trustedSkillCatalogRoots: getNetworkTrustedSkillCatalogRoots(),
         serviceOnlyRoots: [
           {
+            id: `user-${userId}-learning-state`,
+            root: resolve(resolvedWorkspaceDir, '.state'),
+          },
+          {
             id: `user-${userId}-conversation-memory-daily`,
             root: resolve(conversationMemoryDir, 'daily'),
           },

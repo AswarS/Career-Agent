@@ -3,6 +3,7 @@ import {
   checkSessionWorkspacePath,
   type WorkspacePathDecision,
 } from './workspaceSecurity.js'
+import type { SessionFilesystemRoot } from './filesystemPolicyTypes.js'
 
 export type ServerShellKind = 'bash' | 'powershell'
 
@@ -182,12 +183,14 @@ async function checkShellPath(
   options: {
     workspaceRoot: string
     autoMemoryDir?: string
+    serviceOnlyRoots?: Iterable<SessionFilesystemRoot>
   },
 ): Promise<WorkspacePathDecision> {
   const decision = await checkSessionWorkspacePath(path, 'write', {
     cwd,
     workspaceRoot: options.workspaceRoot,
     autoMemoryDir: options.autoMemoryDir,
+    serviceOnlyRoots: options.serviceOnlyRoots,
   })
   if (decision.allowed && decision.rootType === 'memory') {
     return {
@@ -211,6 +214,7 @@ export async function checkShellCommandWorkspace(
     cwd: string
     workspaceRoot: string
     autoMemoryDir?: string
+    serviceOnlyRoots?: Iterable<SessionFilesystemRoot>
   },
 ): Promise<ShellWorkspaceDecision> {
   const syntaxViolation = getStaticSyntaxViolation(command)

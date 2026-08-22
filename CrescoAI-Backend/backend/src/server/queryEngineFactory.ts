@@ -241,6 +241,7 @@ async function checkServerShellBoundary(
       cwd: context.config.cwd,
       workspaceRoot: context.config.workspaceRoot,
       autoMemoryDir: context.config.autoMemoryDir,
+      serviceOnlyRoots: context.config.serviceOnlyRoots,
     },
   )
   if (boundary.allowed === true) {

@@ -9,6 +9,7 @@ import {
 } from '../src/artifacts/actionArtifactPublisher.js'
 import { discoverGeneratedFiles } from '../src/Network/modules/agent/generated-output-discovery.js'
 import { createLearningPlanArtifactAdapter } from '../src/tools/LearningPlanTool/artifactAdapter.js'
+import type { JsonValue } from '../src/skills/skillLifecycleTypes.js'
 
 const temporaryRoots: string[] = []
 
@@ -30,6 +31,12 @@ const skillPlan = {
   schema_version: '1.0',
   artifact_type: 'LearningPlan',
   created_at: '2026-08-16T08:00:00.000Z',
+  version: 1,
+  updated_at: '2026-08-16T08:00:00.000Z',
+  planning_constraints: {
+    available_time_per_week: '10 小时',
+    deadline: '2027-02-15',
+  },
   lineage: {
     model_ref: 'action_artifacts/career-competency-model-<uid>.json',
     model_as_of: '2026-08-15',
@@ -117,7 +124,7 @@ const skillPlan = {
 }
 
 function successCompletion(
-  result: Record<string, unknown>,
+  result: JsonValue,
 ): ActionCompletionForArtifact {
   return {
     skill_call_id: 'skill-call-1',

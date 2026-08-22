@@ -5,7 +5,7 @@ import {
   executeSkillAction,
   getSkillActionCommand,
 } from '../../skills/skillAction.js'
-import { publishActionArtifact } from '../../artifacts/actionArtifactPublisher.js'
+import { assertActionArtifactPublished, publishActionArtifact, toPublicActionArtifactPublication } from '../../artifacts/actionArtifactPublisher.js'
 import { createCareerCompetencyModelArtifactAdapter } from './artifactAdapter.js'
 import { lazySchema } from '../../utils/lazySchema.js'
 
@@ -32,11 +32,10 @@ const outputSchema = lazySchema(() =>
     artifact: z
       .strictObject({
         artifact_uid: z.string(),
+        artifact_ref: z.string(),
         artifact_type: z.string(),
         schema_version: z.string(),
         status: z.enum(['ready', 'canonical_only', 'error']),
-        canonical_path: z.string().optional(),
-        presentation_path: z.string().optional(),
         render_mode: z.literal('html').optional(),
         error: z.string().optional(),
       })
@@ -115,10 +114,12 @@ export const CareerCompetencyModelTool = buildTool({
         context.actionArtifactRuntime?.sessionId ?? completion.skill_call_id,
       userId: context.actionArtifactRuntime?.userId ?? null,
     })
+    assertActionArtifactPublished(completion, artifact)
+    const { result: _internalResult, ...publicCompletion } = completion
     const data: Output = {
-      ...completion,
+      ...publicCompletion,
       skill_name: SKILL_NAME,
-      ...(artifact ? { artifact } : {}),
+      ...(artifact ? { artifact: toPublicActionArtifactPublication(artifact), result: { artifact_ref: artifact.artifact_ref } } : completion.result !== undefined ? { result: completion.result } : {}),
     }
     return {
       data,

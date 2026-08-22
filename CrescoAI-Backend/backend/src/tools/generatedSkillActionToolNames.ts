@@ -3,4 +3,6 @@ export const generatedSkillActionToolNames = new Set([
   "baselineassessment",
   "careercompetencymodel",
   "learningplan",
+  "learningprogressassessment",
+  "learningstagedesign",
 ])

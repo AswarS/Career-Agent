@@ -31,6 +31,15 @@ const learningPlanSchema = z.object({
   schema_version: z.string(),
   artifact_type: z.string(),
   created_at: z.string().optional(),
+  version: z.number().int().positive(),
+  updated_at: z.string().datetime({ offset: true }),
+  planning_constraints: z.object({
+    available_time_per_week: z.string().trim().min(1),
+    deadline: z.string().trim().min(1).nullable(),
+    resource_constraints: z.string().trim().min(1).optional(),
+    explicit_goals: z.string().trim().min(1).optional(),
+    notes: z.string().trim().min(1).optional(),
+  }),
   lineage: z.object({
     model_ref: z.string().nullable(),
     model_as_of: z.string().nullable(),

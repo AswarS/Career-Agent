@@ -9,12 +9,12 @@
     "model_ref": {
       "type": "string",
       "required": false,
-      "description": "Canonical path of a CareerCompetencyModel artifact. Omit to resolve from the most recent relevant tool result in context."
+      "description": "Opaque artifact:// reference for a CareerCompetencyModel. Omit to resolve the most recent matching Action result in context."
     },
     "baseline_ref": {
       "type": "string",
       "required": false,
-      "description": "Canonical path of a BaselineAssessment artifact. Omit to resolve from the most recent relevant tool result in context."
+      "description": "Opaque artifact:// reference for a BaselineAssessment. Omit to resolve the most recent matching Action result in context."
     },
     "goal_level": {
       "type": "string",

@@ -8,3 +8,7 @@ __pycache__/
 
 # Local helper scripts for one-off demos or machine-specific workflows.
 scripts/local/
+
+# Local environment overrides (secrets); keep .env.example in sync instead
+.env
+.env.local

@@ -5,6 +5,8 @@ export function getGeneratedSkillActionTools() {
     (require("./BaselineAssessmentTool/BaselineAssessmentTool.js") as typeof import("./BaselineAssessmentTool/BaselineAssessmentTool.js")).BaselineAssessmentTool,
     (require("./CareerCompetencyModelTool/CareerCompetencyModelTool.js") as typeof import("./CareerCompetencyModelTool/CareerCompetencyModelTool.js")).CareerCompetencyModelTool,
     (require("./LearningPlanTool/LearningPlanTool.js") as typeof import("./LearningPlanTool/LearningPlanTool.js")).LearningPlanTool,
+    (require("./LearningProgressAssessmentTool/LearningProgressAssessmentTool.js") as typeof import("./LearningProgressAssessmentTool/LearningProgressAssessmentTool.js")).LearningProgressAssessmentTool,
+    (require("./LearningStageDesignTool/LearningStageDesignTool.js") as typeof import("./LearningStageDesignTool/LearningStageDesignTool.js")).LearningStageDesignTool,
   ] as const
 }
 /* eslint-enable @typescript-eslint/no-require-imports */

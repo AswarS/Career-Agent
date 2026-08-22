@@ -14,6 +14,8 @@ const CAREER_AGENT_SKILL_NAMES = [
   'baseline-assessment',
   'career-competency-model',
   'learning-plan',
+  'learning-stage-design',
+  'learning-progress-assessment',
   'code-analysis',
 ].sort()
 
@@ -21,6 +23,8 @@ const PACKAGED_GLOBAL_SKILL_NAMES = [
   'baseline-assessment',
   'career-competency-model',
   'learning-plan',
+  'learning-stage-design',
+  'learning-progress-assessment',
 ]
 
 registerCareerAgentSkills()
@@ -209,6 +213,19 @@ describe('CareerAgent skills on the native CC skill chain', () => {
     expect(text).toContain('`working` corresponds to `applied`')
     expect(text).toContain('Do not ask the user questions')
     expect(text).toContain('LearningPlan')
+  })
+
+  test('loads learning-stage-design as an Action-only current-stage skill', async () => {
+    const skill = getBundledSkills().find(item => item.name === 'learning-stage-design')
+    expect(skill).toBeDefined()
+    if (!skill || skill.type !== 'prompt') throw new Error('learning-stage-design was not registered')
+    const blocks = await skill.getPromptForCommand('', {} as never)
+    const text = blocks.filter(block => block.type === 'text').map(block => block.text).join('\n')
+    expect(skill.modelEntry).toBe('action-tool')
+    expect(skill.allowedTools).toEqual(['WebSearch', 'WebFetch', 'Write', 'Read', 'Edit', 'ReturnSkillResult'])
+    expect(text).toContain('Work only on `current_stage`')
+    expect(text).toContain('Do not evaluate whether the user has mastered the stage')
+    expect(text).toContain('Do not use Bash, Python, Node, `jq`')
   })
 
 })
