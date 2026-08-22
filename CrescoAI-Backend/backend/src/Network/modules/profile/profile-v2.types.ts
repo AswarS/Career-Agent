@@ -65,6 +65,11 @@ export interface BaseProfileRecord {
   updatedAt: string;
 }
 
+export interface ProfileReadSnapshot {
+  base: BaseProfileRecord;
+  aggregateVersion: number;
+}
+
 export interface BaseProfilePatch {
   name?: string;
   gender?: string;

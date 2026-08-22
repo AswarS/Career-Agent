@@ -230,13 +230,33 @@ function createMessageBlockGroups(blocks: MessageBlockView[], streaming: boolean
   const finalBlocks = [...textBlocks, ...artifactBlocks, ...askQuestionBlocks];
   const executionGroup = createExecutionBlockGroup(processBlocks);
   const replySegments: Array<{
-    textBlock: MessageBlockView;
+    textBlock: MessageBlockView | null;
     processBlocks: MessageBlockView[];
+    askQuestionBlocks: MessageBlockView[];
   }> = [];
   let pendingProcessBlocks: MessageBlockView[] = [];
+  let currentSegment: {
+    textBlock: MessageBlockView | null;
+    processBlocks: MessageBlockView[];
+    askQuestionBlocks: MessageBlockView[];
+  } | null = null;
 
   for (const block of blocks) {
-    if (block.type === 'artifact' || block.type === 'ask_question') {
+    if (block.type === 'artifact') {
+      continue;
+    }
+
+    if (block.type === 'ask_question') {
+      if (!currentSegment) {
+        currentSegment = {
+          textBlock: null,
+          processBlocks: pendingProcessBlocks,
+          askQuestionBlocks: [],
+        };
+        replySegments.push(currentSegment);
+        pendingProcessBlocks = [];
+      }
+      currentSegment.askQuestionBlocks.push(block);
       continue;
     }
 
@@ -245,27 +265,29 @@ function createMessageBlockGroups(blocks: MessageBlockView[], streaming: boolean
       continue;
     }
 
-    replySegments.push({
+    currentSegment = {
       textBlock: block,
       processBlocks: pendingProcessBlocks,
-    });
+      askQuestionBlocks: [],
+    };
+    replySegments.push(currentSegment);
     pendingProcessBlocks = [];
   }
 
-  if (!streaming && pendingProcessBlocks.length && replySegments.length) {
-    replySegments[replySegments.length - 1]!.processBlocks.push(...pendingProcessBlocks);
+  if (!streaming && pendingProcessBlocks.length && currentSegment) {
+    currentSegment.processBlocks.push(...pendingProcessBlocks);
     pendingProcessBlocks = [];
   }
 
   const replyUnits: MessageReplyUnitView[] = replySegments.map((segment, index) => {
     const unitExecutionGroup = createExecutionBlockGroup(segment.processBlocks);
     return {
-      id: `reply-${segment.textBlock.id}`,
+      id: `reply-${segment.textBlock?.id ?? `interactive-${index}`}`,
       textBlock: segment.textBlock,
       executionBlocks: unitExecutionGroup.executionBlocks,
       standaloneToolResultBlocks: unitExecutionGroup.standaloneToolResultBlocks,
       artifactBlocks: index === replySegments.length - 1 ? artifactBlocks : [],
-      askQuestionBlocks: index === replySegments.length - 1 ? askQuestionBlocks : [],
+      askQuestionBlocks: segment.askQuestionBlocks,
       hasHiddenExecutionBlocks: unitExecutionGroup.hasHiddenExecutionBlocks,
       hiddenExecutionBlockCount: unitExecutionGroup.hiddenExecutionBlockCount,
       pending: false,
@@ -280,7 +302,7 @@ function createMessageBlockGroups(blocks: MessageBlockView[], streaming: boolean
       executionBlocks: pendingExecutionGroup.executionBlocks,
       standaloneToolResultBlocks: pendingExecutionGroup.standaloneToolResultBlocks,
       artifactBlocks: replySegments.length ? [] : artifactBlocks,
-      askQuestionBlocks: replySegments.length ? [] : askQuestionBlocks,
+      askQuestionBlocks: [],
       hasHiddenExecutionBlocks: pendingExecutionGroup.hasHiddenExecutionBlocks,
       hiddenExecutionBlockCount: pendingExecutionGroup.hiddenExecutionBlockCount,
       pending: streaming,
@@ -294,7 +316,7 @@ function createMessageBlockGroups(blocks: MessageBlockView[], streaming: boolean
       executionBlocks: [],
       standaloneToolResultBlocks: [],
       artifactBlocks,
-      askQuestionBlocks,
+      askQuestionBlocks: askQuestionBlocks,
       hasHiddenExecutionBlocks: false,
       hiddenExecutionBlockCount: 0,
       pending: false,

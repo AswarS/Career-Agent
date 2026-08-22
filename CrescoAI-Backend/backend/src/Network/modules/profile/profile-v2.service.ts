@@ -17,6 +17,7 @@ import {
   type BaseProfileRecord,
   type EducationBackgroundItem,
   type ProfileMutationMeta,
+  type ProfileReadSnapshot,
 } from './profile-v2.types';
 
 @Injectable()
@@ -39,6 +40,20 @@ export class ProfileV2Service {
   async getBaseProfile(userId: number): Promise<BaseProfileRecord> {
     const { base: entity } = await this.ensureProfileInitialized(userId);
     return this.toBaseRecord(entity);
+  }
+
+  /**
+   * Initializes Profile V2 once and returns the read data that recall and
+   * proposal flows need from the same transaction. SQLite uses a single
+   * connection, so callers must not compose getBaseProfile() and getState()
+   * with Promise.all().
+   */
+  async getReadSnapshot(userId: number): Promise<ProfileReadSnapshot> {
+    const { base, state } = await this.ensureProfileInitialized(userId);
+    return {
+      base: this.toBaseRecord(base),
+      aggregateVersion: state.aggregateVersion,
+    };
   }
 
   async updateBaseProfile(

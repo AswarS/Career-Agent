@@ -135,23 +135,31 @@ export class SettingsService {
             dto.display_name ?? dto.displayName ?? user.displayName ?? username,
         });
         // Username is not part of the external account contract. Persist it
-        // even when the public account fields did not change.
-        await manager.save(user);
+        // even when the public account fields did not change. Use a field
+        // whitelist so credentials omitted from this query cannot be cleared.
+        await manager.update(UserEntity, { id: userId }, { username });
+
+        const updatedUser = await manager.findOne(UserEntity, {
+          where: { id: userId },
+        });
+        if (!updatedUser) {
+          throw new NotFoundException('user not found');
+        }
 
         return {
           message: 'username updated successfully',
           account: {
-            id: user.publicUserId!,
-            publicUserId: user.publicUserId!,
-            public_user_id: user.publicUserId!,
-            email: user.email,
-            username: user.username,
-            display_name: user.displayName,
-            displayName: user.displayName,
-            created_at: user.createdAt?.toISOString() ?? null,
-            createdAt: user.createdAt?.toISOString() ?? null,
-            updated_at: user.updatedAt?.toISOString() ?? null,
-            updatedAt: user.updatedAt?.toISOString() ?? null,
+            id: updatedUser.publicUserId!,
+            publicUserId: updatedUser.publicUserId!,
+            public_user_id: updatedUser.publicUserId!,
+            email: updatedUser.email,
+            username: updatedUser.username,
+            display_name: updatedUser.displayName,
+            displayName: updatedUser.displayName,
+            created_at: updatedUser.createdAt?.toISOString() ?? null,
+            createdAt: updatedUser.createdAt?.toISOString() ?? null,
+            updated_at: updatedUser.updatedAt?.toISOString() ?? null,
+            updatedAt: updatedUser.updatedAt?.toISOString() ?? null,
           },
         };
       });

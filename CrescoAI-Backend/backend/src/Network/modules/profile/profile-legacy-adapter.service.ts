@@ -99,13 +99,18 @@ export class ProfileLegacyAdapterService {
         revisions,
       )) || businessChanged;
 
-      user.profileJson = serializeCanonicalProfile(profile);
+      const profileJson = serializeCanonicalProfile(profile);
       const displayName =
         profile.basicInfo.fullName || profile.basicInfo.displayName;
       await applyPublicAccountPatch(manager, user, {
         displayName: displayName || user.displayName,
       });
-      await manager.save(user);
+      await manager.update(
+        UserEntity,
+        { id: user.id },
+        { profileJson },
+      );
+      user.profileJson = profileJson;
 
       if (suggestion) {
         suggestion.status = 'accepted';

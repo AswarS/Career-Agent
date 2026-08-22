@@ -226,10 +226,8 @@ export class ProfileProposalService {
 
   async proposeBase(userId: number, input: ProposeBaseProfileDto) {
     if (!profileFeatureFlags.v2Write()) throw profileAccessDenied('Profile V2 writes are disabled');
-    const [base, state] = await Promise.all([
-      this.baseService.getBaseProfile(userId),
-      this.baseService.getState(userId),
-    ]);
+    const snapshot = await this.baseService.getReadSnapshot(userId);
+    const base = snapshot.base;
     const autoApply = profileFeatureFlags.l3AutoApply();
     const proposal = await this.saveProposal(userId, {
       targetType: 'base_profile',
@@ -242,7 +240,7 @@ export class ProfileProposalService {
       confirmationRequired: !autoApply,
       sourceConversationId: input.sourceConversationId ?? null,
       sourceMessageId: input.sourceMessageId ?? null,
-      baseVersion: state.aggregateVersion,
+      baseVersion: snapshot.aggregateVersion,
     });
     if (!autoApply || proposal.status === 'applied' || proposal.confirmationRequired) return proposal;
     const resolved = await this.apply(userId, proposal.id, false, 'agent');

@@ -1,6 +1,10 @@
 import {
+  Body,
   Controller,
   Get,
+  Headers,
+  HttpCode,
+  HttpStatus,
   Param,
   Post,
   Query,
@@ -18,6 +22,11 @@ import {
   PraxisTraceInterceptor,
 } from './praxis-integration-http';
 import { PraxisSsoService } from './praxis-sso.service';
+import { PraxisBehaviorEventService } from './praxis-behavior-event.service';
+
+type PraxisIntegrationRequest = AuthenticatedRequest & {
+  praxisTraceId?: string;
+};
 
 @Controller('integration/praxis/v1')
 @Public()
@@ -25,7 +34,10 @@ import { PraxisSsoService } from './praxis-sso.service';
 @UseInterceptors(PraxisTraceInterceptor)
 @UseFilters(PraxisIntegrationExceptionFilter)
 export class PraxisIntegrationController {
-  constructor(private readonly integration: PraxisIntegrationService) {}
+  constructor(
+    private readonly integration: PraxisIntegrationService,
+    private readonly behaviorEvents: PraxisBehaviorEventService,
+  ) {}
 
   @Get('accounts/:externalUserId')
   getAccount(@Param('externalUserId') externalUserId: string) {
@@ -44,6 +56,20 @@ export class PraxisIntegrationController {
     @Query('limit') limit?: string,
   ) {
     return this.integration.searchDirectory(query, cursor, limit);
+  }
+
+  @Post('behavior-events')
+  @HttpCode(HttpStatus.ACCEPTED)
+  receiveBehaviorEvent(
+    @Body() body: unknown,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Req() request: PraxisIntegrationRequest,
+  ) {
+    return this.behaviorEvents.receive(
+      body,
+      idempotencyKey,
+      request.praxisTraceId,
+    );
   }
 }
 

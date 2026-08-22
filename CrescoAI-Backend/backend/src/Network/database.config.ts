@@ -7,6 +7,7 @@ import { MessageEntity } from './modules/conversation/entities/message.entity.js
 import { GeneratedAppEntity } from './modules/generated-app/entities/generated-app.entity.js';
 import { MemoryEntity } from './modules/memory/entities/memory.entity.js';
 import { IntegrationOutboxEntity } from './modules/integration/entities/integration-outbox.entity.js';
+import { PraxisBehaviorEventEntity } from './modules/integration/entities/praxis-behavior-event.entity.js';
 import { BaseProfileEntity } from './modules/profile/entities/base-profile.entity.js';
 import { ProfileChangeProposalEntity } from './modules/profile/entities/profile-change-proposal.entity.js';
 import { ProfileMemoryItemEntity } from './modules/profile/entities/profile-memory-item.entity.js';
@@ -50,4 +51,5 @@ export const careerAgentEntities = [
   ProfileEvidenceLinkEntity,
   ProfileRefreshJobEntity,
   IntegrationOutboxEntity,
+  PraxisBehaviorEventEntity,
 ];

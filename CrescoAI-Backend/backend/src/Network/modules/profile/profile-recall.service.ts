@@ -30,11 +30,15 @@ export class ProfileRecallService {
 
   async buildContext(userId: number, query: string): Promise<ProfileContextRecord | null> {
     if (!profileFeatureFlags.recall()) return null;
-    const [base, memories, state] = await Promise.all([
-      this.baseService.getBaseProfile(userId),
-      this.memoryService.list(userId, { status: 'active', limit: 200 }),
-      this.baseService.getState(userId),
-    ]);
+    // getBaseProfile() and getState() both initialize Profile V2 transactionally.
+    // Running them concurrently produces nested BEGIN statements on SQLite's
+    // single connection. Read both values from one initialization snapshot.
+    const snapshot = await this.baseService.getReadSnapshot(userId);
+    const memories = await this.memoryService.list(userId, {
+      status: 'active',
+      limit: 200,
+    });
+    const base = snapshot.base;
     const intent = this.classifyIntent(query);
     const now = Date.now();
     const effective = memories.filter((item) =>
@@ -63,7 +67,7 @@ export class ProfileRecallService {
       longTerm,
     }).slice(0, 8_000);
     return {
-      version: state.aggregateVersion,
+      version: snapshot.aggregateVersion,
       queryIntent: intent,
       baseFacts,
       hardConstraints,

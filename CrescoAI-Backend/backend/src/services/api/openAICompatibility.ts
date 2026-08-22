@@ -17,6 +17,22 @@ function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+function normalizeFunctionParameters(value: unknown): UnknownRecord {
+  if (!isRecord(value)) {
+    return { type: 'object', properties: {} }
+  }
+
+  // OpenAI-compatible function calling requires the root parameters schema to
+  // be an object. Zod unions of object schemas serialize with a root `anyOf`
+  // and no `type`, which DeepSeek rejects as `type: null`. Keep the union
+  // constraints while making the function-argument container explicit.
+  if (value.type !== 'object') {
+    return { ...value, type: 'object' }
+  }
+
+  return value
+}
+
 export function isOpenAICompatibleProvider(provider: string | undefined): boolean {
   const normalized = provider?.trim().toLowerCase().replace(/[_\s]+/g, '-')
   return normalized === 'openai' || normalized === 'openai-compatible' || normalized === 'openrouter'
@@ -175,7 +191,7 @@ export function translateAnthropicRequestToOpenAI(input: UnknownRecord): Unknown
       function: {
         name: String(tool.name ?? ''),
         ...(typeof tool.description === 'string' ? { description: tool.description } : {}),
-        parameters: isRecord(tool.input_schema) ? tool.input_schema : { type: 'object', properties: {} },
+        parameters: normalizeFunctionParameters(tool.input_schema),
       },
     }))
 

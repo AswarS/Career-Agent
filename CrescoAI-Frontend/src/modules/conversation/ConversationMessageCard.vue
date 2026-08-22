@@ -162,9 +162,10 @@ function getQuestionAnswers(toolUseId: string | null | undefined) {
       </p>
 
       <section
-        v-for="unit in viewModel.replyUnits"
+        v-for="(unit, unitIndex) in viewModel.replyUnits"
         :key="unit.id"
         class="message-reply-unit"
+        :data-message-reply-unit="unitIndex"
         :class="{ pending: unit.pending, 'has-text': Boolean(unit.textBlock) }"
       >
         <div v-if="unit.hasHiddenExecutionBlocks" class="execution-fold">
@@ -390,6 +391,7 @@ function getQuestionAnswers(toolUseId: string | null | undefined) {
       <AskUserQuestionCard
         v-for="block in unit.askQuestionBlocks"
         :key="block.id"
+        :data-ask-question-tool-use-id="block.toolUseId ?? undefined"
         :block="block"
         :answers="getQuestionAnswers(block.toolUseId)"
         :collapsed="isQuestionCollapsed(block)"

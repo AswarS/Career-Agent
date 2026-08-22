@@ -40,11 +40,25 @@ export async function applyPublicAccountPatch(
   }
 
   const occurredAt = new Date();
+  const nextAccountVersion = (user.accountVersion ?? 0) + 1;
+  await manager.update(
+    UserEntity,
+    { id: user.id },
+    {
+      ...(displayChanged ? { displayName: nextDisplayName } : {}),
+      ...(avatarChanged ? { avatarUrl: nextAvatarUrl } : {}),
+      ...(statusChanged ? { accountStatus: nextStatus } : {}),
+      accountVersion: nextAccountVersion,
+    },
+  );
+
+  // Keep the caller's entity in sync without saving the whole entity. User
+  // instances loaded by public-account flows intentionally omit credentials,
+  // so a whole-entity save must never be used here.
   user.displayName = nextDisplayName;
   user.avatarUrl = nextAvatarUrl;
   user.accountStatus = nextStatus;
-  user.accountVersion = (user.accountVersion ?? 0) + 1;
-  await manager.save(user);
+  user.accountVersion = nextAccountVersion;
 
   if (statusChanged) {
     await enqueueAccountStatusChanged(

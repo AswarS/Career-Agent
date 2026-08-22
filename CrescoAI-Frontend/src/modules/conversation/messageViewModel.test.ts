@@ -163,6 +163,32 @@ describe('createMessageViewModel', () => {
     expect(viewModel.hasHiddenExecutionBlocks).toBe(false);
   });
 
+  it('keeps each AskUserQuestion in its original reply unit when one message streams multiple rounds', () => {
+    const viewModel = createMessageViewModel(createMessage({
+      content: '',
+      streaming: true,
+      blocks: [
+        { id: 'text-1', type: 'text', text: '第一段回复。' },
+        { id: 'ask-1', type: 'ask_question', toolUseId: 'tool-1', questions: [] },
+        { id: 'result-1', type: 'tool_result', toolUseId: 'tool-1', text: '第一轮已回答。' },
+        { id: 'text-2', type: 'text', text: '第二段回复。' },
+        { id: 'ask-2', type: 'ask_question', toolUseId: 'tool-2', questions: [] },
+        { id: 'result-2', type: 'tool_result', toolUseId: 'tool-2', text: '第二轮已回答。' },
+        { id: 'text-3', type: 'text', text: '第三段回复。' },
+        { id: 'ask-3', type: 'ask_question', toolUseId: 'tool-3', questions: [] },
+      ],
+    }));
+
+    expect(viewModel.replyUnits.map((unit) => ({
+      text: unit.textBlock?.text ?? null,
+      questions: unit.askQuestionBlocks.map((block) => block.toolUseId),
+    }))).toEqual([
+      { text: '第一段回复。', questions: ['tool-1'] },
+      { text: '第二段回复。', questions: ['tool-2'] },
+      { text: '第三段回复。', questions: ['tool-3'] },
+    ]);
+  });
+
   it('keeps inline think fallback as a status block for legacy streaming messages', () => {
     const viewModel = createMessageViewModel(createMessage({
       content: '<think>先组织答案。</think>\n\n这里是正文。',
