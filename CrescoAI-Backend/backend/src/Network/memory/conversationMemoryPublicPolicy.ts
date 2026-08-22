@@ -93,6 +93,24 @@ export function sanitizeConversationMemoryPublicText(
     .filter((value): value is string => Boolean(value))
   if (!normalizedIds.length) return input
 
+  // Persisted tool outputs live under the current conversation's own private
+  // session directory. The agent must be able to Read the file back from the
+  // exact path printed in the message, so exempt those sections from
+  // identifier redaction.
+  return input
+    .split(/(<persisted-output>[\s\S]*?<\/persisted-output>)/g)
+    .map((segment, index) =>
+      index % 2 === 1
+        ? segment
+        : sanitizeIdentifierText(segment, normalizedIds),
+    )
+    .join('')
+}
+
+function sanitizeIdentifierText(
+  input: string,
+  normalizedIds: string[],
+): string {
   let output = input.replace(
     PUBLIC_IDENTIFIER_TOKEN_PATTERN,
     (match, rawIdentifier: string) => {
@@ -108,7 +126,7 @@ export function sanitizeConversationMemoryPublicText(
     },
   )
 
-  output = output
+  return output
     .replace(
       new RegExp(
         `(?:会话|conversation|session)\\s*(?:id\\s*[:：-]?\\s*)?[\\u0060"'（(]*${INTERNAL_IDENTIFIER_REPLACEMENT}[\\u0060"'）)]*`,
@@ -120,7 +138,6 @@ export function sanitizeConversationMemoryPublicText(
       new RegExp(`${INTERNAL_IDENTIFIER_REPLACEMENT}\\.(?:jsonl|md)`, 'gi'),
       INTERNAL_IDENTIFIER_REPLACEMENT,
     )
-  return output
 }
 
 export function containsConversationMemoryPrivateIdentifier(

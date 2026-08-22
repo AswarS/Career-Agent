@@ -16,6 +16,12 @@ const groupedArtifacts = computed(() => artifacts.value);
 
 function formatArtifactType(artifact: ArtifactRecord) {
   switch (artifact.type) {
+    case 'baseline-assessment':
+      return '能力基线评估';
+    case 'career-competency-model':
+      return '岗位能力模型';
+    case 'learning-plan':
+      return '学习计划';
     case 'weekly-plan':
       return '周计划';
     case 'profile-summary':

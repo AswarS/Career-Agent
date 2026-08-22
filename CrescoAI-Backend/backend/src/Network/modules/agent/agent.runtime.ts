@@ -3,6 +3,11 @@ import {
   appendNetworkTranscriptEvent,
   ensureNetworkTranscriptFile,
 } from '../../utils/networkTranscriptStorage.js';
+import type {
+  JsonValue,
+  SkillOutcome,
+} from '../../../skills/skillLifecycleTypes.js';
+import type { ActionArtifactManifest } from '../../../artifacts/actionArtifactPublisher.js';
 
 export interface AgentCreateConversationInput {
   userId: string;
@@ -69,6 +74,7 @@ export interface GeneratedFile {
   title?: string;
   mimeType?: string;
   sizeBytes?: number;
+  actionArtifact?: ActionArtifactManifest;
 }
 
 export type AgentMessageBlockType = 'text' | 'status' | 'tool_call' | 'tool_result' | 'skill' | 'artifact' | 'ask_question';
@@ -98,6 +104,20 @@ export interface AgentSendMessageResult {
   generatedFiles?: GeneratedFile[];
   blocks?: AgentMessageBlock[];
   raw?: Record<string, unknown>;
+}
+
+export interface AgentSkillCompletedEvent {
+  type: 'skill.completed';
+  messageId: string;
+  skillCallId: string;
+  skillName: string;
+  outcome: SkillOutcome;
+  summary: string;
+  result?: JsonValue;
+  startedAt: string;
+  completedAt: string;
+  durationMs: number;
+  source: 'agent' | 'harness';
 }
 
 export type AgentStreamEvent =
@@ -131,6 +151,7 @@ export type AgentStreamEvent =
       messageId: string;
       block: AgentMessageBlock;
     }
+  | AgentSkillCompletedEvent
   | {
       type: 'message.completed';
       accepted: boolean;

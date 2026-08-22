@@ -156,6 +156,12 @@ export type CompactProgressEvent =
   | { type: 'compact_end' }
 
 export type ToolUseContext = {
+  /** Runtime identity and workspace used by Action Tools that publish artifacts. */
+  actionArtifactRuntime?: {
+    workspaceDir: string
+    sessionId: string
+    userId?: string | null
+  }
   options: {
     commands: Command[]
     debug: boolean
@@ -364,6 +370,11 @@ export type Tool<
   Output = unknown,
   P extends ToolProgressData = ToolProgressData,
 > = {
+  /**
+   * Distinguishes tools that intentionally share a public name but expose
+   * different descriptions or input schemas in different runtimes.
+   */
+  readonly schemaCacheNamespace?: string
   /**
    * Optional aliases for backwards compatibility when a tool is renamed.
    * The tool can be looked up by any of these names in addition to its primary name.

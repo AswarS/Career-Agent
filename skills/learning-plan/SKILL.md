@@ -1,184 +1,225 @@
 ---
 name: learning-plan
-description: "TRIGGER FIRST: 学习计划/学习路线/怎么学/系统学习/从零开始/备考/面试准备/求职准备/技能提升/考试复习/课程规划/知识体系梳理 -> use this skill. 生成结构化长期学习计划 JSON + HTML 交互学习应用需求文档，拆分阶段、活动、练习和评估。"
-allowed-tools: read, write, exec
+description: "Compare an existing CareerCompetencyModel artifact with an existing BaselineAssessment artifact and produce a staged LearningPlan artifact: identify and prioritize the gaps between the target career expectations and the user's current assessed baseline, and organize them into a stage-based learning path. Use when the user needs a concrete, prioritized sequence of capabilities to develop toward a career target, grounded in artifacts already produced upstream. Do not use for researching a career, redoing a baseline assessment, course recommendations, daily study schedules, or teaching execution; return insufficient_input when the required upstream artifacts are missing, mismatched, or unusably stale."
+model-entry: action-tool
+allowed-tools:
+  - Read
+  - Write
+  - ReturnSkillResult
 ---
 
-# Learning Plan — 长期学习计划生成
+# Learning Plan
 
-将用户的学习目标转化为两样东西：
-1. **学习计划 JSON** — 描述学什么、怎么学、以什么顺序学
-2. **HTML 交互应用需求文档** — 描述配套的交互式学习应用长什么样、怎么交互
+Bridge the current state to the target state: consume a `CareerCompetencyModel` artifact (what the target career requires) and a `BaselineAssessment` artifact (where the user is today), compute the gaps, prioritize them, and organize them into a stage-based learning path.
 
-两者通过 `html_app_id` 关联。
+## Hard Boundary
 
-## 理解输入
+- This Skill does not rebuild the competency model and does not redo the baseline assessment. It only consumes their artifacts.
+- Use only `Read`, `Write`, and `ReturnSkillResult`. Do not use Web tools, MCP, other Skills, or shell commands.
+- Use `Read` only for two purposes: (1) reading the artifact files referenced by `model_ref` / `baseline_ref`, or resolving them from context when refs are absent; (2) reading back the artifact written by this invocation. Do not browse or discover other local files, and do not read the user's Profile, résumé, portfolio, memories, or personal files.
+- Do not ask the user questions. Constraint and goal collection happens in the main conversation before this invocation; this Skill only consumes user-stated inputs.
+- All constraints and goals must come from the user's explicit statements passed through `<skill-action-input>`. Never invent the user's weekly time, deadline, goals, or personal circumstances.
+- Do not include course recommendations, resource lists, daily schedules, or micro-task breakdowns.
+- Keep the first version practical: a small set of prioritized gaps and a small number of stages.
 
-用户可能以多种方式提供学习需求：
+## Workflow
 
-**方式 A：提供资料文件**
-用户指定一个目录，里面有文本文件作为学习资料。读取所有文件，从中提取知识体系。
+### 1. Load & Validate
 
-**方式 B：对话描述**
-用户直接描述想学什么，如"我想准备 Python 后端面试"或"帮我规划机器学习的学习路线"。此时需要基于自身知识构建知识体系。
+Read the invocation inputs from `<skill-action-input>`:
 
-**方式 C：混合**
-用户既有资料文件，又有口头补充。两者结合。
+- `model_ref`: canonical path of a `CareerCompetencyModel` artifact (optional).
+- `baseline_ref`: canonical path of a `BaselineAssessment` artifact (optional).
+- `goal_level`: optional user goal on the depth ladder (`working`, `independent`, or `advanced`). Absent means market-aligned.
+- `constraints`: user-stated planning constraints. `available_time_per_week` and `deadline` are required fields; `deadline` is `null` only when the user explicitly said they have no deadline. Remaining fields (`resource_constraints`, `explicit_goals`, `notes`) may be absent.
 
-无论哪种方式，第一步都是一样的：搞清楚用户要学什么、为什么学、当前水平如何。如果用户没有说清楚这些，主动问。这些信息直接决定计划的深度和广度。
+When a ref is absent, resolve it from the conversation context: find the most recent `CareerCompetencyModel` / `BaselineAssessment` tool result and take its `artifact.canonical_path`. If a baseline canonical file is unavailable but the baseline result JSON is already visible in context, that inline result may be used and its `skill_call_id` recorded as the baseline ref.
 
-## 输出
+Then `Read` the referenced files and validate:
 
-```
-<output_dir>/
-├── learning_plan.json          # 学习计划主文件
-├── html_specs/                 # 每个交互应用一份需求文档
-│   ├── app_0101_01.md
-│   └── ...
-└── metadata.json               # 元信息
-```
+- **Target correspondence**: the model's `target.role` and the baseline's `assessment_target.name` must semantically refer to the same career target. Exact string equality is not required, but materially different targets invalidate the pair.
+- **Freshness**: judge whether the artifacts are usable for this plan. Consider the model's `methodology.as_of` and the baseline's completion timestamp, plus any context signals that the user's situation has materially changed (new job, changed target, invalidated evidence). There is no fixed age threshold — record the judgment.
 
-默认输出目录：!`echo "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/workspace/learning-plan/output/`
+Record the judgment in `lineage.validation`. If either artifact is missing, unreadable, mismatched, or judged unusably stale, return `insufficient_input` describing what is missing without phrasing it as a question, request, recommendation, or next action.
 
----
+**Success criterion:** One usable model and one usable baseline are in hand, and the validation judgment is recorded.
 
-## 工作流程
+### 2. Identify Gaps
 
-### 第一步：理解知识领域
+Compute the target depth for each competency:
 
-不管输入是文件还是对话，目标是构建一张知识地图：
+- `target_depth` = `goal_level` when the user provided one (applies globally), otherwise the model's `expected_depth`.
 
-- **核心概念**有哪些？
-- **前置依赖**是什么？（学 B 之前必须会 A）
-- **难度分布**怎样？（哪些是入门级，哪些是进阶）
-- **哪些知识适合交互式学习？**（下面会展开）
+Map levels to a shared rank using exactly this table:
 
-这一步的质量直接决定后面计划的质量。宁可在这里多花时间，也不要急着生成输出。
+| Model `expected_depth` | Rank | Baseline `level` | Rank |
+| --- | --- | --- | --- |
+| awareness | 0 | awareness | 0 |
+| working | 2 | foundational | 1 |
+| independent | 3 | applied | 2 |
+| advanced | 4 | independent | 3 |
+| — | — | advanced | 4 |
 
-### 第二步：规划学习路径
+`working` corresponds to `applied` (rank 2). `foundational` is one rank below `working`.
 
-#### 确定计划规模
+For each model competency, find its current level by semantically matching baseline capability dimensions to the competency (same or equivalent name/scope). Then compute `delta = rank(target_depth) − rank(current_level)`:
 
-计划的大小应该匹配学习目标的复杂度：
+- **met**: `delta ≤ 0`. Exclude from `prioritized_gaps`; the plan only contains what needs work.
+- **shallow**: `1 ≤ delta ≤ 2`. The user has a base but insufficient depth.
+- **missing**: no baseline evidence for the competency (unknown/absent), or `delta ≥ 3`. Rationale must note when only awareness-level evidence exists but the depth gap is fundamental.
 
-| 场景 | Phases | Stages/Phase | 总天数参考 |
-|------|--------|-------------|-----------|
-| 单个技能点（如"学会用 Git"） | 2-3 | 2-3 | 7-14 天 |
-| 中等主题（如"Python 数据分析"） | 3-4 | 3-4 | 30-60 天 |
-| 大型体系（如"全栈开发"） | 5-7 | 3-5 | 90-180 天 |
+Keep `expected_depth` in every gap entry even when `target_depth` differs, so the market anchor is preserved.
 
-这只是参考，根据实际内容灵活调整。关键原则：**每个 Stage 应该是一个用户可以在 1-3 天内完成的学习单元**。如果一个 Stage 需要一周才能完成，说明粒度太粗，应该拆分。
+When baseline dimensions cannot be mapped to any model competency, record that in `limitations`; do not silently drop or invent a mapping.
 
-#### 学习路径设计原则
+**Success criterion:** Every gap entry has a defensible delta, category, and current/target level.
 
-这些不是教条，而是经过验证的学习科学原理，理解它们能帮你做出更好的设计决策：
+### 3. Prioritize
 
-**间隔重复（Spaced Repetition）**
-人的记忆遵循遗忘曲线——新学的东西如果不复习，几天后就忘掉大部分。所以重要概念应该在后续阶段以不同形式出现。比如"递归"在第一阶段作为概念学习，第二阶段在树的遍历中实际应用，第三阶段在动态规划中再次强化。
+Order the gaps deterministically:
 
-**认知负荷控制（Cognitive Load）**
-每个学习单元不要同时引入太多新概念。一般来说，一个 Stage 引入 3-5 个新知识点是合适的。如果某个知识点本身很复杂（如"动态规划"），那么这个 Stage 可能只有 1-2 个知识点，但用更多的活动来消化。
+1. Primary key `importance`: `core` before `important` before `supporting`.
+2. Secondary key: `delta` descending (treat missing-with-no-evidence as `delta = 4`).
+3. Within the same band, honor the model's `prerequisite` relationships as ordering constraints: a prerequisite gap ranks before the gap that depends on it.
+4. A user deadline or tight weekly time may lift constrained gaps; record such adjustments in the gap's `rationale`.
 
-**主动学习优先**
-阅读是最被动的学习方式，效果也最差。交互练习、动手实践的记忆留存率远高于被动阅读。所以每个 Stage 应该以交互或练习活动为主，阅读只是铺垫。
+Assign `priority` as the final 1-based position. Do not relabel importance or re-research the occupation.
 
-**及时反馈**
-学习者需要知道自己学得对不对。每个 Stage 都应该有某种形式的检验——可以是交互式测验，也可以是实践项目。
+**Success criterion:** The order is explainable from importance, delta, prerequisites, and user constraints.
 
-#### 层级结构
+### 4. Build Learning Path
 
-```
-Phase（大阶段）→ Stage（小阶段）→ Activity（学习活动）
-```
+Organize the prioritized gaps into stages using this default skeleton, merging or skipping stages when the gap set is small:
 
-- **Phase**：对应知识体系的一个大模块，有清晰的学习目标和里程碑
-- **Stage**：1-3 天可完成的学习单元，包含若干相关知识点
-- **Activity**：具体的学习动作（阅读、交互、练习、复习）
+- **Foundation**: gaps categorized `missing`, or with `delta ≥ 2`, plus the roots of prerequisite chains.
+- **Core**: `core`/`important` gaps with `1 ≤ delta ≤ 2`.
+- **Applied**: remaining `shallow` gaps, framed around project-based consolidation.
+- **Job-ready**: gaps whose `target_depth` is `independent` or `advanced` with `delta = 1`.
 
-### 第三步：选择交互类型
+Drop any stage with no gaps. For each retained stage include:
 
-不是所有内容都需要 HTML 交互应用。选择交互的标准是：**这个知识点用交互方式学，是否比纯文字/练习明显更好？**
+- `id`, `name`, `goal`: the stage's headline objective;
+- `competency_refs`: the gap competencies assigned to this stage;
+- `expected_level_after`: the target depth (model ladder: `awareness | working | independent | advanced`) the assigned competencies should reach by stage end;
+- `estimated_duration`: when the user provided weekly time and/or a deadline, derive the duration from those constraints; otherwise give a coarse range and mark the basis as estimate;
+- `depends_on`: stage ordering dependencies;
+- `rationale`.
 
-| 场景 | 为什么适合交互 | 交互类型 |
-|------|--------------|---------|
-| 抽象概念（如指针、递归） | 难以靠想象理解，可视化后豁然开朗 | 动画/可视化 |
-| 算法流程 | 需要看到每一步的变化 | 步骤模拟器 |
-| 术语记忆 | 重复练习比阅读高效 | 翻卡片/配对 |
-| 操作技能（如 SQL） | 需要动手试错 | 沙盒/模拟器 |
-| 概念辨析（如 stack vs queue） | 对比操作更直观 | 拖拽分类 |
-| 综合检验 | 游戏化提高参与度 | 闯关/情景模拟 |
+Do not produce daily or weekly micro-schedules, and do not recommend specific courses or resources.
 
-一般来说，一个 Phase 中有 2-4 个交互应用是合理的。过多会导致开发成本高，过少则失去交互式学习的优势。
+**Success criterion:** Stages are coherent, ordered, and each contains at least one gap with a stated goal and expected level.
 
-### 第四步：生成学习计划 JSON
+### 5. Write & Return
 
-按照 `references/plan_schema.json` 的 Schema 生成 `learning_plan.json`。
+Use `Write` to save one standalone JSON artifact in the current workspace. Name it:
 
-**结构概览：**
-
-```
-learning_plan.json
-├── meta                        # 元信息（ID、标题、时间）
-├── overview                    # 总览（目标、受众、总天数、难度曲线）
-└── phases[]                    # 大阶段
-    ├── phase_id, title, goal, milestone, estimated_days
-    ├── prerequisites[]         # 前置阶段
-    └── stages[]                # 小阶段
-        ├── stage_id, title, knowledge_points[]
-        ├── learning_activities[]
-        │   ├── type: text_reading | html_interactive | practice | review
-        │   ├── html_app_id     # 仅 html_interactive 类型
-        │   └── estimated_minutes
-        └── assessment          # 阶段评估
+```text
+learning_plan_<role-slug>_<YYYY-MM-DD>.json
 ```
 
-关于 JSON 内容的质量要求：
-- `description` 字段要具体。"学习排序算法"是差的描述；"通过逐步执行冒泡、选择、插入排序，观察每一步的比较和交换操作，建立对 O(n²) 复杂度的直觉"是好的描述。
-- `milestone` 要可验证。"理解链表"不可验证；"能手写链表反转并通过 LeetCode #206"可验证。
-- `estimated_minutes` 要务实。阅读通常 15-30 分钟，交互 20-40 分钟，练习 30-90 分钟。
+The JSON must use this top-level structure:
 
-### 第五步：生成 HTML 需求文档
-
-为每个 `html_app_id` 生成独立的 Markdown 需求文档，放在 `html_specs/` 目录。
-
-需求文档参考：`references/html_spec_example.md`
-
-**关键质量要求：**
-
-- **内容数据必须具体**。不要写"题目列表"，而是列出实际的题目内容。不要写"卡片数据"，而是写出每张卡片的正反面。需求文档的读者（可能是另一个 AI 或开发者）需要足够的信息来直接实现这个应用，而不需要再去查资料。
-- **交互流程必须完整**。从用户打开应用到完成学习，每一步发生什么。
-- **界面描述要用 ASCII 布局图**。比纯文字描述清晰得多。
-
-### 第六步：生成元信息并验证
-
-生成 `metadata.json`（包含生成时间、输入来源、统计数据），然后验证：
-
-1. 所有 `html_app_id` 在 JSON 和需求文档之间一一对应
-2. 阶段依赖关系无环
-3. 所有必填字段完整
-4. 输出摘要告诉用户生成了什么
-
----
-
-## html_app_id 命名规则
-
-格式：`app_{phase两位}{stage两位}_{活动序号两位}`
-
-- `app_0101_01` → Phase 1, Stage 1, 第 1 个交互活动
-- `app_0203_02` → Phase 2, Stage 3, 第 2 个交互活动
-- 评估用交互：`app_{phase}{stage}_assess`
-
----
-
-## 使用示例
-
+```json
+{
+  "schema_version": "1.0",
+  "artifact_type": "LearningPlan",
+  "created_at": "ISO-8601 timestamp",
+  "lineage": {
+    "model_ref": "string path or null",
+    "model_as_of": "YYYY-MM-DD or null",
+    "baseline_ref": "string path or skill_call_id or null",
+    "baseline_completed_at": "ISO-8601 or null",
+    "validation": {
+      "target_correspondence": "string",
+      "freshness_judgment": "string",
+      "notes": ["string"]
+    }
+  },
+  "target": {
+    "role": "string",
+    "industry": "string or null",
+    "region": "string or null",
+    "seniority": "string or null",
+    "specialization": "string or null"
+  },
+  "goal_level": "working | independent | advanced | null",
+  "baseline_summary": {
+    "overall_level": "awareness | foundational | applied | independent | advanced",
+    "overall_confidence": "low | medium | high",
+    "coverage_note": "string"
+  },
+  "prioritized_gaps": [
+    {
+      "competency_ref": "competency-1",
+      "competency_name": "string",
+      "domain_ref": "domain-1",
+      "importance": "core | important | supporting",
+      "expected_depth": "awareness | working | independent | advanced",
+      "target_depth": "awareness | working | independent | advanced",
+      "current_level": "awareness | foundational | applied | independent | advanced | null",
+      "gap": "missing | shallow",
+      "delta": 1,
+      "priority": 1,
+      "prerequisites": ["competency-2"],
+      "rationale": "string"
+    }
+  ],
+  "stages": [
+    {
+      "id": "stage-1",
+      "name": "Foundation",
+      "goal": "string",
+      "competency_refs": ["competency-1"],
+      "expected_level_after": "awareness | working | independent | advanced",
+      "estimated_duration": {
+        "value": "string",
+        "basis": "from_user_constraints | estimate"
+      },
+      "depends_on": ["stage-id or empty"],
+      "rationale": "string"
+    }
+  ],
+  "assumptions": ["string"],
+  "limitations": ["string"]
+}
 ```
-用户：我想准备 Python 后端面试，有三个月时间，目前会基础语法
-→ 方式 B，直接从对话构建知识体系
 
-用户：这个目录里是我的课程笔记，帮我做个复习计划
-→ 方式 A，从文件提取知识体系
+Use English JSON keys and concise values in the user's language. Validate that every `competency_ref`, `domain_ref`, and prerequisite reference resolves before writing. Do not embed the user's profile or personal data in the artifact.
 
-用户：我在学 React，这是官方文档的摘要，另外我还想加上 TypeScript
-→ 方式 C，文件 + 对话补充
-```
+After `Write` succeeds, use `Read` on that exact artifact path. Verify the persisted file—not only the in-memory draft—before returning success:
+
+- it is complete, valid JSON;
+- all required top-level sections exist;
+- every internal reference resolves;
+- every gap entry has a valid delta, category, and levels;
+- no constraints or goals were invented;
+- no user Profile or personal data was written.
+
+If verification finds a correctable serialization or completeness problem, rewrite the same artifact and read it back once more. Return `error` if the persisted artifact still cannot be validated. Do not use this verification step to inspect any other workspace file.
+
+After the file is successfully written and read back, call `ReturnSkillResult` exactly once with the current Harness `skill_call_id`, `skill_name`, and:
+
+- `outcome: "success"`;
+- a concise summary of the plan;
+- `result.artifact` containing `type`, `path`, `format`, and `schema_version`;
+- `result.target`;
+- `result.counts` for gaps and stages;
+- `result.limitations`.
+
+Do not place the full plan in the Tool result; the artifact is the canonical plan. After `ReturnSkillResult` is accepted, the Skill invocation is complete.
+
+Return `insufficient_input` only when a usable model or baseline cannot be established from the refs and context. Return `error` for read/write failures or invalid artifact serialization. Never report success before the artifact exists.
+
+**Success criterion:** One valid `LearningPlan` JSON artifact exists and its reference is returned through the lifecycle tool.
+
+## Final Check Before Returning
+
+Verify all of the following:
+
+- Every gap cites a model competency and carries a defensible `delta`, category, and levels.
+- `expected_depth` is preserved in every gap entry.
+- No gap exists for a `met` competency.
+- Stage ordering follows importance, delta, prerequisites, and user constraints.
+- Every constraint and goal in the artifact traces to user statements; absent ones appear only in `assumptions`.
+- `lineage.validation` records the target-correspondence and freshness judgment.
+- `skill_call_id` and `skill_name` exactly match the current Harness envelope.

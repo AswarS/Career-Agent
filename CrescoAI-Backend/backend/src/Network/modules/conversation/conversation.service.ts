@@ -55,6 +55,11 @@ import {
   markConversationMemorySessionDeleting,
   unmarkConversationMemorySessionDeleting,
 } from '../../memory/conversationMemoryLock.js';
+import type {
+  JsonValue,
+  SkillOutcome,
+} from '../../../skills/skillLifecycleTypes.js';
+import type { ActionArtifactManifest } from '../../../artifacts/actionArtifactPublisher.js';
 
 declare global {
   namespace Express {
@@ -95,6 +100,7 @@ export interface MessageMedia {
   sizeBytes?: number;
   created_at?: string;
   createdAt?: string;
+  actionArtifact?: ActionArtifactManifest;
 }
 
 export type MessageBlockType = 'text' | 'status' | 'tool_call' | 'tool_result' | 'skill' | 'artifact' | 'ask_question';
@@ -215,6 +221,25 @@ export type ConversationStreamEvent =
       message_id: string;
       messageId: string;
       block: MessageBlock;
+    }
+  | {
+      type: 'skill.completed';
+      message_id: string;
+      messageId: string;
+      skill_call_id: string;
+      skillCallId: string;
+      skill_name: string;
+      skillName: string;
+      outcome: SkillOutcome;
+      summary: string;
+      result?: JsonValue;
+      started_at: string;
+      startedAt: string;
+      completed_at: string;
+      completedAt: string;
+      duration_ms: number;
+      durationMs: number;
+      source: 'agent' | 'harness';
     }
   | {
       type: 'artifact.created';
@@ -1013,6 +1038,29 @@ export class ConversationService implements OnModuleInit {
         continue;
       }
 
+      if (event.type === 'skill.completed') {
+        yield {
+          type: 'skill.completed',
+          message_id: event.messageId,
+          messageId: event.messageId,
+          skill_call_id: event.skillCallId,
+          skillCallId: event.skillCallId,
+          skill_name: event.skillName,
+          skillName: event.skillName,
+          outcome: event.outcome,
+          summary: sanitizeServerPhysicalPaths(event.summary),
+          result: sanitizeServerPhysicalPathsInValue(event.result) as JsonValue | undefined,
+          started_at: event.startedAt,
+          startedAt: event.startedAt,
+          completed_at: event.completedAt,
+          completedAt: event.completedAt,
+          duration_ms: event.durationMs,
+          durationMs: event.durationMs,
+          source: event.source,
+        };
+        continue;
+      }
+
       if (event.type === 'error') {
         yield {
           type: 'error',
@@ -1045,6 +1093,11 @@ export class ConversationService implements OnModuleInit {
             assistantMessageId,
             persistedAssistantResources.media,
           );
+        }
+        if (
+          persistedAssistantResources.media.length
+          || persistedAssistantResources.actions.length
+        ) {
           yield {
             type: 'artifact.created',
             message_id: assistantMessageId,
@@ -2707,6 +2760,7 @@ export class ConversationService implements OnModuleInit {
       title?: string;
       mimeType?: string;
       sizeBytes?: number;
+      actionArtifact?: ActionArtifactManifest;
     }>,
     userId?: number,
   ): Promise<MessageMedia[]> {
@@ -2740,6 +2794,7 @@ export class ConversationService implements OnModuleInit {
         sizeBytes: f.sizeBytes,
         created_at: new Date().toISOString(),
         createdAt: new Date().toISOString(),
+        ...(f.actionArtifact ? { actionArtifact: f.actionArtifact } : {}),
       });
     }
     return media;
@@ -2802,6 +2857,7 @@ export class ConversationService implements OnModuleInit {
     const {
       storage_path: _storagePath,
       storagePath: _storagePathAlias,
+      actionArtifact: _actionArtifact,
       ...publicResource
     } = resource;
     return publicResource;
@@ -2890,23 +2946,29 @@ export class ConversationService implements OnModuleInit {
     for (const resource of resources) {
       const enriched = { ...resource };
       try {
+        const actionArtifact = enriched.actionArtifact;
         const artifact = await this.artifactService.createArtifact({
           userId,
           conversationId,
           messageId,
-          type: this.artifactTypeForMedia(enriched.kind),
+          type: actionArtifact?.artifact_type ?? this.artifactTypeForMedia(enriched.kind),
           kind: enriched.kind,
-          title: enriched.title ?? this.displayNameFromPath(enriched.url),
-          renderMode: 'url',
-          payloadPath: enriched.url,
-          url: enriched.url,
+          title: actionArtifact?.title ?? enriched.title ?? this.displayNameFromPath(enriched.url),
+          renderMode: actionArtifact?.render_mode ?? 'url',
+          payloadPath: actionArtifact ? undefined : enriched.url,
+          url: actionArtifact ? undefined : enriched.url,
           storagePath: enriched.storage_path ?? enriched.storagePath,
           mimeType: enriched.mime_type ?? enriched.mimeType,
           sizeBytes: enriched.size_bytes ?? enriched.sizeBytes,
-          summary: `Generated ${enriched.kind} artifact`,
+          metadata: actionArtifact,
+          summary: actionArtifact?.summary ?? `Generated ${enriched.kind} artifact`,
         });
         enriched.artifact_id = String(artifact.id);
         enriched.artifactId = String(artifact.id);
+        // The generated HTML contains user evidence, so do not expose it through
+        // the public generated-file route. The open_artifact action fetches the
+        // authenticated artifact detail and renders its inline HTML payload.
+        if (actionArtifact) enriched.url = undefined;
 
         const action = this.artifactActionForMedia(enriched, String(artifact.id));
         if (action) {
@@ -2916,7 +2978,13 @@ export class ConversationService implements OnModuleInit {
         skillLogger.error('ConversationService', `Failed to create generated artifact: ${err?.message ?? err}`);
       }
 
-      media.push(this.toPublicMessageMedia(enriched));
+      // Action artifacts are opened through their authenticated Artifact
+      // detail record. Keeping them out of ordinary media avoids publishing
+      // user-evidence HTML through the generated-file URL and avoids a broken
+      // iframe that cannot attach the API bearer token.
+      if (!resource.actionArtifact) {
+        media.push(this.toPublicMessageMedia(enriched));
+      }
     }
 
     return { media, actions };

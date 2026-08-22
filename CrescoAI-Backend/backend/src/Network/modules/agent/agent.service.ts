@@ -32,7 +32,11 @@ import { setSessionMultimodalConfig, removeSessionMultimodalConfig } from '../..
 import { discoverGeneratedFiles } from './generated-output-discovery.js';
 import { sanitizeServerPhysicalPaths } from '../../utils/publicOutputSanitizer.js';
 import { getCommands } from '../../../commands.js';
-import { flushSessionStorage } from '../../../utils/sessionStorage.js';
+import {
+  flushSessionStorage,
+  getProjectDir,
+} from '../../../utils/sessionStorage.js';
+import { TOOL_RESULTS_SUBDIR } from '../../../utils/toolResultStorage.js';
 import {
   appendNetworkTranscriptEvent,
   ensureNetworkUserWorkspaceDir,
@@ -79,6 +83,12 @@ import {
 import { listProfileEvidenceCandidates } from '../../memory/conversationMemoryIndex.js';
 import { loadAgentSessionHistory } from './agent-session-recovery.js';
 import type { Tool } from '../../../Tool.js';
+import { GithubMcpRuntimeService, type GithubMcpRuntimeSnapshot } from '../settings/github-mcp-runtime.service';
+import {
+  drainSkillLifecycleEvents,
+  finalizeAllActiveSkillInvocations,
+} from '../../../skills/skillLifecycle.js';
+import type { SkillCompletedEvent } from '../../../skills/skillLifecycleTypes.js';
 
 // ---------------------------------------------------------------------------
 // JSONL helpers
@@ -532,12 +542,14 @@ type QueryEngineInferenceResult =
       usage?: Record<string, unknown>;
       durationMs?: number;
       generatedFiles?: GeneratedFile[];
+      skillResults?: SkillCompletedEvent[];
       messageCreated?: boolean;
     }
   | {
       success: false;
       userMessageId?: string;
       assistantMessageId?: string;
+      skillResults?: SkillCompletedEvent[];
       messageCreated?: boolean;
     };
 
@@ -565,6 +577,7 @@ export class AgentService {
     @Optional() private readonly profileProductProjectionService?: ProfileProductProjectionService,
     @Optional() private readonly profileProductMutationService?: ProfileProductMutationService,
     @Optional() private readonly profileEvidenceService?: ProfileEvidenceService,
+    @Optional() private readonly githubMcpRuntimeService?: GithubMcpRuntimeService,
   ) {}
 
   /**
@@ -717,6 +730,12 @@ export class AgentService {
         generatedFiles: result.generatedFiles,
       };
     } finally {
+      const context = this.sessionContexts.get(tempConversationId);
+      if (context) {
+        runWithSessionContext(context, () => {
+          finalizeAllActiveSkillInvocations('cancelled');
+        });
+      }
       this.queryEngines.delete(tempConversationId);
       this.sessionContexts.delete(tempConversationId);
       this.conversationConfigs.delete(tempConversationId);
@@ -776,6 +795,9 @@ export class AgentService {
     } finally {
       removeSessionMultimodalConfig(sessionId);
       if (isTemporarySession) {
+        runWithSessionContext(ctx, () => {
+          finalizeAllActiveSkillInvocations('cancelled');
+        });
         this.sessionContexts.delete(sessionId);
         this.queryEngines.delete(sessionId);
         this.conversationConfigs.delete(sessionId);
@@ -811,6 +833,11 @@ export class AgentService {
 
     this.disposedConversationOwners.set(conversationId, userId);
     const context = this.sessionContexts.get(conversationId);
+    if (context) {
+      runWithSessionContext(context, () => {
+        finalizeAllActiveSkillInvocations('cancelled');
+      });
+    }
     try {
       context?.abortController?.abort();
     } catch {
@@ -822,9 +849,13 @@ export class AgentService {
         pendingResponse.resolve({ approved: false });
       }
       context.pendingToolResponses.clear();
-      await Promise.allSettled(
-        context.mcpClients.map((client) => client.close()),
-      );
+      if (context.ownsMcpClients) {
+        await Promise.allSettled(
+          context.mcpClients.map((client) =>
+            client.type === 'connected' ? client.cleanup() : Promise.resolve(),
+          ),
+        );
+      }
       for (const connection of context.wsConnections) {
         try {
           connection.close?.();
@@ -968,6 +999,9 @@ export class AgentService {
           model: qeResult.model,
           usage: qeResult.usage,
           durationMs: qeResult.durationMs,
+          ...(qeResult.skillResults?.length
+            ? { skillResults: qeResult.skillResults }
+            : {}),
         },
       };
     }
@@ -1045,6 +1079,9 @@ export class AgentService {
         attachmentCount: input.attachments?.length ?? 0,
         context: input.context ?? {},
         fallback: true,
+        ...(qeResult.skillResults?.length
+          ? { skillResults: qeResult.skillResults }
+          : {}),
       },
     };
   }
@@ -1177,6 +1214,9 @@ export class AgentService {
           model: qeResult.model,
           usage: qeResult.usage,
           durationMs: qeResult.durationMs,
+          ...(qeResult.skillResults?.length
+            ? { skillResults: qeResult.skillResults }
+            : {}),
         },
       };
       return;
@@ -1278,6 +1318,9 @@ export class AgentService {
         attachmentCount: input.attachments?.length ?? 0,
         context: input.context ?? {},
         fallback: true,
+        ...(qeResult.skillResults?.length
+          ? { skillResults: qeResult.skillResults }
+          : {}),
       },
     };
   }
@@ -1416,6 +1459,7 @@ export class AgentService {
       const prevApiKey = process.env.ANTHROPIC_API_KEY;
       const prevBaseUrl = process.env.ANTHROPIC_BASE_URL;
       const prevModel = process.env.ANTHROPIC_MODEL;
+      const prevSmallFastModel = process.env.ANTHROPIC_SMALL_FAST_MODEL;
       const profileTurnPrompt = await this.getProfileTurnPrompt(userId, content);
 
       if (config.apiKey) {
@@ -1426,6 +1470,12 @@ export class AgentService {
       }
       if (config.model) {
         process.env.ANTHROPIC_MODEL = config.model;
+        // Haiku-class utility calls (WebFetch content extraction, session
+        // titles, tool-use summaries) resolve their model through
+        // getSmallFastModel(). Point them at the user's configured model so
+        // they inherit the same gateway/model access as the main loop
+        // instead of defaulting to claude-haiku-4-5.
+        process.env.ANTHROPIC_SMALL_FAST_MODEL = config.model;
       }
 
       const result = await (async () => {
@@ -1442,8 +1492,20 @@ export class AgentService {
             let model: string | undefined;
             let usage: Record<string, unknown> | undefined;
             const hiddenConversationMemoryToolUseIds = new Set<string>();
+            const skillResults: SkillCompletedEvent[] = [];
             const conversationMemoryDir = ctx.config.conversationMemoryDir;
             let conversationMemoryMaintenanceActive = false;
+            const emitPendingSkillResults = () => {
+              for (const event of drainSkillLifecycleEvents()) {
+                skillResults.push(event);
+                emitMessageCreated(actualAssistantMessageId);
+                eventQueue.push({
+                  type: 'skill.completed',
+                  messageId: actualAssistantMessageId,
+                  ...event,
+                });
+              }
+            };
 
             const inputWithAttachments = this.buildPromptWithAttachmentMentions(
               content,
@@ -1467,6 +1529,7 @@ export class AgentService {
             });
 
             for await (const msg of stream) {
+              emitPendingSkillResults();
               if (messageInput.abortSignal?.aborted) {
                 return {
                   reply: '',
@@ -1650,6 +1713,7 @@ export class AgentService {
                 }
               }
             }
+            emitPendingSkillResults();
 
             const reply = sanitizeConversationMemoryAgentText(
               finalResultText
@@ -1675,6 +1739,7 @@ export class AgentService {
               blocks,
               model,
               usage,
+              skillResults,
               assistantMessageId: actualAssistantMessageId,
               messageCreated,
             };
@@ -1695,6 +1760,11 @@ export class AgentService {
           } else {
             process.env.ANTHROPIC_MODEL = prevModel;
           }
+          if (prevSmallFastModel === undefined) {
+            delete process.env.ANTHROPIC_SMALL_FAST_MODEL;
+          } else {
+            process.env.ANTHROPIC_SMALL_FAST_MODEL = prevSmallFastModel;
+          }
           removeSessionMultimodalConfig(conversationId);
           if (abortHandler && messageInput.abortSignal) {
             messageInput.abortSignal.removeEventListener('abort', abortHandler);
@@ -1708,6 +1778,7 @@ export class AgentService {
           success: false,
           userMessageId,
           assistantMessageId: result.assistantMessageId ?? actualAssistantMessageId,
+          skillResults: result.skillResults,
           messageCreated: result.messageCreated ?? messageCreated,
         };
       }
@@ -1729,16 +1800,30 @@ export class AgentService {
         blocks: result.blocks,
         model: result.model,
         usage: result.usage,
+        skillResults: result.skillResults,
         durationMs: Date.now() - startTime,
         generatedFiles: generatedFiles.length ? generatedFiles : undefined,
         messageCreated: result.messageCreated ?? messageCreated,
       };
     } catch (err: any) {
       console.error('[AgentService] QueryEngine streaming inference FAILED:', err?.message ?? err);
+      const context = this.sessionContexts.get(conversationId);
+      const skillResults = context
+        ? runWithSessionContext(context, () => drainSkillLifecycleEvents())
+        : [];
+      for (const event of skillResults) {
+        emitMessageCreated(actualAssistantMessageId);
+        eventQueue.push({
+          type: 'skill.completed',
+          messageId: actualAssistantMessageId,
+          ...event,
+        });
+      }
       return {
         success: false,
         userMessageId,
         assistantMessageId: actualAssistantMessageId,
+        skillResults,
         messageCreated,
       };
     } finally {
@@ -1798,6 +1883,7 @@ export class AgentService {
       const prevApiKey = process.env.ANTHROPIC_API_KEY
       const prevBaseUrl = process.env.ANTHROPIC_BASE_URL
       const prevModel = process.env.ANTHROPIC_MODEL
+      const prevSmallFastModel = process.env.ANTHROPIC_SMALL_FAST_MODEL
       const profileTurnPrompt = await this.getProfileTurnPrompt(userId, content)
 
       if (config.apiKey) {
@@ -1808,6 +1894,12 @@ export class AgentService {
       }
       if (config.model) {
         process.env.ANTHROPIC_MODEL = config.model
+        // Haiku-class utility calls (WebFetch content extraction, session
+        // titles, tool-use summaries) resolve their model through
+        // getSmallFastModel(). Point them at the user's configured model so
+        // they inherit the same gateway/model access as the main loop
+        // instead of defaulting to claude-haiku-4-5.
+        process.env.ANTHROPIC_SMALL_FAST_MODEL = config.model
       }
 
       const result = await (async () => {
@@ -1897,6 +1989,7 @@ export class AgentService {
                     blocks = appendTextToAgentBlock(blocks, textBlockId, safeText);
                     continue;
                   }
+                  const blockType = typeof block.type === 'string' ? block.type : '';
                   const rawPublicBlock =
                     createPublicAgentBlockFromContentBlock(block, blockIndex);
                   const publicBlock = rawPublicBlock
@@ -1956,8 +2049,9 @@ export class AgentService {
               thinkingParts.join('\n').trim(),
               ctx,
             );
+            const skillResults = drainSkillLifecycleEvents();
 
-            return { reply, thinking, blocks, model, usage, assistantMessageId };
+            return { reply, thinking, blocks, model, usage, skillResults, assistantMessageId };
           });
         } finally {
           if (prevApiKey === undefined) {
@@ -1975,6 +2069,11 @@ export class AgentService {
           } else {
             process.env.ANTHROPIC_MODEL = prevModel;
           }
+          if (prevSmallFastModel === undefined) {
+            delete process.env.ANTHROPIC_SMALL_FAST_MODEL;
+          } else {
+            process.env.ANTHROPIC_SMALL_FAST_MODEL = prevSmallFastModel;
+          }
           removeSessionMultimodalConfig(conversationId);
         }
       })();
@@ -1982,7 +2081,12 @@ export class AgentService {
       if (!result.reply) {
         console.error('[AgentService] QueryEngine returned empty reply');
         await flushSessionStorage();
-        return { success: false, userMessageId, assistantMessageId };
+        return {
+          success: false,
+          userMessageId,
+          assistantMessageId,
+          skillResults: result.skillResults,
+        };
       }
 
       await flushSessionStorage();
@@ -2002,12 +2106,17 @@ export class AgentService {
         blocks: result.blocks,
         model: result.model,
         usage: result.usage,
+        skillResults: result.skillResults,
         durationMs: Date.now() - startTime,
         generatedFiles: generatedFiles.length ? generatedFiles : undefined,
       };
     } catch (err: any) {
       console.error('[AgentService] QueryEngine inference FAILED:', err?.message ?? err);
-      return { success: false, userMessageId, assistantMessageId };
+      const context = this.sessionContexts.get(conversationId);
+      const skillResults = context
+        ? runWithSessionContext(context, () => drainSkillLifecycleEvents())
+        : [];
+      return { success: false, userMessageId, assistantMessageId, skillResults };
     }
   }
 
@@ -2086,6 +2195,16 @@ export class AgentService {
     const conversationMemorySessionFile = resolve(
       getNetworkConversationMemorySessionPath(userId, conversationId),
     );
+    // Large tool outputs are persisted to this conversation's private
+    // session directory by toolResultStorage. Grant it as a read-only root so
+    // the agent can Read a persisted output back from the path printed in the
+    // tool result message.
+    const toolResultsDir = resolve(
+      getProjectDir(resolvedWorkspaceDir, userId),
+      conversationId,
+      TOOL_RESULTS_SUBDIR,
+    );
+    void mkdir(toolResultsDir, { recursive: true }).catch(() => {});
     return {
       sessionId: conversationId,
       userId,
@@ -2120,6 +2239,11 @@ export class AgentService {
             allowedTools: ['Read'] as const,
             pathPolicy: 'direct-session-jsonl',
           },
+          {
+            id: `user-${userId}-tool-results`,
+            root: toolResultsDir,
+            allowedTools: NETWORK_READ_ONLY_FILE_TOOLS,
+          },
         ],
         sharedReadOnlyRoots: getNetworkSharedReadOnlyRoots(),
         trustedSkillCatalogRoots: getNetworkTrustedSkillCatalogRoots(),
@@ -2141,6 +2265,8 @@ export class AgentService {
       anthropicClient: null,
       queryEngine: null,
       mcpClients: [],
+      mcpRuntimeVersion: 0,
+      ownsMcpClients: false,
       wsConnections: new Set(),
       abortController: new AbortController(),
       createdAt: Date.now(),
@@ -2164,6 +2290,14 @@ export class AgentService {
     this.assertConversationRuntimeActive(conversationId, userId);
     this.refreshCachedSessionConfig(conversationId, config);
     this.assertCachedSessionOwner(conversationId, userId);
+
+    const mcpRuntime = await this.ensureGithubMcpRuntime(userId);
+    const existingContext = this.sessionContexts.get(conversationId);
+    if (existingContext
+      && existingContext.mcpRuntimeVersion !== mcpRuntime.version) {
+      this.queryEngines.delete(conversationId);
+      existingContext.queryEngine = null;
+    }
 
     const cached = this.queryEngines.get(conversationId);
     if (cached) {
@@ -2194,6 +2328,9 @@ export class AgentService {
         this.sessionContexts.set(conversationId, ctx);
         createdContext = true;
       }
+      ctx.mcpClients = mcpRuntime.clients;
+      ctx.mcpRuntimeVersion = mcpRuntime.version;
+      ctx.ownsMcpClients = false;
 
       try {
         const [{ messages: initialMessages }, commands] = await Promise.all([
@@ -2204,7 +2341,8 @@ export class AgentService {
         const queryEngine = createQueryEngineForSession(ctx, {
           commands,
           initialMessages,
-          mcpTools: this.getProfileTools(userId, conversationId),
+          extraTools: this.getProfileTools(userId, conversationId),
+          mcpTools: mcpRuntime.tools,
         });
         ctx.queryEngine = queryEngine;
         this.queryEngines.set(conversationId, queryEngine);
@@ -2266,6 +2404,12 @@ export class AgentService {
   }
 
   private invalidateConversationRuntime(conversationId: string): void {
+    const context = this.sessionContexts.get(conversationId);
+    if (context) {
+      runWithSessionContext(context, () => {
+        finalizeAllActiveSkillInvocations('cancelled');
+      });
+    }
     this.queryEngines.delete(conversationId);
     this.sessionContexts.delete(conversationId);
   }
@@ -2286,6 +2430,30 @@ export class AgentService {
       productProjectionService: this.profileProductProjectionService,
       productMutationService: this.profileProductMutationService,
     });
+  }
+
+  private async ensureGithubMcpRuntime(userId: string): Promise<GithubMcpRuntimeSnapshot> {
+    if (!this.githubMcpRuntimeService) {
+      return {
+        status: 'not_configured',
+        version: 0,
+        clients: [],
+        tools: [],
+        githubUser: null,
+        lastError: null,
+        connectedAt: null,
+        lastAttemptAt: null,
+      };
+    }
+    try {
+      return await this.githubMcpRuntimeService.ensureConnected(Number(userId));
+    } catch (error) {
+      console.warn('[AgentService] GitHub MCP connection failed; continuing without MCP tools', {
+        userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return this.githubMcpRuntimeService.getSnapshot(Number(userId));
+    }
   }
 
   private async getProfileTurnPrompt(userId: string, query: string) {

@@ -35,7 +35,7 @@ export class ArtifactController {
       throw new ForbiddenException('You do not have access to this artifact');
     }
 
-    return this.artifactService.toPublicArtifact(artifact);
+    return this.artifactService.toRenderablePublicArtifact(artifact);
   }
 
   @Post(':artifactId/refresh')

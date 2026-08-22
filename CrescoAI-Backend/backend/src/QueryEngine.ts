@@ -129,6 +129,7 @@ const snipProjection = feature('HISTORY_SNIP')
 
 export type QueryEngineConfig = {
   cwd: string
+  actionArtifactRuntime?: ToolUseContext['actionArtifactRuntime']
   tools: Tools
   commands: Command[]
   mcpClients: MCPServerConnection[]
@@ -341,6 +342,7 @@ export class QueryEngine {
     }
 
     let processUserInputContext: ProcessUserInputContext = {
+      actionArtifactRuntime: this.config.actionArtifactRuntime,
       messages: this.mutableMessages,
       // Slash commands that mutate the message array (e.g. /force-snip)
       // call setMessages(fn).  In interactive mode this writes back to
@@ -499,6 +501,7 @@ export class QueryEngine {
     // Recreate after processing the prompt to pick up updated messages and
     // model (from slash commands).
     processUserInputContext = {
+      actionArtifactRuntime: this.config.actionArtifactRuntime,
       messages,
       setMessages: () => {},
       onChangeAPIKey: () => {},

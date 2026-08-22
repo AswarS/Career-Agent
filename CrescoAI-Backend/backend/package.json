@@ -21,7 +21,9 @@
     "dev:restore-check": "bun run ./src/dev-entry.ts",
     "network:dev": "bun run network:migrate && bun run ./src/Network/main.ts",
     "network:start": "bun run ./src/Network/main.ts",
-    "network:migrate": "bun run ./src/Network/run-migrations.ts"
+    "network:migrate": "bun run ./src/Network/run-migrations.ts",
+    "skill-tools:plan": "bun run ./scripts/generate-skill-action-tools.ts",
+    "skill-tools:generate": "bun run ./scripts/generate-skill-action-tools.ts --write"
   },
   "dependencies": {
     "@alcalzone/ansi-tokenize": "*",
@@ -99,6 +101,7 @@
     "strip-ansi": "*",
     "supports-hyperlinks": "*",
     "tree-kill": "*",
+    "turndown": "^7.2.4",
     "type-fest": "*",
     "typeorm": "^0.3.28",
     "undici": "*",
@@ -124,6 +127,7 @@
     "@types/multer": "^2.0.0",
     "@types/node": "^24.12.2",
     "@types/supertest": "^7.0.0",
+    "@types/turndown": "^5.0.6",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",
     "eslint-plugin-prettier": "^5.2.2",

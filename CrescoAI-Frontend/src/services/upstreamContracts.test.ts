@@ -106,6 +106,66 @@ describe('uploaded asset presentation cache integration', () => {
 });
 
 describe('normalizeArtifactRecord', () => {
+  it('preserves a BaselineAssessment HTML artifact for the dedicated viewer', () => {
+    const artifact = normalizeArtifactRecord({
+      id: '42',
+      type: 'baseline-assessment',
+      title: 'LLM Agent 工程师 · 能力基线评估',
+      status: 'ready',
+      render_mode: 'html',
+      revision: 1,
+      summary: '具备 Agent workflow 的实践证据。',
+      payload: { html: '<main>baseline</main>' },
+    });
+
+    expect(artifact.type).toBe('baseline-assessment');
+    expect(artifact.renderMode).toBe('html');
+    if (artifact.renderMode !== 'html') {
+      throw new Error('expected html artifact');
+    }
+    expect(artifact.payload.html).toBe('<main>baseline</main>');
+  });
+
+  it('preserves a CareerCompetencyModel HTML artifact for the dedicated viewer', () => {
+    const artifact = normalizeArtifactRecord({
+      id: '43',
+      type: 'career-competency-model',
+      title: 'LLM Agent 工程师 · 岗位能力模型',
+      status: 'ready',
+      render_mode: 'html',
+      revision: 1,
+      summary: '基于公开岗位与雇主材料的岗位能力模型。',
+      payload: { html: '<main>competency-model</main>' },
+    });
+
+    expect(artifact.type).toBe('career-competency-model');
+    expect(artifact.renderMode).toBe('html');
+    if (artifact.renderMode !== 'html') {
+      throw new Error('expected html artifact');
+    }
+    expect(artifact.payload.html).toBe('<main>competency-model</main>');
+  });
+
+  it('preserves a LearningPlan HTML artifact for the dedicated viewer', () => {
+    const artifact = normalizeArtifactRecord({
+      id: '44',
+      type: 'learning-plan',
+      title: 'LLM Agent 工程师 · 学习计划',
+      status: 'ready',
+      render_mode: 'html',
+      revision: 1,
+      summary: '2 项优先差距 · 2 个学习阶段。',
+      payload: { html: '<main>learning-plan</main>' },
+    });
+
+    expect(artifact.type).toBe('learning-plan');
+    expect(artifact.renderMode).toBe('html');
+    if (artifact.renderMode !== 'html') {
+      throw new Error('expected html artifact');
+    }
+    expect(artifact.payload.html).toBe('<main>learning-plan</main>');
+  });
+
   it('maps snake_case fields and queued status into the frontend artifact shape', () => {
     const artifact = normalizeArtifactRecord({
       id: 'artifact-weekly-plan',
@@ -651,6 +711,36 @@ describe('normalizeThreadMessage', () => {
         name: 'Read',
         text: '读取完成。',
       },
+    });
+  });
+
+  it('normalizes skill completion events', () => {
+    const event = normalizeMessageStreamEvent({
+      type: 'skill.completed',
+      message_id: 'msg-assistant-1',
+      skill_call_id: 'call-1',
+      skill_name: 'learning-plan',
+      outcome: 'insufficient_input',
+      summary: '缺少当前技能水平。',
+      result: { missing: ['skill_level'] },
+      started_at: '2026-08-13T10:00:00.000Z',
+      completed_at: '2026-08-13T10:00:01.000Z',
+      duration_ms: 1000,
+      source: 'agent',
+    }, 'session-1');
+
+    expect(event).toEqual({
+      type: 'skill.completed',
+      messageId: 'msg-assistant-1',
+      skillCallId: 'call-1',
+      skillName: 'learning-plan',
+      outcome: 'insufficient_input',
+      summary: '缺少当前技能水平。',
+      result: { missing: ['skill_level'] },
+      startedAt: '2026-08-13T10:00:00.000Z',
+      completedAt: '2026-08-13T10:00:01.000Z',
+      durationMs: 1000,
+      source: 'agent',
     });
   });
 
