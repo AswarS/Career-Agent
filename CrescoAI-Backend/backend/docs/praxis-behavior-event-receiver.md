@@ -27,7 +27,7 @@ Content-Type: application/json
 ```
 
 - 复用现有 `PraxisServiceAuthGuard`，支持 active/retained 双凭据轮换。
-- 仅接受 Praxis 1.10.0 封闭行为契约中的事件类型、资源类型和 facts 字段。
+- 仅接受 Praxis 1.12.0 封闭行为契约中的事件类型、资源类型和 facts 字段。
 - 严格拒绝额外字段，因此 `rawChat`、`rawAnswer`、`fileBody`、完整画像、
   Prompt、凭据和 Token 等正文或敏感数据不能越过边界。
 - `Idempotency-Key` 必须等于 `eventId`。
@@ -98,7 +98,6 @@ Praxis 行为事件是已经发生的领域事实，但并不天然等于 Career
 | --- | --- | --- | --- |
 | `profile.complete` | `profile_completion` | Praxis 五维实训画像已完成 | 具体职业偏好或能力 |
 | `run.complete` | `training_progress` | 一次实训 Run 已完成 | 已掌握 Run 涉及的全部技能 |
-| `coaching.complete` | `learning_progress` | 一次辅导流程已完成 | 辅导效果或能力提升 |
 | `node.pass` | `learning_progress` | 一个训练节点已通过 | 未命名技能、长期能力水平 |
 | `evaluation.complete` | `assessment_result` | 一次评估已完成 | 单次分数等于稳定能力 |
 | `final_assessment.complete` | `assessment_result` | 最终评估已完成 | 自动写入能力标签 |
