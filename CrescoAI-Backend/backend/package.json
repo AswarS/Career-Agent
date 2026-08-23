@@ -31,7 +31,7 @@
     "@ant/computer-use-input": "file:./shims/ant-computer-use-input",
     "@ant/computer-use-mcp": "file:./shims/ant-computer-use-mcp",
     "@ant/computer-use-swift": "file:./shims/ant-computer-use-swift",
-    "@anthropic-ai/claude-agent-sdk": "*",
+    "@anthropic-ai/claude-agent-sdk": "0.2.89",
     "@anthropic-ai/mcpb": "*",
     "@anthropic-ai/sandbox-runtime": "*",
     "@anthropic-ai/sdk": "*",
