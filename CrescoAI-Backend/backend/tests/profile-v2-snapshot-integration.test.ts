@@ -336,11 +336,20 @@ describe('Profile V2 snapshot integration', () => {
     const recall = new ProfileRecallService(service, {
       list: async () => [],
     } as unknown as ProfileMemoryService);
-
-    await expect(recall.buildContext(user.id, '帮我做职业规划')).resolves.toMatchObject({
-      version: 1,
-      queryIntent: 'career_planning',
-    });
+    const previousRecallFlag = process.env.CAREER_AGENT_PROFILE_V2_RECALL;
+    process.env.CAREER_AGENT_PROFILE_V2_RECALL = 'true';
+    try {
+      await expect(recall.buildContext(user.id, '帮我做职业规划')).resolves.toMatchObject({
+        version: 1,
+        queryIntent: 'career_planning',
+      });
+    } finally {
+      if (previousRecallFlag === undefined) {
+        delete process.env.CAREER_AGENT_PROFILE_V2_RECALL;
+      } else {
+        process.env.CAREER_AGENT_PROFILE_V2_RECALL = previousRecallFlag;
+      }
+    }
   });
 
   test('Product Profile education fields update the existing education JSON', async () => {
