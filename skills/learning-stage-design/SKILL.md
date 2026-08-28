@@ -2,6 +2,7 @@
 name: learning-stage-design
 description: "Expand the current stage of an activated LearningPlan into an executable LearningStagePackage with objectives, learning sequence, current sources, practice tasks, evidence requirements, and completion criteria. Use when the user wants to begin or concretize the current learning stage. Do not revise the overall plan, assess mastery, advance state, or redesign another stage."
 model-entry: action-tool
+model: GLM-5.2
 allowed-tools:
   - WebSearch
   - WebFetch

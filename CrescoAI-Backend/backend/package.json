@@ -22,6 +22,12 @@
     "network:dev": "bun run network:migrate && bun run ./src/Network/main.ts",
     "network:start": "bun run ./src/Network/main.ts",
     "network:migrate": "bun run ./src/Network/run-migrations.ts",
+    "network-tools:manifest": "bun run ./scripts/generate-network-tool-manifest.ts",
+    "network-tools:manifest:check": "bun run ./scripts/generate-network-tool-manifest.ts --check",
+    "network-tools:readme": "bun run ./scripts/generate-network-tool-manifest-readme.ts",
+    "network-tools:readme:check": "bun run ./scripts/generate-network-tool-manifest-readme.ts --check",
+    "network-tools:artifacts": "bun run network-tools:manifest && bun run network-tools:readme",
+    "network-tools:artifacts:check": "bun run network-tools:manifest:check && bun run network-tools:readme:check",
     "skill-tools:plan": "bun run ./scripts/generate-skill-action-tools.ts",
     "skill-tools:generate": "bun run ./scripts/generate-skill-action-tools.ts --write"
   },

@@ -2,6 +2,7 @@
 name: baseline-assessment
 description: Assess the user's current capability baseline relative to an explicit or unambiguously inferred role, domain, or task target, using only evidence already present in the conversation, injected profile context, prior tool/MCP/skill results, or visible artifacts. Use when an evidence-based starting point is needed before career positioning, planning, or development decisions. Do not use this skill to collect evidence, interview or test the user, discover goals, identify gaps, or recommend next actions; return insufficient_input when the target or relevant evidence is absent.
 model-entry: action-tool
+model: GLM-5.2
 ---
 
 # Baseline Assessment

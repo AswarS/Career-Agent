@@ -80,6 +80,19 @@ describe('CareerAgent skills on the native CC skill chain', () => {
     expect(registry.getAll().map(skill => skill.name)).toEqual(['code-analysis'])
   })
 
+  test('pins every learning Action Skill to the configured child model', () => {
+    const skillsByName = new Map(
+      getBundledSkills()
+        .filter(skill => skill.type === 'prompt')
+        .map(skill => [skill.name, skill]),
+    )
+
+    for (const name of PACKAGED_GLOBAL_SKILL_NAMES) {
+      expect(skillsByName.get(name)?.modelEntry).toBe('action-tool')
+      expect(skillsByName.get(name)?.model).toBe('GLM-5.2')
+    }
+  })
+
   test('loads the hyphenated baseline-assessment prompt with its evidence boundary', async () => {
     const skill = getBundledSkills().find(
       item => item.name === 'baseline-assessment',
@@ -102,6 +115,7 @@ describe('CareerAgent skills on the native CC skill chain', () => {
 
     expect(skill.name).toBe('baseline-assessment')
     expect(skill.modelEntry).toBe('action-tool')
+    expect(skill.model).toBe('GLM-5.2')
     expect(text).toContain('Base directory for this skill:')
     expect(text).toContain('Freeze the evidence boundary at invocation time.')
     expect(text).toContain('Use `ReturnSkillResult` as the only tool call')
@@ -174,6 +188,7 @@ describe('CareerAgent skills on the native CC skill chain', () => {
       .join('\n')
 
     expect(skill.modelEntry).toBe('action-tool')
+    expect(skill.model).toBe('GLM-5.2')
     expect(skill.allowedTools).toEqual([
       'WebSearch',
       'WebFetch',
@@ -208,6 +223,7 @@ describe('CareerAgent skills on the native CC skill chain', () => {
       .join('\n')
 
     expect(skill.modelEntry).toBe('action-tool')
+    expect(skill.model).toBe('GLM-5.2')
     expect(skill.allowedTools).toEqual(['Read', 'Write', 'ReturnSkillResult'])
     expect(text).toContain('Bridge the current state to the target state')
     expect(text).toContain('`working` corresponds to `applied`')
@@ -222,6 +238,7 @@ describe('CareerAgent skills on the native CC skill chain', () => {
     const blocks = await skill.getPromptForCommand('', {} as never)
     const text = blocks.filter(block => block.type === 'text').map(block => block.text).join('\n')
     expect(skill.modelEntry).toBe('action-tool')
+    expect(skill.model).toBe('GLM-5.2')
     expect(skill.allowedTools).toEqual(['WebSearch', 'WebFetch', 'Write', 'Read', 'Edit', 'ReturnSkillResult'])
     expect(text).toContain('Work only on `current_stage`')
     expect(text).toContain('Do not evaluate whether the user has mastered the stage')

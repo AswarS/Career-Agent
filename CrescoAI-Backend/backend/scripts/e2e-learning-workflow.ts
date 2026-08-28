@@ -3,7 +3,7 @@
  *
  * The conversation is intentionally written like normal user requests. It
  * does not name tools or describe the expected orchestration. The server uses
- * user1's stored model configuration and Profile, and the created thread is
+ * the selected user's stored model configuration and Profile, and the created thread is
  * retained for inspection in the frontend.
  *
  * Privacy: this runner prints only thread IDs, event/tool names, outcomes and
@@ -51,7 +51,8 @@ async function api(
   return response.json();
 }
 
-function createLocalUser1Authorization(): string {
+function createLocalAuthorization(): string {
+  const requestedUsername = process.env.E2E_USERNAME?.trim().toLowerCase() || "user1";
   const database = new Database(careerAgentDatabasePath, { readonly: true });
   try {
     const user = database
@@ -64,18 +65,18 @@ function createLocalUser1Authorization(): string {
           displayName: string | null;
           tokenVersion: number;
         },
-        []
+        [string, string, string]
       >(
         `SELECT id, publicUserId, email, username, displayName, tokenVersion
          FROM users
-         WHERE lower(coalesce(username, '')) = 'user1'
-            OR userId = '1'
-            OR id = 1
-         ORDER BY CASE WHEN lower(coalesce(username, '')) = 'user1' THEN 0 ELSE 1 END
+         WHERE lower(coalesce(username, '')) = ?
+            OR (? = 'user1' AND (userId = '1' OR id = 1))
+         ORDER BY CASE WHEN lower(coalesce(username, '')) = ? THEN 0 ELSE 1 END
          LIMIT 1`,
       )
-      .get();
-    if (!user?.publicUserId) throw new Error("user1 account was not found");
+      .get(requestedUsername, requestedUsername, requestedUsername);
+    if (!user?.publicUserId)
+      throw new Error(`${requestedUsername} account was not found`);
     internalUserId = String(user.id);
     const now = Math.floor(Date.now() / 1_000);
     const header = Buffer.from(
@@ -102,6 +103,48 @@ function createLocalUser1Authorization(): string {
   } finally {
     database.close();
   }
+}
+
+async function auditDemoThread(threadId: string): Promise<boolean> {
+  const messages = await api(`/threads/${threadId}/messages`);
+  const blocks = (Array.isArray(messages) ? messages : [])
+    .filter((message) => message?.role === "assistant")
+    .flatMap((message) => (Array.isArray(message.blocks) ? message.blocks : []));
+  const toolByUseId = new Map<string, string>();
+  const sequence: string[] = [];
+  let mainErrors = 0;
+  for (const block of blocks) {
+    if (block?.type === "tool_call") {
+      const name = String(block.name ?? "unknown");
+      const useId = String(block.toolUseId ?? "");
+      if (useId) toolByUseId.set(useId, name);
+      sequence.push(`call:${name}`);
+    } else if (block?.type === "tool_result") {
+      const useId = String(block.toolUseId ?? "");
+      const isError =
+        block.isError === true ||
+        block.is_error === true ||
+        block.status === "error" ||
+        block.status === "failed";
+      if (isError) mainErrors += 1;
+      sequence.push(
+        `result:${toolByUseId.get(useId) ?? "unknown"}:${isError ? "error" : "ok"}`,
+      );
+    }
+  }
+  const artifacts = loadPersistedRunArtifacts(threadId);
+  const subagent = await auditSubagentToolErrors(threadId);
+  console.log(
+    `Demo audit: mainErrors=${mainErrors} subagentErrors=${subagent.errors.length} artifacts=${artifacts.length}`,
+  );
+  console.log(`  sequence ${sequence.join(" -> ") || "none"}`);
+  console.log(
+    `  artifact types ${artifacts.map((artifact) => artifact.type).join(", ") || "none"}`,
+  );
+  for (const error of subagent.errors) {
+    console.log(`  subagent error tool=${error.tool} category=${error.category}`);
+  }
+  return mainErrors === 0 && subagent.errors.length === 0;
 }
 
 function asObject(value: unknown): JsonObject | null {
@@ -948,7 +991,30 @@ async function verifyExecution(threadId: string): Promise<boolean> {
 }
 
 async function main(): Promise<void> {
-  authorization = createLocalUser1Authorization();
+  authorization = createLocalAuthorization();
+  const demoMessagesJson = process.env.E2E_DEMO_MESSAGES?.trim();
+  if (demoMessagesJson) {
+    const parsed = JSON.parse(demoMessagesJson) as unknown;
+    if (!Array.isArray(parsed) || !parsed.every((item) => typeof item === "string")) {
+      throw new Error("E2E_DEMO_MESSAGES must be a JSON string array");
+    }
+    const thread = await api("/threads", {
+      method: "POST",
+      body: { title: process.env.E2E_DEMO_TITLE?.trim() || "真实 E2E｜学习规划 Demo" },
+    });
+    const threadId = String(thread.id ?? thread.uuid);
+    console.log(`Thread created: ${threadId}`);
+    for (let index = 0; index < parsed.length; index += 1) {
+      console.log(`Message ${index + 1}/${parsed.length} started`);
+      await sendMessage(threadId, parsed[index]!);
+      console.log(`Message ${index + 1}/${parsed.length} completed`);
+    }
+    const passed = await auditDemoThread(threadId);
+    console.log(`Frontend thread retained: ${threadId}`);
+    console.log(passed ? "DEMO TRAJECTORY CLEAN" : "DEMO TRAJECTORY NEEDS REVIEW");
+    process.exitCode = passed ? 0 : 1;
+    return;
+  }
   const verifyExecutionThreadId =
     process.env.E2E_VERIFY_EXECUTION_THREAD_ID?.trim();
   if (verifyExecutionThreadId) {

@@ -2,6 +2,7 @@
 name: learning-plan
 description: "Compare an existing CareerCompetencyModel artifact with an existing BaselineAssessment artifact and produce a staged LearningPlan artifact: identify and prioritize the gaps between the target career expectations and the user's current assessed baseline, and organize them into a stage-based learning path. Use when the user needs a concrete, prioritized sequence of capabilities to develop toward a career target, grounded in artifacts already produced upstream. Do not use for researching a career, redoing a baseline assessment, course recommendations, daily study schedules, or teaching execution; return insufficient_input when the required upstream artifacts are missing, mismatched, or unusably stale."
 model-entry: action-tool
+model: GLM-5.2
 allowed-tools:
   - Read
   - Write

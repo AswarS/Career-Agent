@@ -2,6 +2,7 @@
 name: career-competency-model
 description: Research what the current external world requires for a clearly scoped occupation or role and produce a source-backed CareerCompetencyModel artifact. Use when the user needs an evidence-based role competency framework, job-requirement model, or occupational world model grounded in current job postings, employer materials, official occupational or industry sources, professional bodies, technical documentation, curricula, and—when appropriate—research literature. Do not use for assessing the user, comparing the user with the model, gap analysis, career choice, course recommendations, or learning plans.
 model-entry: action-tool
+model: GLM-5.2
 allowed-tools:
   - WebSearch
   - WebFetch

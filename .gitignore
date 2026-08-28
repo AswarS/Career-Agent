@@ -2,6 +2,18 @@
 /CrescoAI-Backend/backend/src/Network/files
 /CrescoAI-Backend/backend/src/Network/user
 
-# Design assets and scratch archives
+# Root-level scratch work and imported skill bundles
 /design/
-skills.rar
+/experiments/
+/generated-skills/
+/skills2/
+/web_app_skills/
+
+# Scratch archives
+*.zip
+*.rar
+*.rar.bak
+*.7z
+*.tar
+*.tar.gz
+*.tgz

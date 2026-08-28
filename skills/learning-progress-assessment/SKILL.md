@@ -2,6 +2,7 @@
 name: learning-progress-assessment
 description: "Assess already-visible evidence against the current activated learning stage's existing objectives and completion criteria, producing a LearningProgressAssessment artifact and readiness signal. Use after the user has produced answers, code, reports, or other evidence. Do not collect evidence, search, redefine the rubric, teach, revise the plan, or update progress state."
 model-entry: action-tool
+model: GLM-5.2
 allowed-tools:
   - Write
   - Read

@@ -21,6 +21,7 @@ export type GlobalDiskSkillCatalogEntry = {
   allowedTools: string[]
   category: 'analysis' | 'generation' | 'utility' | 'search'
   modelEntry: 'action-tool' | 'skill-catalog'
+  model?: string
   resourceRoot: string
 }
 
@@ -109,6 +110,10 @@ export function getGlobalDiskSkillCatalog(): GlobalDiskSkillCatalogEntry[] {
         frontmatter['model-entry'] === 'action-tool'
           ? 'action-tool'
           : 'skill-catalog'
+      const model =
+        typeof frontmatter.model === 'string' && frontmatter.model.trim()
+          ? frontmatter.model.trim()
+          : undefined
 
       return [
         {
@@ -120,6 +125,7 @@ export function getGlobalDiskSkillCatalog(): GlobalDiskSkillCatalogEntry[] {
           allowedTools,
           category,
           modelEntry,
+          model,
           resourceRoot: skillDir,
         },
       ]
@@ -176,6 +182,7 @@ export function registerCareerAgentSkills(): void {
       userInvocable: true,
       resourceRoot: skill.resourceRoot,
       modelEntry: skill.modelEntry,
+      model: skill.model,
       async getPromptForCommand(args) {
         return [
           {
