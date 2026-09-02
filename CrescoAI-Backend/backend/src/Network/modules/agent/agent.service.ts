@@ -75,6 +75,7 @@ import { ProfileRecallService } from '../profile/profile-recall.service';
 import { ProfileProductProjectionService } from '../profile/profile-product-projection.service';
 import { ProfileProductMutationService } from '../profile/profile-product-mutation.service';
 import { ProfileEvidenceService } from '../profile/profile-evidence.service';
+import { createPraxisTools } from '../integration/praxis.tools.js';
 import {
   decodeProfileProductMemoryValue,
   isListProfileProductCodec,
@@ -2341,7 +2342,10 @@ export class AgentService {
         const queryEngine = createQueryEngineForSession(ctx, {
           commands,
           initialMessages,
-          extraTools: this.getProfileTools(userId, conversationId),
+          extraTools: [
+            ...this.getProfileTools(userId, conversationId),
+            ...this.getPraxisTools(userId, conversationId),
+          ],
           mcpTools: mcpRuntime.tools,
         });
         ctx.queryEngine = queryEngine;
@@ -2429,6 +2433,16 @@ export class AgentService {
       recallService: this.profileRecallService,
       productProjectionService: this.profileProductProjectionService,
       productMutationService: this.profileProductMutationService,
+    });
+  }
+
+  private getPraxisTools(userId: string, conversationId: string): Tool[] {
+    return createPraxisTools({
+      userId,
+      conversationId,
+      // The read client will be supplied after Praxis publishes its endpoint.
+      // Until then praxis_read stays out of the model-visible tool pool.
+      readEnabled: false,
     });
   }
 

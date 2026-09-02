@@ -51,6 +51,14 @@ function handleAction(action: MessageAction) {
   emit('action', action);
 }
 
+function isActionOnlyBlock(block: MessageBlockView) {
+  return block.type === 'artifact'
+    && !block.text
+    && !block.media.length
+    && !block.files.length
+    && block.actions.length > 0;
+}
+
 function getReplyUnitKey(unit: MessageReplyUnitView) {
   return `${viewModel.value.id}:${unit.id}`;
 }
@@ -263,9 +271,15 @@ function getQuestionAnswers(toolUseId: string | null | undefined) {
       <template v-for="block in unit.artifactBlocks" :key="block.id">
         <section
           class="message-timeline-block"
-          :class="[block.type, { error: block.isError }]"
+          :class="[
+            block.type,
+            {
+              error: block.isError,
+              'action-only': isActionOnlyBlock(block),
+            },
+          ]"
         >
-          <div class="timeline-block-label">
+          <div v-if="block.title || block.status" class="timeline-block-label">
             <span>{{ block.title }}</span>
             <small v-if="block.status">{{ block.status }}</small>
           </div>
@@ -380,9 +394,18 @@ function getQuestionAnswers(toolUseId: string | null | undefined) {
               :key="action.id"
               type="button"
               class="message-action"
+              :class="{ 'praxis-launch-action': action.kind === 'launch-praxis' }"
               @click="handleAction(action)"
             >
-              {{ action.label }}
+              <template v-if="action.kind === 'launch-praxis'">
+                <span class="praxis-action-mark" aria-hidden="true">P</span>
+                <span class="praxis-action-copy">
+                  <strong>{{ action.label }}</strong>
+                  <small>进入实训平台继续学习</small>
+                </span>
+                <span class="praxis-action-arrow" aria-hidden="true">→</span>
+              </template>
+              <template v-else>{{ action.label }}</template>
             </button>
           </div>
         </section>
@@ -664,6 +687,13 @@ function getQuestionAnswers(toolUseId: string | null | undefined) {
   border-left-color: color-mix(in srgb, var(--color-primary) 72%, var(--color-border));
 }
 
+.message-timeline-block.artifact.action-only {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+}
+
 .message-timeline-block.error {
   border-left-color: color-mix(in srgb, var(--color-error, #b3261e) 72%, var(--color-border));
   background: color-mix(in srgb, #fff1f0 54%, var(--color-surface-strong));
@@ -931,7 +961,12 @@ function getQuestionAnswers(toolUseId: string | null | undefined) {
   margin-top: 12px;
 }
 
+.message-timeline-block.action-only .message-actions {
+  margin-top: 10px;
+}
+
 .message-action {
+  appearance: none;
   border: 1px solid var(--color-border);
   border-radius: 999px;
   padding: 0.56rem 0.78rem;
@@ -941,6 +976,65 @@ function getQuestionAnswers(toolUseId: string | null | undefined) {
   font-size: 0.84rem;
   font-weight: 700;
   cursor: pointer;
+}
+
+.praxis-launch-action {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  min-width: min(100%, 286px);
+  padding: 10px 12px 10px 10px;
+  border-color: color-mix(in srgb, var(--color-primary) 38%, var(--color-border));
+  border-radius: 14px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--color-primary-soft) 74%, white), var(--color-surface-strong));
+  color: var(--color-text);
+  text-align: left;
+  box-shadow: 0 5px 16px rgba(32, 91, 79, 0.08);
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.praxis-action-mark {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font-size: 0.84rem;
+  font-weight: 900;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+}
+
+.praxis-action-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.praxis-action-copy strong {
+  color: var(--color-text);
+  font-size: 0.88rem;
+  line-height: 1.25;
+}
+
+.praxis-action-copy small {
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.praxis-action-arrow {
+  color: var(--color-primary);
+  font-size: 1.08rem;
+  font-weight: 900;
+  transition: transform 160ms ease;
 }
 
 @media (max-width: 760px) {
@@ -957,5 +1051,28 @@ function getQuestionAnswers(toolUseId: string | null | undefined) {
 .message-action:hover {
   border-color: color-mix(in srgb, var(--color-primary) 38%, var(--color-border));
   color: var(--color-primary);
+}
+
+.praxis-launch-action:hover {
+  border-color: color-mix(in srgb, var(--color-primary) 64%, var(--color-border));
+  color: var(--color-text);
+  box-shadow: 0 9px 22px rgba(32, 91, 79, 0.14);
+  transform: translateY(-1px);
+}
+
+.praxis-launch-action:hover .praxis-action-arrow {
+  transform: translateX(2px);
+}
+
+.praxis-launch-action:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--color-primary) 24%, transparent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .praxis-launch-action,
+  .praxis-action-arrow {
+    transition: none;
+  }
 }
 </style>

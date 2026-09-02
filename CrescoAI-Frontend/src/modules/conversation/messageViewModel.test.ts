@@ -233,6 +233,30 @@ describe('createMessageViewModel', () => {
     expect(artifactBlock?.files[0]?.displayType).toBe('PDF');
     expect(artifactBlock?.files[0]?.displaySize).toBe('2.0 KB');
   });
+
+  it('places a Praxis launch action in the visible message action block', () => {
+    const viewModel = createMessageViewModel(createMessage({
+      actions: [{
+        id: 'action-launch-praxis-1',
+        kind: 'launch-praxis',
+        label: '打开 Praxis',
+        destination: 'home',
+      }],
+    }));
+
+    const artifactBlock = viewModel.blocks.find((block) => block.type === 'artifact');
+    expect(artifactBlock?.title).toBeNull();
+    expect(artifactBlock?.text).toBe('');
+    expect(artifactBlock?.actions).toEqual([{
+      id: 'action-launch-praxis-1',
+      kind: 'launch-praxis',
+      label: '打开 Praxis',
+      destination: 'home',
+    }]);
+    expect(
+      viewModel.replyUnits[viewModel.replyUnits.length - 1]?.artifactBlocks[0]?.actions,
+    ).toHaveLength(1);
+  });
 });
 
 describe('canDownloadFile', () => {

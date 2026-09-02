@@ -60,6 +60,7 @@ import type {
   SkillOutcome,
 } from '../../../skills/skillLifecycleTypes.js';
 import type { ActionArtifactManifest } from '../../../artifacts/actionArtifactPublisher.js';
+import { extractPraxisMessageActions } from '../integration/praxis-message-actions.js';
 
 declare global {
   namespace Express {
@@ -77,6 +78,7 @@ export interface MessageAction {
   artifactId?: string;
   view_mode?: string;
   viewMode?: string;
+  destination?: string;
 }
 
 type MessageMediaKind = 'image' | 'audio' | 'video' | 'html' | 'app' | 'file';
@@ -840,6 +842,10 @@ export class ConversationService implements OnModuleInit {
       agentResponse.assistantMessageId,
       assistantResources,
     );
+    const assistantActions = this.mergeMessageActions(
+      persistedAssistantResources.actions,
+      extractPraxisMessageActions(agentResponse.blocks),
+    ) ?? [];
     const sessionFilePath = await this.findOrCreateRuntimeSessionFile(conversation.id, conversation.userId);
     if (persistedAssistantResources.media.length) {
       await this.replaceMessageResourceMappings(
@@ -852,7 +858,7 @@ export class ConversationService implements OnModuleInit {
     await this.mergeAssistantMessageActions(
       sessionFilePath,
       agentResponse.assistantMessageId,
-      persistedAssistantResources.actions,
+      assistantActions,
     );
     await this.touchConversation(conversation, dto.content);
     await this.saveProfileSuggestionsFromAgentOutput(
@@ -882,12 +888,12 @@ export class ConversationService implements OnModuleInit {
         ? sanitizeServerPhysicalPaths(agentResponse.reasoning)
         : undefined,
       media: persistedAssistantResources.media,
-      actions: persistedAssistantResources.actions,
+      actions: assistantActions,
       blocks: normalizeCanonicalMessageBlocks(
         this.appendArtifactBlockToMessageBlocks(
           (agentResponse.blocks ?? []) as MessageBlock[],
           persistedAssistantResources.media,
-          persistedAssistantResources.actions,
+          assistantActions,
         ),
         { authoritativeText: agentResponse.reply },
       ) as MessageBlock[] | undefined,
@@ -1084,6 +1090,10 @@ export class ConversationService implements OnModuleInit {
           assistantMessageId,
           assistantResources,
         );
+        const assistantActions = this.mergeMessageActions(
+          persistedAssistantResources.actions,
+          extractPraxisMessageActions(event.blocks),
+        ) ?? [];
         const sessionFilePath = await this.findOrCreateRuntimeSessionFile(conversation.id, conversation.userId);
 
         if (persistedAssistantResources.media.length) {
@@ -1096,21 +1106,21 @@ export class ConversationService implements OnModuleInit {
         }
         if (
           persistedAssistantResources.media.length
-          || persistedAssistantResources.actions.length
+          || assistantActions.length
         ) {
           yield {
             type: 'artifact.created',
             message_id: assistantMessageId,
             messageId: assistantMessageId,
             media: persistedAssistantResources.media,
-            actions: persistedAssistantResources.actions,
+            actions: assistantActions,
           };
         }
 
         await this.mergeAssistantMessageActions(
           sessionFilePath,
           assistantMessageId,
-          persistedAssistantResources.actions,
+          assistantActions,
         );
         await this.touchConversation(conversation, dto.content);
         await this.saveProfileSuggestionsFromAgentOutput(
@@ -1127,13 +1137,13 @@ export class ConversationService implements OnModuleInit {
           ? this.appendArtifactBlockToMessageBlocks(
               event.blocks as MessageBlock[],
               persistedAssistantResources.media,
-              persistedAssistantResources.actions,
+              assistantActions,
             )
           : this.createBlocksFromReplyAndArtifacts(
               event.reply,
               undefined,
               persistedAssistantResources.media,
-              persistedAssistantResources.actions,
+              assistantActions,
             );
         const completedBlocks = normalizeCanonicalMessageBlocks(completedBlocksSource, {
           authoritativeText: event.reply,
@@ -1157,7 +1167,7 @@ export class ConversationService implements OnModuleInit {
             ? sanitizeServerPhysicalPaths(event.reasoning)
             : undefined,
           media: persistedAssistantResources.media.length ? persistedAssistantResources.media : undefined,
-          actions: persistedAssistantResources.actions.length ? persistedAssistantResources.actions : undefined,
+          actions: assistantActions.length ? assistantActions : undefined,
           blocks: sanitizeServerPhysicalPathsInValue(completedBlocks) as MessageBlock[] | undefined,
           raw: sanitizeServerPhysicalPathsInValue(event.raw),
         };

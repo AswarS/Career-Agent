@@ -90,6 +90,7 @@ export interface UpstreamMessageAction {
   artifactId?: string;
   view_mode?: string | null;
   viewMode?: string | null;
+  destination?: string | null;
 }
 
 export interface UpstreamMessageMedia {
@@ -330,6 +331,19 @@ function normalizeMessageActions(actions: UpstreamMessageAction[] | null | undef
   const nextActions: MessageAction[] = [];
 
   for (const action of actions ?? []) {
+    if (action.kind === 'launch-praxis' || action.kind === 'launch_praxis') {
+      if (action.destination !== 'home') {
+        continue;
+      }
+      nextActions.push({
+        id: action.id,
+        kind: 'launch-praxis',
+        label: action.label,
+        destination: 'home',
+      });
+      continue;
+    }
+
     const artifactId = action.artifactId ?? action.artifact_id;
 
     if (!artifactId || (action.kind !== 'open-artifact' && action.kind !== 'open_artifact')) {

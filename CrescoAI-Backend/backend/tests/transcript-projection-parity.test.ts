@@ -391,4 +391,82 @@ describe('conversation transcript trajectory projection', () => {
       source: 'agent',
     }])
   })
+
+  test('restores the Praxis launch action from its tool result', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'career-agent-praxis-action-'))
+    tempDirs.push(dir)
+    const filePath = join(dir, 'session.jsonl')
+    const events = [
+      {
+        type: 'user',
+        uuid: 'user-1',
+        timestamp: '2026-09-02T00:00:00.000Z',
+        sessionId: 'session-1',
+        message: { role: 'user', content: '打开 Praxis' },
+      },
+      {
+        type: 'assistant',
+        uuid: 'assistant-1',
+        timestamp: '2026-09-02T00:00:01.000Z',
+        sessionId: 'session-1',
+        message: {
+          id: 'assistant-message-1',
+          role: 'assistant',
+          content: [{
+            type: 'tool_use',
+            id: 'praxis-open-1',
+            name: 'praxis_open',
+            input: { destination: 'home' },
+          }],
+        },
+      },
+      {
+        type: 'user',
+        uuid: 'praxis-result-1',
+        timestamp: '2026-09-02T00:00:02.000Z',
+        sessionId: 'session-1',
+        message: {
+          role: 'user',
+          content: [{
+            type: 'tool_result',
+            tool_use_id: 'praxis-open-1',
+            content: JSON.stringify({
+              schemaVersion: '1.0.0',
+              status: 'ready',
+              message: 'Praxis 已准备好打开。',
+              uiAction: {
+                kind: 'launch_praxis',
+                label: '打开 Praxis',
+                destination: 'home',
+              },
+            }),
+          }],
+        },
+      },
+      {
+        type: 'assistant',
+        uuid: 'assistant-2',
+        timestamp: '2026-09-02T00:00:03.000Z',
+        sessionId: 'session-1',
+        message: {
+          id: 'assistant-message-2',
+          role: 'assistant',
+          content: [{ type: 'text', text: '请点击下方按钮进入 Praxis。' }],
+        },
+      },
+    ]
+    await writeFile(filePath, `${events.map((event) => JSON.stringify(event)).join('\n')}\n`, 'utf8')
+
+    const messages = await new ConversationTranscriptProjectionService().projectTranscriptFile({
+      filePath,
+      sessionId: 'session-1',
+    })
+
+    expect(messages[1]?.actions).toEqual([{
+      id: 'action-launch-praxis-praxis-open-1',
+      kind: 'launch_praxis',
+      label: '打开 Praxis',
+      destination: 'home',
+    }])
+  })
 })

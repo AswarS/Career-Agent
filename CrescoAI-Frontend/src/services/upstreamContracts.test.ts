@@ -307,6 +307,28 @@ describe('normalizeThreadMessage', () => {
     ]);
   });
 
+  it('normalizes a Praxis launch action without treating it as an artifact', () => {
+    const message = normalizeThreadMessage({
+      id: 'message-praxis',
+      role: 'assistant',
+      content: '请点击按钮进入 Praxis。',
+      actions: [{
+        id: 'action-launch-praxis-1',
+        kind: 'launch_praxis',
+        label: '打开 Praxis',
+        destination: 'home',
+      }],
+      created_at: '2026-09-02T08:02:00Z',
+    }, 'thread-001');
+
+    expect(message.actions).toEqual([{
+      id: 'action-launch-praxis-1',
+      kind: 'launch-praxis',
+      label: '打开 Praxis',
+      destination: 'home',
+    }]);
+  });
+
   it('drops unsupported assistant message actions from upstream payloads', () => {
     const message = normalizeThreadMessage({
       id: 'message-004',
@@ -844,6 +866,32 @@ describe('normalizeThreadMessage', () => {
       usage: { input_tokens: 3, output_tokens: 5 },
     });
     expect(event && 'reasoning' in event).toBe(false);
+  });
+
+  it('preserves the Praxis launch action on live stream completion', () => {
+    const event = normalizeMessageStreamEvent({
+      type: 'message.completed',
+      conversation_id: 'session-1',
+      message_id: 'uuid-user-1',
+      assistant_message_id: 'msg-assistant-1',
+      reply: '请点击按钮进入 Praxis。',
+      actions: [{
+        id: 'action-launch-praxis-1',
+        kind: 'launch_praxis',
+        label: '打开 Praxis',
+        destination: 'home',
+      }],
+    }, 'session-1');
+
+    expect(event).toMatchObject({
+      type: 'message.completed',
+      actions: [{
+        id: 'action-launch-praxis-1',
+        kind: 'launch-praxis',
+        label: '打开 Praxis',
+        destination: 'home',
+      }],
+    });
   });
 
   it('preserves numeric zero agent ids from upstream payloads', () => {

@@ -40,6 +40,7 @@ import {
   sanitizeConversationMemoryPublicText,
   sanitizeConversationMemoryPublicValue,
 } from '../../memory/conversationMemoryPublicPolicy.js';
+import { extractPraxisMessageActions } from '../integration/praxis-message-actions.js';
 
 type ProjectedConversationMessage = ConversationMessage & {
   uuid?: string;
@@ -217,12 +218,14 @@ export class ConversationTranscriptProjectionService {
           hiddenConversationMemoryToolUseIds,
           conversationMemoryDir,
         );
-        if (toolResultBlocks.length && activeAssistantMessageId) {
+        const praxisActions = extractPraxisMessageActions(toolResultBlocks);
+        if ((toolResultBlocks.length || praxisActions.length) && activeAssistantMessageId) {
           const existing = map.get(activeAssistantMessageId);
           if (existing) {
             map.set(activeAssistantMessageId, {
               ...existing,
               blocks: this.mergeBlocks(existing.blocks, toolResultBlocks),
+              actions: this.mergeMessageActions(existing.actions, praxisActions),
             });
           }
           continue;
