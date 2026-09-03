@@ -32,7 +32,8 @@ function parseSecrets(
     throw new Error(`${name} must be a JSON object`);
   }
   const entries = Object.entries(parsed).filter(
-    ([kid, secret]) => kid.trim() && typeof secret === 'string' && secret.length >= 16,
+    ([kid, secret]) =>
+      kid.trim() && typeof secret === 'string' && secret.length >= 16,
   );
   if (entries.length !== Object.keys(parsed).length || entries.length === 0) {
     throw new Error(`${name} contains an invalid kid or secret`);
@@ -86,10 +87,12 @@ function verificationKeys(
       throw new Error(`SSO verification key ${kid} is not a valid public key`);
     }
     if (
-      (algorithm === 'ES256' && key.asymmetricKeyType !== 'ec')
-      || (algorithm === 'RS256' && key.asymmetricKeyType !== 'rsa')
+      (algorithm === 'ES256' && key.asymmetricKeyType !== 'ec') ||
+      (algorithm === 'RS256' && key.asymmetricKeyType !== 'rsa')
     ) {
-      throw new Error(`SSO verification key ${kid} does not match ${algorithm}`);
+      throw new Error(
+        `SSO verification key ${kid} does not match ${algorithm}`,
+      );
     }
     keys[kid] = key;
   }
@@ -126,23 +129,23 @@ export function resolvePraxisIntegrationConfig(
     environment.CAREER_AGENT_PRAXIS_INTEGRATION_ENABLED,
     false,
   );
-  const algorithm = environment.CAREER_AGENT_PRAXIS_SSO_ALGORITHM?.trim()
-    || 'ES256';
+  const algorithm =
+    environment.CAREER_AGENT_PRAXIS_SSO_ALGORITHM?.trim() || 'ES256';
   if (algorithm !== 'ES256' && algorithm !== 'RS256') {
-    throw new Error(
-      'CAREER_AGENT_PRAXIS_SSO_ALGORITHM must be ES256 or RS256',
-    );
+    throw new Error('CAREER_AGENT_PRAXIS_SSO_ALGORITHM must be ES256 or RS256');
   }
 
   const disabledPrivateKey = devKeyPair.privateKey;
   if (!integrationEnabled) {
     return {
       enabled: false,
-      issuer: environment.CAREER_AGENT_PRAXIS_ISSUER?.trim()
-        || 'https://career.invalid',
+      issuer:
+        environment.CAREER_AGENT_PRAXIS_ISSUER?.trim() ||
+        'https://career.invalid',
       audience: 'praxis-agent',
-      praxisBaseUrl: environment.CAREER_AGENT_PRAXIS_BASE_URL?.trim()
-        || 'https://praxis.invalid',
+      praxisBaseUrl:
+        environment.CAREER_AGENT_PRAXIS_BASE_URL?.trim() ||
+        'https://praxis.invalid',
       serviceCredentials: {},
       eventSigningKeys: {},
       activeEventSigningKid: '',
@@ -179,14 +182,16 @@ export function resolvePraxisIntegrationConfig(
       ...Object.values(eventSigningKeys),
     ]) {
       if (secret.length < 32) {
-        throw new Error('Praxis integration secrets must contain at least 32 characters in production');
+        throw new Error(
+          'Praxis integration secrets must contain at least 32 characters in production',
+        );
       }
     }
   }
 
   const activeEventSigningKid =
-    environment.CAREER_AGENT_PRAXIS_EVENT_SIGNING_KID?.trim()
-    || Object.keys(eventSigningKeys)[0];
+    environment.CAREER_AGENT_PRAXIS_EVENT_SIGNING_KID?.trim() ||
+    Object.keys(eventSigningKeys)[0];
   if (!eventSigningKeys[activeEventSigningKid]) {
     throw new Error(
       'CAREER_AGENT_PRAXIS_EVENT_SIGNING_KID is not present in the signing key set',
@@ -195,15 +200,15 @@ export function resolvePraxisIntegrationConfig(
   const signingKey = privateKey(environment, production);
   const keyType = signingKey.asymmetricKeyType;
   if (
-    (algorithm === 'ES256' && keyType !== 'ec')
-    || (algorithm === 'RS256' && keyType !== 'rsa')
+    (algorithm === 'ES256' && keyType !== 'ec') ||
+    (algorithm === 'RS256' && keyType !== 'rsa')
   ) {
     throw new Error(`Praxis SSO private key does not match ${algorithm}`);
   }
   const activeSsoKid =
-    environment.CAREER_AGENT_PRAXIS_SSO_ACTIVE_KID?.trim()
-    || environment.CAREER_AGENT_PRAXIS_SSO_KID?.trim()
-    || 'career-dev';
+    environment.CAREER_AGENT_PRAXIS_SSO_ACTIVE_KID?.trim() ||
+    environment.CAREER_AGENT_PRAXIS_SSO_KID?.trim() ||
+    'career-dev';
   const ssoVerificationKeys = verificationKeys(
     environment.CAREER_AGENT_PRAXIS_SSO_VERIFICATION_KEYS_JSON,
     algorithm,
@@ -213,16 +218,15 @@ export function resolvePraxisIntegrationConfig(
   return {
     enabled: true,
     issuer: requireHttps(
-      environment.CAREER_AGENT_PRAXIS_ISSUER?.trim()
-        || 'http://localhost:4000',
+      environment.CAREER_AGENT_PRAXIS_ISSUER?.trim() || 'http://localhost:4000',
       'CAREER_AGENT_PRAXIS_ISSUER',
       production,
     ),
-    audience: environment.CAREER_AGENT_PRAXIS_AUDIENCE?.trim()
-      || 'praxis-agent',
+    audience:
+      environment.CAREER_AGENT_PRAXIS_AUDIENCE?.trim() || 'praxis-agent',
     praxisBaseUrl: requireHttps(
-      environment.CAREER_AGENT_PRAXIS_BASE_URL?.trim()
-        || 'http://localhost:8000',
+      environment.CAREER_AGENT_PRAXIS_BASE_URL?.trim() ||
+        'http://localhost:8000',
       'CAREER_AGENT_PRAXIS_BASE_URL',
       production,
     ),
@@ -238,4 +242,62 @@ export function resolvePraxisIntegrationConfig(
 
 export function validatePraxisIntegrationConfig() {
   resolvePraxisIntegrationConfig();
+}
+
+export interface PraxisReadIntegrationConfig {
+  enabled: boolean;
+  baseUrl: string;
+  path: '/integration/cresco/v1/read';
+  issuer: string;
+  audience: 'praxis-read-api';
+  algorithm: 'ES256' | 'RS256';
+  activeKid: string;
+  privateKey: KeyObject;
+  timeoutMs: number;
+}
+
+/**
+ * The provider endpoint is not deployed yet, so reads have their own explicit
+ * feature flag. Token signing deliberately reuses the published Cresco JWKS
+ * key set; the fixed audience and request binding keep read tokens separate
+ * from SSO tickets.
+ */
+export function resolvePraxisReadIntegrationConfig(
+  environment: Environment = process.env,
+): PraxisReadIntegrationConfig {
+  const integration = resolvePraxisIntegrationConfig(environment);
+  const readEnabled = enabled(
+    environment.CAREER_AGENT_PRAXIS_READ_ENABLED,
+    false,
+  );
+  if (readEnabled && !integration.enabled) {
+    throw new Error(
+      'CAREER_AGENT_PRAXIS_INTEGRATION_ENABLED must be enabled before Praxis reads',
+    );
+  }
+  const timeout = Number(
+    environment.CAREER_AGENT_PRAXIS_READ_TIMEOUT_MS ?? 5000,
+  );
+  if (!Number.isInteger(timeout) || timeout < 100 || timeout > 30_000) {
+    throw new Error(
+      'CAREER_AGENT_PRAXIS_READ_TIMEOUT_MS must be an integer from 100 to 30000',
+    );
+  }
+  const production = environment.NODE_ENV === 'production';
+  return {
+    enabled: readEnabled && integration.enabled,
+    baseUrl: requireHttps(
+      environment.CAREER_AGENT_PRAXIS_READ_BASE_URL?.trim() ||
+        integration.praxisBaseUrl,
+      'CAREER_AGENT_PRAXIS_READ_BASE_URL',
+      production,
+    ),
+    path: '/integration/cresco/v1/read',
+    issuer: integration.issuer,
+    audience: 'praxis-read-api',
+    algorithm: integration.ssoAlgorithm,
+    activeKid: integration.activeSsoKid,
+    privateKey: integration.ssoPrivateKey,
+    timeoutMs: timeout,
+  };
 }

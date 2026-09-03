@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://praxis-agent.local/contracts/integrations/cresco-open-target.schema.json",
+  "title": "Cresco Structured Praxis Open Target",
+  "$defs": {
+    "resourceId": {
+      "type": "string",
+      "minLength": 5,
+      "maxLength": 100,
+      "pattern": "^[A-Za-z][A-Za-z0-9_-]+$"
+    }
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["targetType"],
+      "properties": {"targetType": {"const": "home"}}
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["targetType", "projectId"],
+      "properties": {
+        "targetType": {"const": "project"},
+        "projectId": {"$ref": "#/$defs/resourceId"}
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["targetType", "projectId", "runId"],
+      "properties": {
+        "targetType": {"const": "run"},
+        "projectId": {"$ref": "#/$defs/resourceId"},
+        "runId": {"$ref": "#/$defs/resourceId"}
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["targetType", "projectId", "runId", "nodeRunId"],
+      "properties": {
+        "targetType": {"const": "node"},
+        "projectId": {"$ref": "#/$defs/resourceId"},
+        "runId": {"$ref": "#/$defs/resourceId"},
+        "nodeRunId": {"$ref": "#/$defs/resourceId"}
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["targetType", "projectId", "runId", "submissionId"],
+      "properties": {
+        "targetType": {"const": "submission"},
+        "projectId": {"$ref": "#/$defs/resourceId"},
+        "runId": {"$ref": "#/$defs/resourceId"},
+        "submissionId": {"$ref": "#/$defs/resourceId"}
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["targetType", "projectId", "runId", "reportId"],
+      "properties": {
+        "targetType": {"const": "report"},
+        "projectId": {"$ref": "#/$defs/resourceId"},
+        "runId": {"$ref": "#/$defs/resourceId"},
+        "reportId": {"$ref": "#/$defs/resourceId"}
+      }
+    }
+  ]
+}

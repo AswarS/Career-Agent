@@ -1,0 +1,708 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://praxis-agent.local/contracts/integrations/cresco-read-response.schema.json",
+  "title": "Praxis Cresco Integration Read Response",
+  "$defs": {
+    "resourceId": {
+      "type": "string",
+      "minLength": 5,
+      "maxLength": 100,
+      "pattern": "^[A-Za-z][A-Za-z0-9_-]+$"
+    },
+    "selectionKey": {
+      "type": "string",
+      "minLength": 16,
+      "maxLength": 200,
+      "pattern": "^sel_[A-Za-z0-9_-]+$"
+    },
+    "hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "nullableResourceId": {
+      "oneOf": [
+        {"$ref": "#/$defs/resourceId"},
+        {"type": "null"}
+      ]
+    },
+    "projectMode": {"type": "string", "enum": ["SELF", "PUBLISHED"]},
+    "projectRelation": {
+      "type": "string",
+      "enum": ["creator", "self_executor", "published_executor", "published_publisher"]
+    },
+    "projectState": {
+      "type": "string",
+      "enum": ["draft", "internal_evaluating", "internal_rejected", "ready", "published"]
+    },
+    "runState": {
+      "type": "string",
+      "enum": [
+        "profile_collecting",
+        "plan_generating",
+        "plan_review_pending",
+        "active",
+        "blocked_review_pending",
+        "final_assessing",
+        "final_review_pending",
+        "certificate_issuing",
+        "completed",
+        "ended_with_issue"
+      ]
+    },
+    "nodeState": {
+      "type": "string",
+      "enum": ["locked", "active", "evaluating", "review_pending", "passed", "needs_revision", "blocked"]
+    },
+    "submissionState": {
+      "type": "string",
+      "enum": ["queued", "running", "review_pending", "passed", "revision", "teacher_approved", "teacher_returned", "failed"]
+    },
+    "projectAllowedAction": {
+      "type": "string",
+      "enum": [
+        "project.edit_draft",
+        "project.delete_draft",
+        "project.archive",
+        "project.publication_step",
+        "project.design",
+        "project.publish",
+        "run.create_self",
+        "invitation.create",
+        "file.upload"
+      ]
+    },
+    "runAllowedAction": {
+      "type": "string",
+      "enum": [
+        "profile.start",
+        "profile.answer",
+        "plan.generate",
+        "plan.review",
+        "plan.edit",
+        "plan.batch_approve",
+        "file.upload",
+        "attempts.grant_exhaustion",
+        "final_review.finalize",
+        "final_review.return_node"
+      ]
+    },
+    "nodeAllowedAction": {
+      "type": "string",
+      "enum": ["file.upload", "file.abandon", "submission.precheck", "submission.create", "submission.review"]
+    },
+    "finalAssessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "score", "comment", "source", "evidenceIds", "finalizedAt"],
+      "properties": {
+        "id": {"$ref": "#/$defs/resourceId"},
+        "score": {"type": "integer", "minimum": 0, "maximum": 100},
+        "comment": {"type": "string", "minLength": 1, "maxLength": 10000},
+        "source": {"type": "string", "enum": ["SELF_AGENT", "PUBLISHED_PUBLISHER"]},
+        "evidenceIds": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/resourceId"}
+        },
+        "finalizedAt": {"type": "string", "format": "date-time"}
+      }
+    },
+    "projectSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version",
+        "title",
+        "mode",
+        "relation",
+        "state",
+        "allowedActions",
+        "selectionKey",
+        "openTarget"
+      ],
+      "properties": {
+        "id": {"$ref": "#/$defs/resourceId"},
+        "version": {"type": "integer", "minimum": 1},
+        "title": {"type": "string", "minLength": 1, "maxLength": 200},
+        "mode": {"$ref": "#/$defs/projectMode"},
+        "relation": {"$ref": "#/$defs/projectRelation"},
+        "state": {"$ref": "#/$defs/projectState"},
+        "allowedActions": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/projectAllowedAction"}
+        },
+        "selectionKey": {"$ref": "#/$defs/selectionKey"},
+        "openTarget": {"$ref": "cresco-open-target.schema.json"}
+      }
+    },
+    "runSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "projectId",
+        "runId",
+        "contextVersion",
+        "projectTitle",
+        "mode",
+        "relation",
+        "state",
+        "profileStatus",
+        "activeNodeId",
+        "finalAssessment",
+        "reportId",
+        "allowedActions",
+        "selectionKey",
+        "openTarget"
+      ],
+      "properties": {
+        "projectId": {"$ref": "#/$defs/resourceId"},
+        "runId": {"$ref": "#/$defs/resourceId"},
+        "contextVersion": {"type": "integer", "minimum": 1},
+        "projectTitle": {"type": "string", "minLength": 1, "maxLength": 200},
+        "mode": {"$ref": "#/$defs/projectMode"},
+        "relation": {"$ref": "#/$defs/projectRelation"},
+        "state": {"$ref": "#/$defs/runState"},
+        "profileStatus": {"type": "string", "enum": ["collecting", "complete", "locked", "insufficient"]},
+        "activeNodeId": {"$ref": "#/$defs/nullableResourceId"},
+        "finalAssessment": {
+          "oneOf": [
+            {"$ref": "#/$defs/finalAssessment"},
+            {"type": "null"}
+          ]
+        },
+        "reportId": {"$ref": "#/$defs/nullableResourceId"},
+        "allowedActions": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/runAllowedAction"}
+        },
+        "selectionKey": {"$ref": "#/$defs/selectionKey"},
+        "openTarget": {"$ref": "cresco-open-target.schema.json"}
+      }
+    },
+    "attemptSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "initialAttempts",
+        "consumedAttempts",
+        "remainingAttempts",
+        "exhaustionGrantUsed",
+        "finalReviewReturnAttemptUsed",
+        "activeGrantType"
+      ],
+      "properties": {
+        "initialAttempts": {"type": "integer", "const": 3},
+        "consumedAttempts": {"type": "integer", "minimum": 0},
+        "remainingAttempts": {"type": "integer", "minimum": 0},
+        "exhaustionGrantUsed": {"type": "boolean"},
+        "finalReviewReturnAttemptUsed": {"type": "boolean"},
+        "activeGrantType": {
+          "type": ["string", "null"],
+          "enum": ["exhaustion_grant", "final_review_return", null]
+        }
+      }
+    },
+    "submissionSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "submissionId",
+        "version",
+        "contentHash",
+        "attemptNumber",
+        "evaluationStatus",
+        "createdAt",
+        "selectionKey",
+        "openTarget"
+      ],
+      "properties": {
+        "submissionId": {"$ref": "#/$defs/resourceId"},
+        "version": {"type": "integer", "minimum": 1},
+        "contentHash": {"$ref": "#/$defs/hash"},
+        "attemptNumber": {"type": "integer", "minimum": 1},
+        "evaluationStatus": {"$ref": "#/$defs/submissionState"},
+        "createdAt": {"type": "string", "format": "date-time"},
+        "selectionKey": {"$ref": "#/$defs/selectionKey"},
+        "openTarget": {"$ref": "cresco-open-target.schema.json"}
+      }
+    },
+    "nodeSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version",
+        "order",
+        "title",
+        "objective",
+        "state",
+        "attempts",
+        "acceptanceTargets",
+        "latestSubmission",
+        "allowedActions",
+        "selectionKey",
+        "openTarget"
+      ],
+      "properties": {
+        "id": {"$ref": "#/$defs/resourceId"},
+        "version": {"type": "integer", "minimum": 1},
+        "order": {"type": "integer", "minimum": 1},
+        "title": {"type": "string", "minLength": 1, "maxLength": 200},
+        "objective": {"type": "string", "minLength": 1, "maxLength": 4000},
+        "state": {"$ref": "#/$defs/nodeState"},
+        "attempts": {"$ref": "#/$defs/attemptSummary"},
+        "acceptanceTargets": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20,
+          "items": {"type": "string", "minLength": 1, "maxLength": 1000}
+        },
+        "latestSubmission": {
+          "oneOf": [
+            {"$ref": "#/$defs/submissionSummary"},
+            {"type": "null"}
+          ]
+        },
+        "allowedActions": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/nodeAllowedAction"}
+        },
+        "selectionKey": {"$ref": "#/$defs/selectionKey"},
+        "openTarget": {"$ref": "cresco-open-target.schema.json"}
+      }
+    },
+    "submissionReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["submissionId", "version", "contentHash"],
+      "properties": {
+        "submissionId": {"$ref": "#/$defs/resourceId"},
+        "version": {"type": "integer", "minimum": 1},
+        "contentHash": {"$ref": "#/$defs/hash"}
+      }
+    },
+    "evidenceReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidenceId", "sourceType", "sourceId", "sourceHash"],
+      "properties": {
+        "evidenceId": {"$ref": "#/$defs/resourceId"},
+        "sourceType": {"type": "string", "enum": ["file_block", "frozen_public_url"]},
+        "sourceId": {"$ref": "#/$defs/resourceId"},
+        "sourceHash": {"$ref": "#/$defs/hash"}
+      }
+    },
+    "rubricResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rubricId", "criterion", "met", "reason", "evidenceIds"],
+      "properties": {
+        "rubricId": {"$ref": "#/$defs/resourceId"},
+        "criterion": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "met": {"type": "boolean"},
+        "reason": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "evidenceIds": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/resourceId"}
+        }
+      }
+    },
+    "activeOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["jobId", "kind", "status", "resourceType", "resourceId", "errorCode", "retryable", "openTarget"],
+      "properties": {
+        "jobId": {"$ref": "#/$defs/resourceId"},
+        "kind": {
+          "type": "string",
+          "enum": [
+            "project_stage_planning",
+            "profile_interview",
+            "personalized_plan_generation",
+            "personalized_plan_revalidation",
+            "conversation_reply",
+            "conversation_memory",
+            "file_scan",
+            "file_parse",
+            "submission_precheck",
+            "submission_evaluation",
+            "self_final_assessment",
+            "run_report_generation",
+            "certificate_render"
+          ]
+        },
+        "status": {"type": "string", "enum": ["queued", "running", "retry_wait", "failed"]},
+        "resourceType": {"type": "string", "enum": ["Project", "ProjectRun", "NodeRun", "Submission", "ReviewReport", "Certificate", "FileAsset"]},
+        "resourceId": {"$ref": "#/$defs/resourceId"},
+        "errorCode": {"type": ["string", "null"], "maxLength": 100},
+        "retryable": {"type": "boolean"},
+        "openTarget": {"$ref": "cresco-open-target.schema.json"}
+      }
+    },
+    "sourceVersions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["projects", "runs", "nodes", "submissions", "reports"],
+      "properties": {
+        "projects": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["projectId", "version"],
+            "properties": {
+              "projectId": {"$ref": "#/$defs/resourceId"},
+              "version": {"type": "integer", "minimum": 1}
+            }
+          }
+        },
+        "runs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["runId", "contextVersion"],
+            "properties": {
+              "runId": {"$ref": "#/$defs/resourceId"},
+              "contextVersion": {"type": "integer", "minimum": 1}
+            }
+          }
+        },
+        "nodes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["nodeRunId", "version"],
+            "properties": {
+              "nodeRunId": {"$ref": "#/$defs/resourceId"},
+              "version": {"type": "integer", "minimum": 1}
+            }
+          }
+        },
+        "submissions": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/submissionReference"}
+        },
+        "reports": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["reportId", "jobId", "status"],
+            "properties": {
+              "reportId": {"$ref": "#/$defs/resourceId"},
+              "jobId": {"$ref": "#/$defs/resourceId"},
+              "status": {"type": "string", "enum": ["pending", "ready", "failed"]}
+            }
+          }
+        }
+      }
+    },
+    "snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["snapshotToken", "sourceVersions"],
+      "properties": {
+        "snapshotToken": {"type": "string", "minLength": 16, "maxLength": 500},
+        "sourceVersions": {"$ref": "#/$defs/sourceVersions"}
+      }
+    },
+    "baseEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "traceId", "toolCallId", "view", "observedAt", "scope", "snapshot", "activeOperations", "data"],
+      "properties": {
+        "schemaVersion": {"const": "1.0.0"},
+        "traceId": {"type": "string", "minLength": 5, "maxLength": 100},
+        "toolCallId": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 200,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "observedAt": {"type": "string", "format": "date-time"},
+        "view": {
+          "type": "string",
+          "enum": ["workspace_overview", "project_overview", "run_context", "submission_result", "run_report", "artifact_evidence"]
+        },
+        "scope": {"type": "object"},
+        "snapshot": {"$ref": "#/$defs/snapshot"},
+        "activeOperations": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {"$ref": "#/$defs/activeOperation"}
+        },
+        "data": {"type": "object"}
+      }
+    },
+    "workspaceScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "maxProperties": 0
+    },
+    "projectScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["projectId"],
+      "properties": {"projectId": {"$ref": "#/$defs/resourceId"}}
+    },
+    "runScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["projectId", "runId"],
+      "properties": {
+        "projectId": {"$ref": "#/$defs/resourceId"},
+        "runId": {"$ref": "#/$defs/resourceId"}
+      }
+    },
+    "submissionScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["projectId", "runId", "submissionId"],
+      "properties": {
+        "projectId": {"$ref": "#/$defs/resourceId"},
+        "runId": {"$ref": "#/$defs/resourceId"},
+        "submissionId": {"$ref": "#/$defs/resourceId"}
+      }
+    },
+    "workspaceData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["projects", "runs", "nextCursor"],
+      "properties": {
+        "projects": {"type": "array", "maxItems": 20, "items": {"$ref": "#/$defs/projectSummary"}},
+        "runs": {"type": "array", "maxItems": 50, "items": {"$ref": "#/$defs/runSummary"}},
+        "nextCursor": {"type": ["string", "null"], "minLength": 16, "maxLength": 500}
+      }
+    },
+    "projectOverviewData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["project", "objective", "runs"],
+      "properties": {
+        "project": {"$ref": "#/$defs/projectSummary"},
+        "objective": {"type": "string", "minLength": 1, "maxLength": 4000},
+        "runs": {"type": "array", "maxItems": 50, "items": {"$ref": "#/$defs/runSummary"}}
+      }
+    },
+    "runContextData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run", "nodes", "nextCursor"],
+      "properties": {
+        "run": {"$ref": "#/$defs/runSummary"},
+        "nodes": {"type": "array", "maxItems": 50, "items": {"$ref": "#/$defs/nodeSummary"}},
+        "nextCursor": {"type": ["string", "null"], "minLength": 16, "maxLength": 500}
+      }
+    },
+    "submissionResultData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "submissionRef",
+        "nodeRunId",
+        "attemptNumber",
+        "evaluationStatus",
+        "decision",
+        "feedback",
+        "teacherDecision",
+        "teacherFeedback",
+        "reviewedAt",
+        "createdAt",
+        "rubricResults",
+        "issues",
+        "modificationChecklist",
+        "acceptanceTargets",
+        "evidenceRefs",
+        "selectionKey",
+        "openTarget"
+      ],
+      "properties": {
+        "submissionRef": {"$ref": "#/$defs/submissionReference"},
+        "nodeRunId": {"$ref": "#/$defs/resourceId"},
+        "attemptNumber": {"type": "integer", "minimum": 1},
+        "evaluationStatus": {"$ref": "#/$defs/submissionState"},
+        "decision": {"type": ["string", "null"], "enum": ["pass", "revision", null]},
+        "feedback": {"type": ["string", "null"], "maxLength": 10000},
+        "teacherDecision": {"type": ["string", "null"], "enum": ["approve", "return", null]},
+        "teacherFeedback": {"type": ["string", "null"], "maxLength": 10000},
+        "reviewedAt": {"type": ["string", "null"], "format": "date-time"},
+        "createdAt": {"type": "string", "format": "date-time"},
+        "rubricResults": {"type": "array", "maxItems": 50, "items": {"$ref": "#/$defs/rubricResult"}},
+        "issues": {"type": "array", "maxItems": 20, "items": {"type": "string", "minLength": 1, "maxLength": 2000}},
+        "modificationChecklist": {"type": "array", "maxItems": 20, "items": {"type": "string", "minLength": 1, "maxLength": 2000}},
+        "acceptanceTargets": {"type": "array", "maxItems": 20, "items": {"type": "string", "minLength": 1, "maxLength": 1000}},
+        "evidenceRefs": {"type": "array", "maxItems": 100, "items": {"$ref": "#/$defs/evidenceReference"}},
+        "selectionKey": {"$ref": "#/$defs/selectionKey"},
+        "openTarget": {"$ref": "cresco-open-target.schema.json"}
+      }
+    },
+    "reportSectionIndex": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sectionKey", "title", "summary", "evidenceReferenceCount"],
+      "properties": {
+        "sectionKey": {"type": "string", "minLength": 1, "maxLength": 100, "pattern": "^[A-Za-z0-9_-]+$"},
+        "title": {"type": "string", "minLength": 1, "maxLength": 200},
+        "summary": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "evidenceReferenceCount": {"type": "integer", "minimum": 0, "maximum": 1000}
+      }
+    },
+    "selectedReportSection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sectionKey", "title", "content", "evidenceRefs"],
+      "properties": {
+        "sectionKey": {"type": "string", "minLength": 1, "maxLength": 100, "pattern": "^[A-Za-z0-9_-]+$"},
+        "title": {"type": "string", "minLength": 1, "maxLength": 200},
+        "content": {"type": "string", "minLength": 1, "maxLength": 12000},
+        "evidenceRefs": {"type": "array", "maxItems": 100, "items": {"$ref": "#/$defs/evidenceReference"}}
+      }
+    },
+    "runReportData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reportId", "runId", "jobId", "status", "sections", "selectedSection", "selectionKey", "openTarget"],
+      "properties": {
+        "reportId": {"$ref": "#/$defs/resourceId"},
+        "runId": {"$ref": "#/$defs/resourceId"},
+        "jobId": {"$ref": "#/$defs/resourceId"},
+        "status": {"type": "string", "enum": ["pending", "ready", "failed"]},
+        "sections": {"type": "array", "maxItems": 50, "items": {"$ref": "#/$defs/reportSectionIndex"}},
+        "selectedSection": {
+          "oneOf": [
+            {"$ref": "#/$defs/selectedReportSection"},
+            {"type": "null"}
+          ]
+        },
+        "selectionKey": {"$ref": "#/$defs/selectionKey"},
+        "openTarget": {"$ref": "cresco-open-target.schema.json"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"status": {"enum": ["pending", "failed"]}}},
+          "then": {
+            "properties": {
+              "sections": {"maxItems": 0},
+              "selectedSection": {"type": "null"}
+            }
+          }
+        }
+      ]
+    },
+    "artifactEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidenceId", "sourceType", "sourceId", "sourceHash", "page", "section", "text"],
+      "properties": {
+        "evidenceId": {"$ref": "#/$defs/resourceId"},
+        "sourceType": {"type": "string", "enum": ["file_block", "frozen_public_url"]},
+        "sourceId": {"$ref": "#/$defs/resourceId"},
+        "sourceHash": {"$ref": "#/$defs/hash"},
+        "page": {"type": ["integer", "null"], "minimum": 1},
+        "section": {"type": ["string", "null"], "maxLength": 500},
+        "text": {"type": "string", "minLength": 1, "maxLength": 1200}
+      }
+    },
+    "artifactEvidenceData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["submissionRef", "evidence"],
+      "properties": {
+        "submissionRef": {"$ref": "#/$defs/submissionReference"},
+        "evidence": {"type": "array", "maxItems": 5, "items": {"$ref": "#/$defs/artifactEvidence"}}
+      }
+    }
+  },
+  "oneOf": [
+    {
+      "allOf": [
+        {"$ref": "#/$defs/baseEnvelope"},
+        {
+          "type": "object",
+          "required": ["view", "scope", "data"],
+          "properties": {
+            "view": {"const": "workspace_overview"},
+            "scope": {"$ref": "#/$defs/workspaceScope"},
+            "data": {"$ref": "#/$defs/workspaceData"}
+          }
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {"$ref": "#/$defs/baseEnvelope"},
+        {
+          "type": "object",
+          "required": ["view", "scope", "data"],
+          "properties": {
+            "view": {"const": "project_overview"},
+            "scope": {"$ref": "#/$defs/projectScope"},
+            "data": {"$ref": "#/$defs/projectOverviewData"}
+          }
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {"$ref": "#/$defs/baseEnvelope"},
+        {
+          "type": "object",
+          "required": ["view", "scope", "data"],
+          "properties": {
+            "view": {"const": "run_context"},
+            "scope": {"$ref": "#/$defs/runScope"},
+            "data": {"$ref": "#/$defs/runContextData"}
+          }
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {"$ref": "#/$defs/baseEnvelope"},
+        {
+          "type": "object",
+          "required": ["view", "scope", "data"],
+          "properties": {
+            "view": {"const": "submission_result"},
+            "scope": {"$ref": "#/$defs/submissionScope"},
+            "data": {"$ref": "#/$defs/submissionResultData"}
+          }
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {"$ref": "#/$defs/baseEnvelope"},
+        {
+          "type": "object",
+          "required": ["view", "scope", "data"],
+          "properties": {
+            "view": {"const": "run_report"},
+            "scope": {"$ref": "#/$defs/runScope"},
+            "data": {"$ref": "#/$defs/runReportData"}
+          }
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {"$ref": "#/$defs/baseEnvelope"},
+        {
+          "type": "object",
+          "required": ["view", "scope", "data"],
+          "properties": {
+            "view": {"const": "artifact_evidence"},
+            "scope": {"$ref": "#/$defs/submissionScope"},
+            "data": {"$ref": "#/$defs/artifactEvidenceData"}
+          }
+        }
+      ]
+    }
+  ]
+}

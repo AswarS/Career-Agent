@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "1.0.0",
+  "traceId": "trace_cresco_internal",
+  "toolCallId": "toolcall_workspace_001",
+  "view": "workspace_overview",
+  "observedAt": "2026-09-02T06:00:00Z",
+  "scope": {},
+  "snapshot": {
+    "snapshotToken": "snapshot_workspace_000001",
+    "sourceVersions": {
+      "projects": [],
+      "runs": [],
+      "nodes": [],
+      "submissions": [],
+      "reports": []
+    }
+  },
+  "activeOperations": [],
+  "data": {"projects": [], "runs": [], "nextCursor": null},
+  "internalPermissionReason": "foreign_run"
+}

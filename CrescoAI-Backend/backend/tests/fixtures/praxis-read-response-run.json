@@ -1,0 +1,109 @@
+{
+  "schemaVersion": "1.0.0",
+  "traceId": "trace_cresco_run",
+  "toolCallId": "toolcall_run_001",
+  "view": "run_context",
+  "observedAt": "2026-09-02T06:00:00Z",
+  "scope": {
+    "projectId": "project_demo001",
+    "runId": "run_demo001"
+  },
+  "snapshot": {
+    "snapshotToken": "snapshot_run_000001",
+    "sourceVersions": {
+      "projects": [{"projectId": "project_demo001", "version": 3}],
+      "runs": [{"runId": "run_demo001", "contextVersion": 12}],
+      "nodes": [{"nodeRunId": "node_demo001", "version": 4}],
+      "submissions": [
+        {
+          "submissionId": "submission_demo002",
+          "version": 1,
+          "contentHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      ],
+      "reports": []
+    }
+  },
+  "activeOperations": [
+    {
+      "jobId": "job_demo002",
+      "kind": "submission_evaluation",
+      "status": "running",
+      "resourceType": "Submission",
+      "resourceId": "submission_demo002",
+      "errorCode": null,
+      "retryable": false,
+      "openTarget": {
+        "targetType": "submission",
+        "projectId": "project_demo001",
+        "runId": "run_demo001",
+        "submissionId": "submission_demo002"
+      }
+    }
+  ],
+  "data": {
+    "run": {
+      "projectId": "project_demo001",
+      "runId": "run_demo001",
+      "contextVersion": 12,
+      "projectTitle": "Reliable Retrieval Practice",
+      "mode": "SELF",
+      "relation": "self_executor",
+      "state": "active",
+      "profileStatus": "locked",
+      "activeNodeId": "node_demo001",
+      "finalAssessment": null,
+      "reportId": null,
+      "allowedActions": ["file.upload"],
+      "selectionKey": "sel_run_demo_000001",
+      "openTarget": {
+        "targetType": "run",
+        "projectId": "project_demo001",
+        "runId": "run_demo001"
+      }
+    },
+    "nodes": [
+      {
+        "id": "node_demo001",
+        "version": 4,
+        "order": 1,
+        "title": "Validate the retrieval cache",
+        "objective": "Demonstrate cache correctness with repeatable evidence.",
+        "state": "evaluating",
+        "attempts": {
+          "initialAttempts": 3,
+          "consumedAttempts": 2,
+          "remainingAttempts": 1,
+          "exhaustionGrantUsed": false,
+          "finalReviewReturnAttemptUsed": false,
+          "activeGrantType": null
+        },
+        "acceptanceTargets": ["Show one repeatable cache hit and one invalidation case."],
+        "latestSubmission": {
+          "submissionId": "submission_demo002",
+          "version": 1,
+          "contentHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "attemptNumber": 2,
+          "evaluationStatus": "running",
+          "createdAt": "2026-09-02T05:55:00Z",
+          "selectionKey": "sel_submission_demo_000002",
+          "openTarget": {
+            "targetType": "submission",
+            "projectId": "project_demo001",
+            "runId": "run_demo001",
+            "submissionId": "submission_demo002"
+          }
+        },
+        "allowedActions": ["file.upload"],
+        "selectionKey": "sel_node_demo_000001",
+        "openTarget": {
+          "targetType": "node",
+          "projectId": "project_demo001",
+          "runId": "run_demo001",
+          "nodeRunId": "node_demo001"
+        }
+      }
+    ],
+    "nextCursor": null
+  }
+}

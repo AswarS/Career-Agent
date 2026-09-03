@@ -7,12 +7,14 @@ import { ProfileRefreshJobEntity } from '../profile/entities/profile-refresh-job
 import { ProfileRefreshController } from './profile-refresh.controller';
 import { ProfileRefreshService } from './profile-refresh.service';
 import { GeneratedAppModule } from '../generated-app/generated-app.module';
+import { PraxisIntegrationModule } from '../integration/praxis-integration.module.js';
 
 @Module({
   imports: [
     SettingsModule,
     ProfileModule,
     GeneratedAppModule,
+    PraxisIntegrationModule,
     TypeOrmModule.forFeature([ProfileRefreshJobEntity]),
   ],
   controllers: [ProfileRefreshController],

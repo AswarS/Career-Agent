@@ -79,6 +79,8 @@ import { ProfileProductProjectionService } from '../profile/profile-product-proj
 import { ProfileProductMutationService } from '../profile/profile-product-mutation.service';
 import { ProfileEvidenceService } from '../profile/profile-evidence.service';
 import { createPraxisTools } from '../integration/praxis.tools.js';
+import { PraxisReadClientService } from '../integration/praxis-read.client.js';
+import { resolvePraxisReadIntegrationConfig } from '../integration/praxis-integration.config.js';
 import {
   decodeProfileProductMemoryValue,
   isListProfileProductCodec,
@@ -584,6 +586,7 @@ export class AgentService {
     @Optional() private readonly githubMcpRuntimeService?: GithubMcpRuntimeService,
     @Optional() private readonly appInteractionSummaryService?: AppInteractionSummaryService,
     @Optional() private readonly appInteractionQueryService?: AppInteractionQueryService,
+    @Optional() private readonly praxisReadClient?: PraxisReadClientService,
   ) {}
 
   /**
@@ -2496,12 +2499,13 @@ export class AgentService {
   }
 
   private getPraxisTools(userId: string, conversationId: string): Tool[] {
+    const readEnabled = resolvePraxisReadIntegrationConfig().enabled
+      && !!this.praxisReadClient;
     return createPraxisTools({
       userId,
       conversationId,
-      // The read client will be supplied after Praxis publishes its endpoint.
-      // Until then praxis_read stays out of the model-visible tool pool.
-      readEnabled: false,
+      readEnabled,
+      readClient: this.praxisReadClient,
     });
   }
 

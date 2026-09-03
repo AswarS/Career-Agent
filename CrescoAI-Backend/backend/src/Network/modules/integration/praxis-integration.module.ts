@@ -14,6 +14,7 @@ import { PraxisSsoService } from './praxis-sso.service';
 import { PraxisOutboxPublisherService } from './praxis-outbox-publisher.service';
 import { PraxisBehaviorEventEntity } from './entities/praxis-behavior-event.entity';
 import { PraxisBehaviorEventService } from './praxis-behavior-event.service';
+import { PraxisReadClientService } from './praxis-read.client.js';
 
 @Module({
   imports: [
@@ -35,7 +36,12 @@ import { PraxisBehaviorEventService } from './praxis-behavior-event.service';
     PraxisSsoService,
     PraxisOutboxPublisherService,
     PraxisBehaviorEventService,
+    PraxisReadClientService,
   ],
-  exports: [PraxisIntegrationService, PraxisSsoService],
+  exports: [
+    PraxisIntegrationService,
+    PraxisSsoService,
+    PraxisReadClientService,
+  ],
 })
 export class PraxisIntegrationModule {}

@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://praxis-agent.local/contracts/integrations/cresco-error-response.schema.json",
+  "title": "Praxis Cresco Integration Error Response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "traceId", "toolCallId", "error"],
+  "properties": {
+    "schemaVersion": {"const": "1.0.0"},
+    "traceId": {"type": "string", "minLength": 5, "maxLength": 100},
+    "toolCallId": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 200,
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message", "retryable"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "REQUEST_INVALID",
+            "TOKEN_INVALID",
+            "TOKEN_EXPIRED",
+            "SCOPE_DENIED",
+            "RESOURCE_NOT_FOUND",
+            "CONTEXT_STALE",
+            "RATE_LIMITED",
+            "SERVICE_UNAVAILABLE",
+            "CONTRACT_VERSION_MISMATCH"
+          ]
+        },
+        "message": {"type": "string", "minLength": 1, "maxLength": 500},
+        "retryable": {"type": "boolean"}
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "code": {"enum": ["RATE_LIMITED", "SERVICE_UNAVAILABLE"]}
+            }
+          },
+          "then": {"properties": {"retryable": {"const": true}}},
+          "else": {"properties": {"retryable": {"const": false}}}
+        },
+        {
+          "if": {"properties": {"code": {"const": "RESOURCE_NOT_FOUND"}}},
+          "then": {
+            "properties": {"message": {"const": "Resource is unavailable."}}
+          }
+        }
+      ]
+    }
+  }
+}

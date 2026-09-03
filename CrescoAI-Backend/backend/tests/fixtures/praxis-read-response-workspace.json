@@ -1,0 +1,60 @@
+{
+  "schemaVersion": "1.0.0",
+  "traceId": "trace_cresco_workspace",
+  "toolCallId": "toolcall_workspace_001",
+  "view": "workspace_overview",
+  "observedAt": "2026-09-02T06:00:00Z",
+  "scope": {},
+  "snapshot": {
+    "snapshotToken": "snapshot_workspace_000001",
+    "sourceVersions": {
+      "projects": [{"projectId": "project_demo001", "version": 3}],
+      "runs": [{"runId": "run_demo001", "contextVersion": 12}],
+      "nodes": [],
+      "submissions": [],
+      "reports": []
+    }
+  },
+  "activeOperations": [],
+  "data": {
+    "projects": [
+      {
+        "id": "project_demo001",
+        "version": 3,
+        "title": "Reliable Retrieval Practice",
+        "mode": "SELF",
+        "relation": "creator",
+        "state": "ready",
+        "allowedActions": ["project.edit_draft", "project.design", "run.create_self", "file.upload"],
+        "selectionKey": "sel_project_demo_000001",
+        "openTarget": {
+          "targetType": "project",
+          "projectId": "project_demo001"
+        }
+      }
+    ],
+    "runs": [
+      {
+        "projectId": "project_demo001",
+        "runId": "run_demo001",
+        "contextVersion": 12,
+        "projectTitle": "Reliable Retrieval Practice",
+        "mode": "SELF",
+        "relation": "self_executor",
+        "state": "active",
+        "profileStatus": "locked",
+        "activeNodeId": "node_demo001",
+        "finalAssessment": null,
+        "reportId": null,
+        "allowedActions": ["file.upload"],
+        "selectionKey": "sel_run_demo_000001",
+        "openTarget": {
+          "targetType": "run",
+          "projectId": "project_demo001",
+          "runId": "run_demo001"
+        }
+      }
+    ],
+    "nextCursor": null
+  }
+}
