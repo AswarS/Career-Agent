@@ -13,6 +13,9 @@ coverage/
 *.swp
 *.swo
 
+data/trajectory-exports/
+data/gateway-monitor/
+
 .claude/
 .idea/
 .vscode/

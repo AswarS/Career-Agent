@@ -1,0 +1,344 @@
+{
+  "skill_id": "tailored_resume_generator",
+  "skill_name": "tailored-resume-generator",
+  "tool_name": "TailoredResumeGenerator",
+  "title": "针对性简历定制",
+  "business_goal": "基于 Profile 或用户真实材料生成基础简历，并在提供目标岗位或职业方向时进一步定向优化，输出可下载和打印的简历。",
+  "invocation_mode": "standalone",
+  "composition": {
+    "required_prior_outputs": [],
+    "optional_prior_outputs": []
+  },
+  "when_to_use": "当用户已经明确了目标职业方向并提供了基础投递材料，需要生成针对该方向的定制化简历草稿时使用。不用于从零探索方向、不用于编造经历、不用于直接执行外部投递动作。",
+  "reference_pattern": "借鉴 learning-plan 的结构，消费上游 artifact（方向探索结果和用户画像），进行语义匹配与内容重组，生成结构化输出，同时严格保持事实边界。",
+  "task_ids": [
+    "p1_task_020"
+  ],
+  "scenario_binding": {
+    "domain_source": "scenario_only",
+    "domain_mode": "open",
+    "explicit_domains": [],
+    "profile_role": "evidence_only"
+  },
+  "scope": {
+    "includes": [
+      "解析基础投递材料",
+      "提取目标方向核心要求",
+      "语义匹配经历与方向要求",
+      "重组简历结构与描述重点",
+      "生成包含事实边界声明的结构化简历草稿"
+    ],
+    "excludes": [
+      "编造或推断用户未提供的项目成果与技能",
+      "探索或重新定义职业方向",
+      "修改上游用户画像或方向探索结果",
+      "执行任何外部系统的投递或发送动作"
+    ]
+  },
+  "input_schema": {
+    "application_materials": {
+      "type": "object",
+      "required": false,
+      "description": "用户准备的投递材料的结构化表示，包括简历、求职信和项目经历描述。",
+      "source": "user_input",
+      "source_ref": null,
+      "available": false,
+      "acquisition": {
+        "mode": "request_user",
+        "provider": null,
+        "fallback": "可改用 resume_draft 或 user_profile；三者都没有可用事实时返回 insufficient_input"
+      }
+    },
+    "resume_draft": {
+      "type": "string",
+      "required": false,
+      "description": "需要优化的现有简历文本；也可仅使用 application_materials 或 user_profile 生成基础简历。",
+      "source": "user_input",
+      "source_ref": null,
+      "available": false,
+      "acquisition": {"mode": "request_user", "provider": null, "fallback": "可改用 application_materials"}
+    },
+    "career_direction_exploration_results": {
+      "type": "object",
+      "required": false,
+      "description": "潜在职业方向的结构化分析或列表，包含典型职责、交付成果、协作模式、进入要求及代表性岗位示例等初步了解信息。",
+      "source": "prior_skill_output",
+      "source_ref": "career_direction_exploration_results",
+      "available": true,
+      "acquisition": {
+        "mode": "prior_skill",
+        "provider": "career-direction-synthesis",
+        "fallback": "可改用 target_opportunity；两者都缺少时生成通用基础简历"
+      }
+    },
+    "target_opportunity": {
+      "type": "object",
+      "required": false,
+      "description": "可选的具体目标岗位职责、要求和关键词；缺少目标输入时生成通用基础简历。",
+      "source": "user_input",
+      "source_ref": null,
+      "available": false,
+      "acquisition": {"mode": "request_user", "provider": null, "fallback": "可改用 career_direction_exploration_results"}
+    },
+    "user_profile": {
+      "type": "object",
+      "required": false,
+      "description": "包含用户的教育背景、工作经历、项目经验、技能、偏好和约束等基础个人与职业信息的语义表示。",
+      "source": "invocation_input",
+      "source_ref": null,
+      "available": true,
+      "acquisition": {
+        "mode": "provided",
+        "provider": null,
+        "fallback": "可改用 application_materials 或 resume_draft；三者都没有可用事实时返回 insufficient_input"
+      }
+    },
+    "format_preferences": {
+      "type": "object",
+      "required": false,
+      "description": "可选语言、篇幅、标题和版式偏好。",
+      "source": "user_input",
+      "source_ref": null,
+      "available": false,
+      "acquisition": {"mode": "request_user", "provider": null, "fallback": "保持原材料语言并使用简洁单栏版式"}
+    }
+  },
+  "output_schema": {
+    "tailored_resume": {
+      "type": "object",
+      "description": "根据目标岗位要求调整重点并突出匹配经历的简历内容，保留事实边界。"
+    }
+  },
+  "output_consumers": [
+    "user_decision"
+  ],
+  "tool_selection": [],
+  "child_tools": [],
+  "harness_tools": [
+    {
+      "tool_name": "PublishTailoredResume",
+      "kind": "artifact_publisher",
+      "purpose": "校验结构化简历，保存 canonical JSON，渲染安全的单栏 HTML 并返回 artifact 引用。",
+      "phase": "after_skill",
+      "trigger": "Skill 以 success 返回 tailored_resume 对象。",
+      "steps": [
+        "校验 tailored_resume schema，并确认每个正文 bullet 都有 source_refs。",
+        "在已认证用户工作区保存 canonical JSON。",
+        "转义所有内容并渲染单栏 HTML 简历。",
+        "验证并索引产物，返回 artifact_ref 和发布状态。"
+      ],
+      "input": {"tailored_resume": {"type": "json", "required": true, "description": "Skill 返回的已验证结构化简历。"}},
+      "output": {
+        "artifact_ref": {"type": "string", "description": "生成简历的不透明产物引用。"},
+        "status": {"type": "string", "description": "产物发布状态。"}
+      },
+      "read_only": false
+    }
+  ],
+  "fresh_data_policy": "none",
+  "action_tool": {
+    "search_hint": "generate a tailored resume draft based on user profile, base materials, and career direction",
+    "preserve_existing": true,
+    "always_load": true,
+    "read_only": false
+  },
+  "operating_model": {
+    "role": "简历生成与定制专家，基于 Profile 或用户材料组织基础简历，并在存在目标要求时进行语义匹配和重组，严格保持事实边界。",
+    "hard_boundaries": [
+      "绝对禁止编造、夸大或推断用户未在 application_materials 或 user_profile 中提供的项目成果或技能。",
+      "不得修改、覆盖或重新生成 career_direction_exploration_results 和 user_profile 的内容。",
+      "不得执行任何外部投递、发送或修改外部系统状态的动作。"
+    ],
+    "workflow": [
+      {
+        "step": 1,
+        "name": "Load and Validate Inputs",
+        "instructions": [
+          "读取 application_materials, career_direction_exploration_results, user_profile。",
+          "确认 application_materials、resume_draft、user_profile 中至少一项包含可用的经历、教育或技能事实。",
+          "判断是否存在 career_direction_exploration_results 或 target_opportunity，以选择基础模式或定向模式。"
+        ],
+        "success_criteria": [
+          "已建立可用事实来源；缺少目标要求时已明确进入基础简历模式。"
+        ]
+      },
+      {
+        "step": 2,
+        "name": "Extract Direction Requirements",
+        "instructions": [
+          "定向模式从 career_direction_exploration_results 或 target_opportunity 提取核心职责、硬性要求和加分项。",
+          "基础模式跳过要求提取，并按事实的重要性、具体性与时间顺序组织内容。"
+        ],
+        "success_criteria": [
+          "定向模式形成结构化要求清单；基础模式明确使用空 match_analysis。"
+        ]
+      },
+      {
+        "step": 3,
+        "name": "Map and Match Evidence",
+        "instructions": [
+          "遍历 application_materials、resume_draft 和 user_profile 中的每一项经历、项目和技能。",
+          "定向模式将事实与要求映射为 matched、partial 或 missing；基础模式跳过该映射。",
+          "识别冲突事实；定向模式同时识别目标要求中完全缺乏证据的项。"
+        ],
+        "success_criteria": [
+          "所有正文候选事实均可溯源，冲突或缺失证据项已隔离，未产生虚构映射。"
+        ]
+      },
+      {
+        "step": 4,
+        "name": "Reconstruct and Tailor Content",
+        "instructions": [
+          "根据映射结果重组简历结构，优先展示 strong_match 经历。",
+          "调整项目描述的侧重点，使用 career_direction_exploration_results 中的行业标准术语对齐描述，但不改变实际工作内容。",
+          "对于 weak_match 经历，强调其可迁移能力。"
+        ],
+        "success_criteria": [
+          "简历草稿结构合理，重点突出，术语与目标方向对齐，且未改变原始事实。"
+        ]
+      },
+      {
+        "step": 5,
+        "name": "Enforce Fact Boundary and Output",
+        "instructions": [
+          "逐项检查生成的简历内容，确保每一个 bullet point 都能在 application_materials 或 user_profile 中找到明确的 source_ref。",
+          "生成包含 candidate、professional_summary、sections、match_analysis、facts_needing_confirmation 和 fact_boundary_declaration 的最终 tailored_resume 对象。",
+          "严格按返回契约生成 tailored_resume 对象；文件渲染和发布由 after-skill Harness Tool 完成。"
+        ],
+        "success_criteria": [
+          "所有输出内容均有原始证据支撑，结构完整且可交给 Harness Tool 发布。"
+        ]
+      }
+    ],
+    "decision_rules": [
+      "经历重组优先级：strong_match 经历优先于 weak_match 经历，weak_match 优先于 no_match 经历。",
+      "术语对齐规则：在描述中使用目标方向的标准术语，但前提是原始材料中存在对应的事实基础，否则保留原始表述。",
+      "缺失处理规则：对于 missing_evidence 项，绝不在简历正文中虚构，必须统一放入 fact_boundary_declaration 中供用户决策。"
+    ],
+    "outcome_rules": {
+      "success": [
+        "成功生成 tailored_resume 对象，所有经历均有原始输入证据支撑，且明确指出了与目标方向的匹配点和缺失项。"
+      ],
+      "insufficient_input": [
+        "application_materials、resume_draft 和 user_profile 均缺少足以形成正文条目的事实。",
+        "现有输入无法解析出任何教育、经历、项目或技能事实。"
+      ],
+      "error": [
+        "输入结构严重损坏导致无法解析。",
+        "输入无法解析，或无法在事实边界内形成任何简历正文。"
+      ]
+    },
+    "artifact_contract": {
+      "mode": "write_file",
+      "artifact_type": "TailoredResume",
+      "file_name_pattern": "tailored-resume.html",
+      "format": "html",
+      "delivery": "user_download",
+      "producer": "harness_tool",
+      "verification_steps": [
+        "Validate the structured tailored_resume before publication.",
+        "Verify every resume bullet in sections has a corresponding source_ref in application_materials, resume_draft, or user_profile.",
+        "Verify no hallucinated skills or achievements are present in the resume sections.",
+        "Render escaped single-column HTML and return a verified artifact reference."
+      ]
+    },
+    "final_checks": [
+      "确认 tailored_resume 中的每一个经历描述都能在原始输入中找到原文或合理推导，未改变事实。",
+      "确认没有包含任何外部搜索到的未经用户确认的经历。",
+      "确认返回对象包含 candidate、professional_summary、sections、match_analysis、facts_needing_confirmation 和 fact_boundary_declaration。",
+      "确认返回结构可由 PublishTailoredResume 校验，随后调用 ReturnSkillResult。"
+    ]
+  },
+  "complexity": {
+    "level": "bounded",
+    "estimated_steps": 5,
+    "rationale": "涉及多源信息（画像、基础材料、方向要求）的语义对齐、内容重组和严格的事实边界控制，超越了简单的文本格式化，但范围明确，不需要拆分为多个 Skill。"
+  },
+  "independence": {
+    "portable": true,
+    "assumptions": [
+      "仅依赖输入契约和外部模型 API。",
+      "上游 artifact 结构符合场景声明的 schema。"
+    ]
+  },
+  "evaluation_cases": [
+    {
+      "id": "success_complete_input",
+      "user_query": "我刚才探索了数据分析方向，了解了他们的要求，请结合我的背景和现有的简历草稿，帮我写一份针对这个方向的定制简历。",
+      "available_context": {
+        "application_materials": "包含基础简历和两个课程项目经历",
+        "career_direction_exploration_results": "包含数据分析方向的典型职责、SQL/Python要求、业务分析能力要求",
+        "user_profile": "包含计算机硕士背景、Python/PyTorch实验经历"
+      },
+      "expected_outcome": "success",
+      "must_include": [
+        "sections 中突出了 Python 数据处理和分析相关的经历",
+        "fact_boundary_declaration 中指出了缺乏真实业务指标或生产环境 SQL 经验的缺失项"
+      ],
+      "must_not_include": [
+        "在简历正文中编造用户未做过的商业数据分析项目",
+        "修改 user_profile 中的教育背景"
+      ]
+    },
+    {
+      "id": "insufficient_missing_materials",
+      "user_query": "根据我总结的产品经理岗位要求，帮我调整一下简历。",
+      "available_context": {
+        "application_materials": null,
+        "career_direction_exploration_results": "包含产品经理方向要求",
+        "user_profile": "包含用户背景"
+      },
+      "expected_outcome": "insufficient_input",
+      "must_include": [
+        "明确指出缺少基础投递材料 application_materials，无法进行经历重组"
+      ],
+      "must_not_include": [
+        "凭空生成一份简历",
+        "要求用户重新进行方向探索"
+      ]
+    },
+    {
+      "id": "boundary_no_hallucination",
+      "user_query": "目标方向要求精通 Kubernetes，但我材料里只有了解 Docker，帮我写简历。",
+      "available_context": {
+        "application_materials": "包含了解 Docker 的项目经历",
+        "career_direction_exploration_results": "明确要求精通 Kubernetes",
+        "user_profile": "包含相关背景"
+      },
+      "expected_outcome": "success",
+      "must_include": [
+        "sections 中如实描述 Docker 经历，不升级为 Kubernetes",
+        "fact_boundary_declaration 中明确列出 Kubernetes 为 missing_evidence"
+      ],
+      "must_not_include": [
+        "在简历中写出精通 Kubernetes",
+        "将 Docker 经历夸大为 Kubernetes 集群管理经验"
+      ]
+    }
+  ],
+  "relation_contract": {
+    "relation_id": "sample_relation_020",
+    "relation_signature": "obj_application_materials_a7ffdc5a+obj_career_direction_exploration_results_33aeb77c+obj_user_profile_a68fe1bb->obj_tailored_resume_4f0d5521",
+    "input_object_ids": [
+      "obj_application_materials_a7ffdc5a",
+      "obj_career_direction_exploration_results_33aeb77c",
+      "obj_user_profile_a68fe1bb"
+    ],
+    "output_object_id": "obj_tailored_resume_4f0d5521",
+    "k": 3,
+    "label": "t([obj_application_materials_a7ffdc5a,obj_career_direction_exploration_results_33aeb77c,obj_user_profile_a68fe1bb],obj_tailored_resume_4f0d5521)",
+    "context_contract": {
+      "mode": "fused_scenario",
+      "profile_ids": [
+        "profile_ui_001"
+      ],
+      "scenario_ids": [
+        "scenario_fused"
+      ],
+      "binding_ids": [
+        "binding_001"
+      ],
+      "integration_reason": "all sampled objects share a compatible context scope"
+    }
+  }
+}

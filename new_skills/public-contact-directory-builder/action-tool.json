@@ -1,0 +1,24 @@
+{
+  "tool_name": "PublicContactDirectoryBuilder",
+  "user_facing_name": "公开联系人目录整理",
+  "search_hint": "extract target organization from draft and search public alumni or referral channels",
+  "preserve_existing": true,
+  "always_load": true,
+  "read_only": false,
+  "child_tools": [
+    "WebSearch",
+    "WebFetch"
+  ],
+  "input": {
+    "draft_message": {
+      "type": "string",
+      "required": true,
+      "description": "基于用户画像、联系人关系和沟通目的生成的自然、克制的联系消息文本，包含真实来意和双方关系说明。"
+    },
+    "follow_up_preferences": {
+      "type": "json",
+      "required": true,
+      "description": "用户对于求职申请跟进策略的个性化约束与期望，包括可接受的跟进频率、偏好的沟通方式以及不同状态下的优先级判定规则。"
+    }
+  }
+}

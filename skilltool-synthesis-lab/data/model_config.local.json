@@ -1,0 +1,8 @@
+{
+  "base_url": "https://llmapi.paratera.com",
+  "model": "DeepSeek-V4-Flash",
+  "api_key": "sk-ujNqgFXifzPGHrPvSqtkzA",
+  "temperature": 0.2,
+  "max_tokens": 48000,
+  "timeout_seconds": 300
+}

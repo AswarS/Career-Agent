@@ -1,0 +1,24 @@
+{
+  "purpose": "Deterministic tools executed by the Harness around the Skill action; these are not child_tools.",
+  "tools": [
+    {
+      "tool_name": "PublishTailoredResume",
+      "kind": "artifact_publisher",
+      "purpose": "Validate structured resume content, persist canonical JSON, render a safe single-column HTML resume, and return its artifact reference.",
+      "phase": "after_skill",
+      "trigger": "The tailored-resume-generator Skill returns outcome success with a tailored_resume object.",
+      "steps": [
+        "Validate the returned tailored_resume schema and require source_refs on every resume bullet.",
+        "Persist canonical JSON in the authenticated action artifact workspace.",
+        "Render an escaped single-column HTML resume without audit-only notes in the resume body.",
+        "Verify and index the artifact, then return artifact_ref and publication status."
+      ],
+      "input": {"tailored_resume": {"type": "json", "required": true, "description": "Validated structured resume content returned by the Skill."}},
+      "output": {
+        "artifact_ref": {"type": "string", "description": "Opaque artifact reference for the generated resume."},
+        "status": {"type": "string", "description": "Artifact publication status."}
+      },
+      "read_only": false
+    }
+  ]
+}

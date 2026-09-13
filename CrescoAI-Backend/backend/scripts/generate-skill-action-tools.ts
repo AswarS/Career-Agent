@@ -1,4 +1,4 @@
-import { readFile, readdir, mkdir, writeFile } from 'node:fs/promises'
+import { readFile, readdir, mkdir, rm, writeFile } from 'node:fs/promises'
 import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { z } from 'zod/v4'
@@ -275,6 +275,7 @@ export const ${spec.exportName} = buildTool({
   maxResultSizeChars: 100_000,
   strict: true,
   alwaysLoad: ${spec.alwaysLoad},
+  shouldDefer: ${!spec.alwaysLoad},
   async description() {
     return (await getSkillActionCommand(SKILL_NAME)).description
   },
@@ -465,6 +466,25 @@ export async function writeSkillActionToolPlan(
   )
 }
 
+export async function pruneStaleGeneratedSkillActionTools(
+  plan: SkillActionToolPlan,
+  toolsDir: string,
+): Promise<string[]> {
+  const activeOutputs = new Set(plan.entries.map(entry => resolve(entry.outputFile)))
+  const pruned: string[] = []
+  const entries = await readdir(toolsDir, { withFileTypes: true })
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !entry.name.endsWith('Tool')) continue
+    const candidateFile = join(toolsDir, entry.name, `${entry.name}.ts`)
+    if (activeOutputs.has(resolve(candidateFile))) continue
+    const source = await readExistingSource(candidateFile)
+    if (source === null || !source.startsWith(GENERATED_FILE_MARKER)) continue
+    await rm(join(toolsDir, entry.name), { recursive: true, force: true })
+    pruned.push(entry.name)
+  }
+  return pruned.sort()
+}
+
 function readFlagValue(args: string[], flag: string): string | undefined {
   const index = args.indexOf(flag)
   return index === -1 ? undefined : args[index + 1]
@@ -481,7 +501,13 @@ async function main(): Promise<void> {
   }
   const plan = await buildSkillActionToolPlan(options)
   const write = args.includes('--write')
-  if (write) await writeSkillActionToolPlan(plan)
+  let pruned: string[] = []
+  if (write) {
+    await writeSkillActionToolPlan(plan)
+    if (args.includes('--prune')) {
+      pruned = await pruneStaleGeneratedSkillActionTools(plan, options.toolsDir)
+    }
+  }
 
   process.stdout.write(
     `${JSON.stringify(
@@ -489,6 +515,7 @@ async function main(): Promise<void> {
         mode: write ? 'write' : 'plan',
         registry_file: plan.registryFile,
         names_registry_file: plan.namesRegistryFile,
+        pruned,
         tools: plan.entries.map(entry => ({
           skill_name: entry.skillName,
           tool_name: entry.toolName,

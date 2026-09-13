@@ -1,0 +1,26 @@
+{
+  "tool_name": "CareerValidationActionPlan",
+  "user_facing_name": "求职验证与行动计划制定",
+  "search_hint": "generate a prioritized job search validation and action plan from gap analysis and target lists",
+  "preserve_existing": true,
+  "always_load": true,
+  "read_only": false,
+  "child_tools": [],
+  "input": {
+    "gap_analysis_report": {
+      "type": "json",
+      "required": true,
+      "description": "结构化评估目标岗位要求与提供的投递材料之间的契合度，识别缺失元素并建议具体改进。"
+    },
+    "opportunity_list": {
+      "type": "json",
+      "required": true,
+      "description": "目标职位列表，包括职位名称、所属组织、工作职责和任职要求。"
+    },
+    "target_organizations": {
+      "type": "json",
+      "required": true,
+      "description": "用户需要寻找公开联系人或内推途径的特定公司或组织列表。"
+    }
+  }
+}

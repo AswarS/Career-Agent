@@ -64,9 +64,9 @@ export type { WebSearchProgress } from '../../types/tools.js'
 import type { WebSearchProgress } from '../../types/tools.js'
 
 const ANYSEARCH_ENDPOINT = 'https://api.anysearch.com/v1/search'
-const DEFAULT_MAX_RESULTS = 10
+const DEFAULT_MAX_RESULTS = 5
 const DEFAULT_TIMEOUT_MS = 30_000
-const DEFAULT_CONTENT_MAX_CHARS = 4_000
+const DEFAULT_CONTENT_MAX_CHARS = 800
 
 const anySearchResponseSchema = z.object({
   code: z.number(),
@@ -204,7 +204,7 @@ function formatHitsForModel(hits: AnySearchHit[]): string {
 export const WebSearchTool = buildTool({
   name: WEB_SEARCH_TOOL_NAME,
   searchHint: 'search the web for current information',
-  maxResultSizeChars: 100_000,
+  maxResultSizeChars: 12_000,
   // Third-party model gateways such as GLM/DeepSeek may return a
   // tool_reference without expanding the referenced schema on the next turn.
   // Keep WebSearch available from turn one so it never depends on ToolSearch.

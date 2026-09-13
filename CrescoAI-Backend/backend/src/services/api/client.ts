@@ -126,6 +126,8 @@ export async function getAnthropicClient({
             apiKey: resolvedApiKey,
             baseUrl: resolvedBaseUrl,
             fetchImpl: fetchOverride ?? globalThis.fetch,
+            sessionId: sessionCtx.sessionId,
+            userId: sessionCtx.userId,
           })
         : fetchOverride
     console.log(`[API Client] session mode: apiKey=${resolvedApiKey ? 'SET' : 'NONE'}, baseURL=${resolvedBaseUrl ?? 'NONE'}, sessionApiKey=${sessionCtx.config.apiKey ? 'SET' : 'NONE'}, sessionBaseUrl=${sessionCtx.config.baseUrl ?? 'NONE'}`)

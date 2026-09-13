@@ -1,0 +1,26 @@
+{
+  "tool_name": "DraftNetworkingMessage",
+  "user_facing_name": "起草职业联系消息草稿",
+  "search_hint": "draft a professional networking or referral inquiry message based on job list and context",
+  "preserve_existing": true,
+  "always_load": true,
+  "read_only": false,
+  "child_tools": [],
+  "input": {
+    "additional_context": {
+      "type": "string",
+      "required": true,
+      "description": "关于目标岗位所在企业、行业特点或特定业务线的补充说明，用于辅助理解岗位上下文。"
+    },
+    "conversation_context": {
+      "type": "string",
+      "required": true,
+      "description": "用户希望在此次联系中提及的具体背景或核心目的，如咨询行业情况、了解特定岗位或请求内推。"
+    },
+    "verified_opportunity_list": {
+      "type": "json",
+      "required": true,
+      "description": "从公开来源检索的真实职位发布集合，包含职位名称、组织、地点、发布日期和来源链接。"
+    }
+  }
+}

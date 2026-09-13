@@ -1,0 +1,21 @@
+{
+  "tool_name": "AlumniNetworkValidationPlan",
+  "user_facing_name": "校友网络职业验证行动计划",
+  "search_hint": "plan alumni network career validation actions based on resume preferences and education",
+  "preserve_existing": true,
+  "always_load": true,
+  "read_only": false,
+  "child_tools": [],
+  "input": {
+    "resume_format_preferences": {
+      "type": "json",
+      "required": true,
+      "description": "用户对简历的语言、篇幅、排版格式等个性化要求。"
+    },
+    "user_educational_institutions": {
+      "type": "string",
+      "required": true,
+      "description": "用户就读的学校或大学，用于筛选和识别相关的校友网络。"
+    }
+  }
+}

@@ -1,0 +1,1206 @@
+{
+  "schema_version": "1.0",
+  "analyzed_at": "2026-09-13T11:39:50.401Z",
+  "user_id": 1,
+  "conversation_id": null,
+  "notes": {
+    "exact_usage": "Provider-reported usage. processed_input = input + cache_creation + cache_read.",
+    "payload_estimate": "CJK ~= 1 token/character; other text ~= 1 token/4 characters. Used only to locate content hotspots."
+  },
+  "totals": {
+    "api_calls": 267,
+    "input": 14714036,
+    "cacheCreation": 0,
+    "cacheRead": 0,
+    "output": 141981,
+    "processedInput": 14714036,
+    "total": 14856017
+  },
+  "trajectory_distribution": {
+    "count": 13,
+    "sum": 14856017,
+    "min": 54076,
+    "mean": 1142771,
+    "p25": 118328,
+    "p50": 287816,
+    "p75": 733936,
+    "p90": 1171408,
+    "p95": 1594460,
+    "max": 9810532
+  },
+  "api_call_distribution": {
+    "count": 267,
+    "sum": 14856017,
+    "min": 7687,
+    "mean": 55641,
+    "p25": 20679,
+    "p50": 46228,
+    "p75": 81030,
+    "p90": 133606,
+    "p95": 136475,
+    "max": 160557
+  },
+  "trajectory_histogram": [
+    {
+      "bucket": "<10k",
+      "count": 0
+    },
+    {
+      "bucket": "10k-50k",
+      "count": 0
+    },
+    {
+      "bucket": "50k-100k",
+      "count": 3
+    },
+    {
+      "bucket": "100k-250k",
+      "count": 3
+    },
+    {
+      "bucket": "250k-1m",
+      "count": 4
+    },
+    {
+      "bucket": ">=1m",
+      "count": 3
+    }
+  ],
+  "top_trajectories": [
+    {
+      "conversationId": "d127a522-10eb-4fea-9b22-534fa0a1d080",
+      "title": "你好",
+      "apiCalls": 143,
+      "payloadEstimatedTokens": 322749,
+      "payloadByCategory": {
+        "user_text": 1210,
+        "assistant_thinking": 77915,
+        "assistant_text": 8420,
+        "internal_meta": 151841,
+        "tool_input:Read": 1592,
+        "tool_result:Read": 15247,
+        "tool_input:Edit": 3130,
+        "tool_result:Edit": 703,
+        "tool_input:Write": 8687,
+        "tool_result:Write": 445,
+        "tool_input:Bash": 451,
+        "tool_result:Bash": 177,
+        "tool_input:profile_read": 34,
+        "tool_result:profile_read": 3249,
+        "tool_input:profile_update": 1498,
+        "tool_result:profile_update": 437,
+        "tool_input:CareerCompetencyModel": 29,
+        "tool_result:CareerCompetencyModel": 386,
+        "tool_input:WebSearch": 441,
+        "tool_result:WebSearch": 21144,
+        "tool_input:FindRealOpportunities": 4757,
+        "tool_result:FindRealOpportunities": 7057,
+        "tool_input:RankOpportunitiesToPursue": 3601,
+        "tool_result:RankOpportunitiesToPursue": 6543,
+        "tool_input:ToolSearch": 11,
+        "tool_result:ToolSearch": 13,
+        "tool_input:WebFetch": 354,
+        "tool_result:WebFetch": 119,
+        "tool_input:ExtractApplicationRequirements": 924,
+        "tool_result:ExtractApplicationRequirements": 2226,
+        "tool_input:Glob": 38,
+        "tool_result:Glob": 70
+      },
+      "input": 9742648,
+      "cacheCreation": 0,
+      "cacheRead": 0,
+      "output": 67884,
+      "processedInput": 9742648,
+      "total": 9810532
+    },
+    {
+      "conversationId": "4681b6dd-b505-42bd-bec9-7cf07d876e2a",
+      "title": "看眼我能做的杭州岗位",
+      "apiCalls": 24,
+      "payloadEstimatedTokens": 57473,
+      "payloadByCategory": {
+        "user_text": 62,
+        "assistant_thinking": 21768,
+        "assistant_text": 2151,
+        "internal_meta": 286,
+        "tool_input:Read": 128,
+        "tool_result:Read": 4351,
+        "tool_input:Write": 1651,
+        "tool_result:Write": 96,
+        "tool_input:profile_read": 5,
+        "tool_result:profile_read": 1375,
+        "tool_input:TodoWrite": 846,
+        "tool_input:WebSearch": 140,
+        "tool_input:BuildBaseResumeBank": 646,
+        "tool_result:TodoWrite": 331,
+        "tool_result:WebSearch": 5709,
+        "tool_result:BuildBaseResumeBank": 1977,
+        "tool_input:WebFetch": 116,
+        "tool_result:WebFetch": 41,
+        "tool_input:CompareProfileWithRequirements": 740,
+        "tool_result:CompareProfileWithRequirements": 3086,
+        "tool_input:ApplicationFocusBrief": 4595,
+        "tool_result:ApplicationFocusBrief": 2507,
+        "tool_input:TailorResumeForOpportunity": 2154,
+        "tool_result:TailorResumeForOpportunity": 1121,
+        "tool_input:BaselineAssessment": 76,
+        "tool_result:BaselineAssessment": 290,
+        "tool_input:AskUserQuestion": 590,
+        "tool_result:AskUserQuestion": 210,
+        "tool_input:CareerCompetencyModel": 51,
+        "tool_result:CareerCompetencyModel": 374
+      },
+      "input": 1561591,
+      "cacheCreation": 0,
+      "cacheRead": 0,
+      "output": 32869,
+      "processedInput": 1561591,
+      "total": 1594460
+    },
+    {
+      "conversationId": "44db3df3-6a0f-4968-9e15-14b937affc33",
+      "title": "SkillTool 生命周期验收",
+      "apiCalls": 24,
+      "payloadEstimatedTokens": 16381,
+      "payloadByCategory": {
+        "user_text": 122,
+        "assistant_text": 1163,
+        "tool_input:ToolSearch": 15,
+        "tool_result:ToolSearch": 18,
+        "tool_input:CheckMaterialFormatCompliance": 82,
+        "tool_result:CheckMaterialFormatCompliance": 578,
+        "internal_meta": 286,
+        "tool_input:Read": 235,
+        "tool_result:Read": 1446,
+        "tool_input:Edit": 2004,
+        "tool_result:Edit": 371,
+        "tool_input:Write": 345,
+        "tool_result:Write": 48,
+        "assistant_thinking": 3340,
+        "tool_input:profile_read": 38,
+        "tool_result:profile_read": 1384,
+        "tool_input:WebSearch": 27,
+        "tool_result:WebSearch": 1514,
+        "tool_input:UnderstandRealWorkProfile": 567,
+        "tool_result:UnderstandRealWorkProfile": 2798
+      },
+      "input": 1163735,
+      "cacheCreation": 0,
+      "cacheRead": 0,
+      "output": 7673,
+      "processedInput": 1163735,
+      "total": 1171408
+    },
+    {
+      "conversationId": "c2c40602-50f8-4c5c-ad65-46ac57301b62",
+      "title": null,
+      "apiCalls": 27,
+      "payloadEstimatedTokens": 8469,
+      "payloadByCategory": {
+        "user_text": 14,
+        "assistant_thinking": 4663,
+        "assistant_text": 835,
+        "tool_input:Bash": 626,
+        "tool_result:Bash": 387,
+        "tool_input:profile_read": 5,
+        "tool_result:profile_read": 9,
+        "tool_input:profile_update": 45,
+        "tool_result:profile_update": 9,
+        "internal_meta": 143,
+        "tool_input:Read": 315,
+        "tool_result:Read": 476,
+        "tool_input:Edit": 448,
+        "tool_result:Edit": 48,
+        "tool_input:Grep": 18,
+        "tool_input:Glob": 72,
+        "tool_result:Grep": 38,
+        "tool_result:Glob": 170,
+        "tool_input:AskUserQuestion": 139,
+        "tool_result:AskUserQuestion": 9
+      },
+      "input": 726120,
+      "cacheCreation": 0,
+      "cacheRead": 0,
+      "output": 7816,
+      "processedInput": 726120,
+      "total": 733936
+    },
+    {
+      "conversationId": "7e14d610-f36c-4074-a365-56606070cd22",
+      "title": "帮我根据画像生成一份简历",
+      "apiCalls": 7,
+      "payloadEstimatedTokens": 7122,
+      "payloadByCategory": {
+        "user_text": 12,
+        "assistant_thinking": 3051,
+        "assistant_text": 767,
+        "tool_input:profile_read": 60,
+        "tool_result:profile_read": 1384,
+        "tool_input:TailoredResumeGenerator": 598,
+        "tool_result:TailoredResumeGenerator": 236,
+        "internal_meta": 143,
+        "tool_input:Read": 46,
+        "tool_result:Read": 188,
+        "tool_input:Write": 589,
+        "tool_result:Write": 48
+      },
+      "input": 313708,
+      "cacheCreation": 0,
+      "cacheRead": 0,
+      "output": 4757,
+      "processedInput": 313708,
+      "total": 318465
+    },
+    {
+      "conversationId": "1bcfe720-9faa-4d14-a0b5-35421d4ad534",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "apiCalls": 10,
+      "payloadEstimatedTokens": 9097,
+      "payloadByCategory": {
+        "user_text": 16,
+        "assistant_thinking": 3337,
+        "assistant_text": 932,
+        "tool_input:ToolSearch": 32,
+        "tool_input:profile_read": 82,
+        "tool_result:ToolSearch": 40,
+        "tool_result:profile_read": 162,
+        "tool_input:FindReferralEntryPoints": 280,
+        "tool_result:FindReferralEntryPoints": 2085,
+        "internal_meta": 143,
+        "tool_input:Read": 46,
+        "tool_result:Read": 188,
+        "tool_input:Write": 742,
+        "tool_result:Write": 37,
+        "tool_input:Edit": 866,
+        "tool_result:Edit": 109
+      },
+      "input": 289767,
+      "cacheCreation": 0,
+      "cacheRead": 0,
+      "output": 6037,
+      "processedInput": 289767,
+      "total": 295804
+    },
+    {
+      "conversationId": "091e6225-288f-4d70-b570-346078c0af63",
+      "title": "SkillTool 完整链路复测",
+      "apiCalls": 6,
+      "payloadEstimatedTokens": 3683,
+      "payloadByCategory": {
+        "user_text": 93,
+        "assistant_thinking": 1376,
+        "assistant_text": 342,
+        "tool_input:ToolSearch": 15,
+        "tool_result:ToolSearch": 17,
+        "tool_input:ExploreCareerDirections": 57,
+        "tool_result:ExploreCareerDirections": 986,
+        "internal_meta": 143,
+        "tool_input:Read": 46,
+        "tool_result:Read": 188,
+        "tool_input:Edit": 372,
+        "tool_result:Edit": 48
+      },
+      "input": 285648,
+      "cacheCreation": 0,
+      "cacheRead": 0,
+      "output": 2168,
+      "processedInput": 285648,
+      "total": 287816
+    },
+    {
+      "conversationId": "598433e9-119a-4f4f-b016-d67310844e0a",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "apiCalls": 4,
+      "payloadEstimatedTokens": 25294,
+      "payloadByCategory": {
+        "user_text": 16,
+        "assistant_thinking": 6246,
+        "tool_input:profile_read": 40,
+        "tool_input:WebSearch": 227,
+        "tool_result:profile_read": 9,
+        "tool_result:WebSearch": 13448,
+        "assistant_text": 163,
+        "tool_input:WebFetch": 91,
+        "tool_result:WebFetch": 39,
+        "tool_input:FindReferralEntryPoints": 1054,
+        "tool_result:FindReferralEntryPoints": 3961
+      },
+      "input": 200818,
+      "cacheCreation": 0,
+      "cacheRead": 0,
+      "output": 7151,
+      "processedInput": 200818,
+      "total": 207969
+    },
+    {
+      "conversationId": "2b037bd3-316b-41ea-9a42-93c29f55dbed",
+      "title": null,
+      "apiCalls": 7,
+      "payloadEstimatedTokens": 1902,
+      "payloadByCategory": {
+        "user_text": 30,
+        "assistant_thinking": 652,
+        "assistant_text": 315,
+        "tool_input:profile_read": 5,
+        "tool_input:Read": 126,
+        "tool_result:profile_read": 9,
+        "tool_result:Read": 266,
+        "tool_input:Glob": 32,
+        "tool_result:Glob": 18,
+        "internal_meta": 143,
+        "tool_input:Write": 258,
+        "tool_result:Write": 48
+      },
+      "input": 138102,
+      "cacheCreation": 0,
+      "cacheRead": 0,
+      "output": 1591,
+      "processedInput": 138102,
+      "total": 139693
+    },
+    {
+      "conversationId": "06396e5a-3c80-4539-80e7-62dbae927ef7",
+      "title": null,
+      "apiCalls": 6,
+      "payloadEstimatedTokens": 2731,
+      "payloadByCategory": {
+        "user_text": 17,
+        "assistant_thinking": 817,
+        "assistant_text": 269,
+        "tool_input:profile_update": 128,
+        "tool_result:profile_update": 71,
+        "internal_meta": 143,
+        "tool_input:Read": 46,
+        "tool_result:Read": 188,
+        "tool_input:Glob": 36,
+        "tool_input:profile_read": 5,
+        "tool_result:Glob": 38,
+        "tool_result:profile_read": 417,
+        "tool_input:Write": 436,
+        "tool_result:Write": 120
+      },
+      "input": 116324,
+      "cacheCreation": 0,
+      "cacheRead": 0,
+      "output": 2004,
+      "processedInput": 116324,
+      "total": 118328
+    },
+    {
+      "conversationId": "c0d2efd7-f5d5-459c-ac51-a2b4d3ba745e",
+      "title": "GLM SkillTool 生命周期验收",
+      "apiCalls": 7,
+      "payloadEstimatedTokens": 5713,
+      "payloadByCategory": {
+        "user_text": 97,
+        "assistant_thinking": 3648,
+        "tool_input:CheckMaterialFormatCompliance": 82,
+        "tool_result:CheckMaterialFormatCompliance": 449,
+        "assistant_text": 182,
+        "internal_meta": 143,
+        "tool_input:Read": 46,
+        "tool_result:Read": 188,
+        "tool_input:Write": 686,
+        "tool_result:Write": 61,
+        "tool_input:Edit": 83,
+        "tool_result:Edit": 48
+      },
+      "input": 67760,
+      "cacheCreation": 0,
+      "cacheRead": 0,
+      "output": 1663,
+      "processedInput": 67760,
+      "total": 69423
+    },
+    {
+      "conversationId": "60d7dada-cd0f-4561-b92e-a55904bdebf2",
+      "title": "Deferred SkillTool 实机测试",
+      "apiCalls": 1,
+      "payloadEstimatedTokens": 367,
+      "payloadByCategory": {
+        "user_text": 93,
+        "assistant_thinking": 168,
+        "tool_input:ToolSearch": 15,
+        "tool_result:ToolSearch": 17,
+        "assistant_text": 74
+      },
+      "input": 53903,
+      "cacheCreation": 0,
+      "cacheRead": 0,
+      "output": 204,
+      "processedInput": 53903,
+      "total": 54107
+    },
+    {
+      "conversationId": "77afce7d-1a8c-47ca-991d-570d6e09e10d",
+      "title": "Synthesis SkillTool 实机测试",
+      "apiCalls": 1,
+      "payloadEstimatedTokens": 213,
+      "payloadByCategory": {
+        "user_text": 98,
+        "assistant_thinking": 58,
+        "tool_input:ExploreCareerDirections": 57
+      },
+      "input": 53912,
+      "cacheCreation": 0,
+      "cacheRead": 0,
+      "output": 164,
+      "processedInput": 53912,
+      "total": 54076
+    }
+  ],
+  "payload_categories": [
+    {
+      "category": "internal_meta",
+      "estimatedTokens": 153414
+    },
+    {
+      "category": "assistant_thinking",
+      "estimatedTokens": 127039
+    },
+    {
+      "category": "tool_result:WebSearch",
+      "estimatedTokens": 41815
+    },
+    {
+      "category": "tool_result:Read",
+      "estimatedTokens": 22726
+    },
+    {
+      "category": "assistant_text",
+      "estimatedTokens": 15613
+    },
+    {
+      "category": "tool_input:Write",
+      "estimatedTokens": 13394
+    },
+    {
+      "category": "tool_result:profile_read",
+      "estimatedTokens": 7998
+    },
+    {
+      "category": "tool_result:FindRealOpportunities",
+      "estimatedTokens": 7057
+    },
+    {
+      "category": "tool_input:Edit",
+      "estimatedTokens": 6903
+    },
+    {
+      "category": "tool_result:RankOpportunitiesToPursue",
+      "estimatedTokens": 6543
+    },
+    {
+      "category": "tool_result:FindReferralEntryPoints",
+      "estimatedTokens": 6046
+    },
+    {
+      "category": "tool_input:FindRealOpportunities",
+      "estimatedTokens": 4757
+    },
+    {
+      "category": "tool_input:ApplicationFocusBrief",
+      "estimatedTokens": 4595
+    },
+    {
+      "category": "tool_input:RankOpportunitiesToPursue",
+      "estimatedTokens": 3601
+    },
+    {
+      "category": "tool_result:CompareProfileWithRequirements",
+      "estimatedTokens": 3086
+    },
+    {
+      "category": "tool_result:UnderstandRealWorkProfile",
+      "estimatedTokens": 2798
+    },
+    {
+      "category": "tool_input:Read",
+      "estimatedTokens": 2626
+    },
+    {
+      "category": "tool_result:ApplicationFocusBrief",
+      "estimatedTokens": 2507
+    },
+    {
+      "category": "tool_result:ExtractApplicationRequirements",
+      "estimatedTokens": 2226
+    },
+    {
+      "category": "tool_input:TailorResumeForOpportunity",
+      "estimatedTokens": 2154
+    },
+    {
+      "category": "tool_result:BuildBaseResumeBank",
+      "estimatedTokens": 1977
+    },
+    {
+      "category": "user_text",
+      "estimatedTokens": 1880
+    },
+    {
+      "category": "tool_input:profile_update",
+      "estimatedTokens": 1671
+    },
+    {
+      "category": "tool_input:FindReferralEntryPoints",
+      "estimatedTokens": 1334
+    },
+    {
+      "category": "tool_result:Edit",
+      "estimatedTokens": 1327
+    },
+    {
+      "category": "tool_result:TailorResumeForOpportunity",
+      "estimatedTokens": 1121
+    },
+    {
+      "category": "tool_input:Bash",
+      "estimatedTokens": 1077
+    },
+    {
+      "category": "tool_result:CheckMaterialFormatCompliance",
+      "estimatedTokens": 1027
+    },
+    {
+      "category": "tool_result:ExploreCareerDirections",
+      "estimatedTokens": 986
+    },
+    {
+      "category": "tool_input:ExtractApplicationRequirements",
+      "estimatedTokens": 924
+    },
+    {
+      "category": "tool_result:Write",
+      "estimatedTokens": 903
+    },
+    {
+      "category": "tool_input:TodoWrite",
+      "estimatedTokens": 846
+    },
+    {
+      "category": "tool_input:WebSearch",
+      "estimatedTokens": 835
+    },
+    {
+      "category": "tool_result:CareerCompetencyModel",
+      "estimatedTokens": 760
+    },
+    {
+      "category": "tool_input:CompareProfileWithRequirements",
+      "estimatedTokens": 740
+    },
+    {
+      "category": "tool_input:AskUserQuestion",
+      "estimatedTokens": 729
+    },
+    {
+      "category": "tool_input:BuildBaseResumeBank",
+      "estimatedTokens": 646
+    },
+    {
+      "category": "tool_input:TailoredResumeGenerator",
+      "estimatedTokens": 598
+    },
+    {
+      "category": "tool_input:UnderstandRealWorkProfile",
+      "estimatedTokens": 567
+    },
+    {
+      "category": "tool_result:Bash",
+      "estimatedTokens": 564
+    },
+    {
+      "category": "tool_input:WebFetch",
+      "estimatedTokens": 561
+    },
+    {
+      "category": "tool_result:profile_update",
+      "estimatedTokens": 517
+    },
+    {
+      "category": "tool_result:TodoWrite",
+      "estimatedTokens": 331
+    },
+    {
+      "category": "tool_result:Glob",
+      "estimatedTokens": 296
+    },
+    {
+      "category": "tool_result:BaselineAssessment",
+      "estimatedTokens": 290
+    },
+    {
+      "category": "tool_input:profile_read",
+      "estimatedTokens": 274
+    },
+    {
+      "category": "tool_result:TailoredResumeGenerator",
+      "estimatedTokens": 236
+    },
+    {
+      "category": "tool_result:AskUserQuestion",
+      "estimatedTokens": 219
+    },
+    {
+      "category": "tool_result:WebFetch",
+      "estimatedTokens": 199
+    },
+    {
+      "category": "tool_input:Glob",
+      "estimatedTokens": 178
+    },
+    {
+      "category": "tool_input:CheckMaterialFormatCompliance",
+      "estimatedTokens": 164
+    },
+    {
+      "category": "tool_input:ExploreCareerDirections",
+      "estimatedTokens": 114
+    },
+    {
+      "category": "tool_result:ToolSearch",
+      "estimatedTokens": 105
+    },
+    {
+      "category": "tool_input:ToolSearch",
+      "estimatedTokens": 88
+    },
+    {
+      "category": "tool_input:CareerCompetencyModel",
+      "estimatedTokens": 80
+    },
+    {
+      "category": "tool_input:BaselineAssessment",
+      "estimatedTokens": 76
+    },
+    {
+      "category": "tool_result:Grep",
+      "estimatedTokens": 38
+    },
+    {
+      "category": "tool_input:Grep",
+      "estimatedTokens": 18
+    }
+  ],
+  "top_api_calls": [
+    {
+      "conversationId": "d127a522-10eb-4fea-9b22-534fa0a1d080",
+      "title": "你好",
+      "eventId": "ad034fa6-6d8a-4798-922b-7522ce135116",
+      "timestamp": "2026-09-01T11:13:47.350Z",
+      "model": "GLM-5.3",
+      "stopReason": "tool_use",
+      "tools": [
+        "profile_update"
+      ],
+      "input": 140866,
+      "cacheCreation": 0,
+      "cacheRead": 0,
+      "output": 19691,
+      "processedInput": 140866,
+      "total": 160557
+    },
+    {
+      "conversationId": "d127a522-10eb-4fea-9b22-534fa0a1d080",
+      "title": "你好",
+      "eventId": "8588a444-ce96-4732-9149-31d2bad3edd4",
+      "timestamp": "2026-09-01T08:08:39.572Z",
+      "model": "GLM-5.3",
+      "stopReason": "end_turn",
+      "tools": [],
+      "input": 142159,
+      "cacheCreation": 0,
+      "cacheRead": 0,
+      "output": 3,
+      "processedInput": 142159,
+      "total": 142162
+    },
+    {
+      "conversationId": "d127a522-10eb-4fea-9b22-534fa0a1d080",
+      "title": "你好",
+      "eventId": "c0daf49d-e2d3-4825-9903-8e2639bbae0d",
+      "timestamp": "2026-09-01T08:08:32.845Z",
+      "model": "GLM-5.3",
+      "stopReason": "tool_use",
+      "tools": [
+        "Edit"
+      ],
+      "input": 141992,
+      "cacheCreation": 0,
+      "cacheRead": 0,
+      "output": 97,
+      "processedInput": 141992,
+      "total": 142089
+    },
+    {
+      "conversationId": "d127a522-10eb-4fea-9b22-534fa0a1d080",
+      "title": "你好",
+      "eventId": "f90c0671-2c76-43ef-9100-1f0cd34213cf",
+      "timestamp": "2026-09-01T11:13:51.299Z",
+      "model": "GLM-5.3",
+      "stopReason": "tool_use",
+      "tools": [
+        "profile_update"
+      ],
+      "input": 141698,
+      "cacheCreation": 0,
+      "cacheRead": 0,
+      "output": 64,
+      "processedInput": 141698,
+      "total": 141762
+    },
+    {
+      "conversationId": "d127a522-10eb-4fea-9b22-534fa0a1d080",
+      "title": "你好",
+      "eventId": "a05bdf61-e671-4900-85f4-4eaad6fad50a",
+      "timestamp": "2026-09-01T08:08:30.098Z",
+      "model": "GLM-5.3",
+      "stopReason": "tool_use",
+      "tools": [
+        "Read"
+      ],
+      "input": 139481,
+      "cacheCreation": 0,
+      "cacheRead": 0,
+      "output": 70,
+      "processedInput": 139481,
+      "total": 139551
+    },
+    {
+      "conversationId": "d127a522-10eb-4fea-9b22-534fa0a1d080",
+      "title": "你好",
+      "eventId": "352a83aa-9406-44ca-b769-51d148709c9c",
+      "timestamp": "2026-09-01T08:08:18.292Z",
+      "model": "GLM-5.3",
+      "stopReason": "tool_use",
+      "tools": [
+        "Edit"
+      ],
+      "input": 139345,
+      "cacheCreation": 0,
+      "cacheRead": 0,
+      "output": 97,
+      "processedInput": 139345,
+      "total": 139442
+    },
+    {
+      "conversationId": "d127a522-10eb-4fea-9b22-534fa0a1d080",
+      "title": "你好",
+      "eventId": "910ab152-f51b-45fa-808c-8c4068bbddaf",
+      "timestamp": "2026-09-01T08:08:05.944Z",
+      "model": "GLM-5.3",
+      "stopReason": "tool_use",
+      "tools": [
+        "Edit"
+      ],
+      "input": 138833,
+      "cacheCreation": 0,
+      "cacheRead": 0,
+      "output": 499,
+      "processedInput": 138833,
+      "total": 139332
+    },
+    {
+      "conversationId": "d127a522-10eb-4fea-9b22-534fa0a1d080",
+      "title": "你好",
+      "eventId": "b177a022-fec3-4925-b91c-309f6a506022",
+      "timestamp": "2026-09-01T08:07:59.267Z",
+      "model": "GLM-5.3",
+      "stopReason": "tool_use",
+      "tools": [
+        "Read"
+      ],
+      "input": 137899,
+      "cacheCreation": 0,
+      "cacheRead": 0,
+      "output": 76,
+      "processedInput": 137899,
+      "total": 137975
+    },
+    {
+      "conversationId": "d127a522-10eb-4fea-9b22-534fa0a1d080",
+      "title": "你好",
+      "eventId": "7505060d-b3cf-49c0-bb1b-283c7e9f3cac",
+      "timestamp": "2026-09-01T08:07:47.840Z",
+      "model": "GLM-5.3",
+      "stopReason": "tool_use",
+      "tools": [
+        "Edit"
+      ],
+      "input": 137627,
+      "cacheCreation": 0,
+      "cacheRead": 0,
+      "output": 202,
+      "processedInput": 137627,
+      "total": 137829
+    },
+    {
+      "conversationId": "d127a522-10eb-4fea-9b22-534fa0a1d080",
+      "title": "你好",
+      "eventId": "b879aa88-1c46-403e-8782-17b6ebffd65b",
+      "timestamp": "2026-09-01T08:07:06.905Z",
+      "model": "GLM-5.3",
+      "stopReason": "end_turn",
+      "tools": [],
+      "input": 136781,
+      "cacheCreation": 0,
+      "cacheRead": 0,
+      "output": 707,
+      "processedInput": 136781,
+      "total": 137488
+    },
+    {
+      "conversationId": "d127a522-10eb-4fea-9b22-534fa0a1d080",
+      "title": "你好",
+      "eventId": "a572501f-aec4-4325-8f26-de3b39a58655",
+      "timestamp": "2026-09-01T08:07:29.743Z",
+      "model": "GLM-5.3",
+      "stopReason": "tool_use",
+      "tools": [
+        "Read"
+      ],
+      "input": 137322,
+      "cacheCreation": 0,
+      "cacheRead": 0,
+      "output": 76,
+      "processedInput": 137322,
+      "total": 137398
+    },
+    {
+      "conversationId": "d127a522-10eb-4fea-9b22-534fa0a1d080",
+      "title": "你好",
+      "eventId": "2689f73f-3979-4b3c-aeec-c982bc5e30e0",
+      "timestamp": "2026-09-01T08:06:39.933Z",
+      "model": "GLM-5.3",
+      "stopReason": "tool_use",
+      "tools": [
+        "Bash"
+      ],
+      "input": 136725,
+      "cacheCreation": 0,
+      "cacheRead": 0,
+      "output": 588,
+      "processedInput": 136725,
+      "total": 137313
+    },
+    {
+      "conversationId": "d127a522-10eb-4fea-9b22-534fa0a1d080",
+      "title": "你好",
+      "eventId": "a29c0645-9eb5-48a8-bea7-860d006fa54e",
+      "timestamp": "2026-09-01T08:06:53.268Z",
+      "model": "GLM-5.3",
+      "stopReason": "tool_use",
+      "tools": [
+        "Bash"
+      ],
+      "input": 136753,
+      "cacheCreation": 0,
+      "cacheRead": 0,
+      "output": 20,
+      "processedInput": 136753,
+      "total": 136773
+    },
+    {
+      "conversationId": "d127a522-10eb-4fea-9b22-534fa0a1d080",
+      "title": "你好",
+      "eventId": "d2dfbdf9-83b0-47a9-830c-64bf126a53e4",
+      "timestamp": "2026-09-01T08:06:24.251Z",
+      "model": "GLM-5.3",
+      "stopReason": "tool_use",
+      "tools": [
+        "Read"
+      ],
+      "input": 136524,
+      "cacheCreation": 0,
+      "cacheRead": 0,
+      "output": 99,
+      "processedInput": 136524,
+      "total": 136623
+    },
+    {
+      "conversationId": "d127a522-10eb-4fea-9b22-534fa0a1d080",
+      "title": "你好",
+      "eventId": "9dd91842-bc8e-46e3-b60f-cb6dea3dde76",
+      "timestamp": "2026-09-01T08:06:21.096Z",
+      "model": "GLM-5.3",
+      "stopReason": "tool_use",
+      "tools": [
+        "Glob"
+      ],
+      "input": 136428,
+      "cacheCreation": 0,
+      "cacheRead": 0,
+      "output": 47,
+      "processedInput": 136428,
+      "total": 136475
+    },
+    {
+      "conversationId": "d127a522-10eb-4fea-9b22-534fa0a1d080",
+      "title": "你好",
+      "eventId": "bae2e7bf-95db-444b-91ee-9153b21db27a",
+      "timestamp": "2026-09-01T08:06:14.950Z",
+      "model": "GLM-5.3",
+      "stopReason": "tool_use",
+      "tools": [
+        "Glob"
+      ],
+      "input": 136366,
+      "cacheCreation": 0,
+      "cacheRead": 0,
+      "output": 13,
+      "processedInput": 136366,
+      "total": 136379
+    },
+    {
+      "conversationId": "d127a522-10eb-4fea-9b22-534fa0a1d080",
+      "title": "你好",
+      "eventId": "5b82e0fb-6b2d-4150-ba0a-5e2cf02326d6",
+      "timestamp": "2026-09-01T08:06:12.202Z",
+      "model": "GLM-5.3",
+      "stopReason": "tool_use",
+      "tools": [
+        "Bash"
+      ],
+      "input": 136336,
+      "cacheCreation": 0,
+      "cacheRead": 0,
+      "output": 22,
+      "processedInput": 136336,
+      "total": 136358
+    },
+    {
+      "conversationId": "d127a522-10eb-4fea-9b22-534fa0a1d080",
+      "title": "你好",
+      "eventId": "10bb31c0-32c4-437c-a46a-63fa5175cae5",
+      "timestamp": "2026-09-01T08:05:48.562Z",
+      "model": "GLM-5.3",
+      "stopReason": "tool_use",
+      "tools": [
+        "Bash"
+      ],
+      "input": 136199,
+      "cacheCreation": 0,
+      "cacheRead": 0,
+      "output": 22,
+      "processedInput": 136199,
+      "total": 136221
+    },
+    {
+      "conversationId": "d127a522-10eb-4fea-9b22-534fa0a1d080",
+      "title": "你好",
+      "eventId": "145444e3-5a76-4011-b2cf-f711a02e5fed",
+      "timestamp": "2026-09-01T08:05:38.283Z",
+      "model": "GLM-5.3",
+      "stopReason": "tool_use",
+      "tools": [
+        "Bash"
+      ],
+      "input": 136128,
+      "cacheCreation": 0,
+      "cacheRead": 0,
+      "output": 57,
+      "processedInput": 136128,
+      "total": 136185
+    },
+    {
+      "conversationId": "d127a522-10eb-4fea-9b22-534fa0a1d080",
+      "title": "你好",
+      "eventId": "a4356dac-6f3a-4b43-aad3-4547fc5bff28",
+      "timestamp": "2026-09-01T08:05:35.965Z",
+      "model": "GLM-5.3",
+      "stopReason": "tool_use",
+      "tools": [
+        "Bash"
+      ],
+      "input": 136089,
+      "cacheCreation": 0,
+      "cacheRead": 0,
+      "output": 25,
+      "processedInput": 136089,
+      "total": 136114
+    }
+  ],
+  "top_payloads": [
+    {
+      "conversationId": "d127a522-10eb-4fea-9b22-534fa0a1d080",
+      "title": "你好",
+      "eventId": "620d8304-ab17-4522-95a6-21e95e5ede28",
+      "timestamp": "2026-09-01T07:34:47.225Z",
+      "category": "internal_meta",
+      "estimatedTokens": 45708,
+      "characters": 182831
+    },
+    {
+      "conversationId": "d127a522-10eb-4fea-9b22-534fa0a1d080",
+      "title": "你好",
+      "eventId": "356ae26a-65cd-467e-bea7-723d471b8f2f",
+      "timestamp": "2026-09-01T08:06:24.718Z",
+      "category": "internal_meta",
+      "estimatedTokens": 45708,
+      "characters": 182831
+    },
+    {
+      "conversationId": "d127a522-10eb-4fea-9b22-534fa0a1d080",
+      "title": "你好",
+      "eventId": "17eec48f-c878-49a2-9a05-327f32f9c162",
+      "timestamp": "2026-09-01T07:35:18.548Z",
+      "category": "internal_meta",
+      "estimatedTokens": 30317,
+      "characters": 121267
+    },
+    {
+      "conversationId": "d127a522-10eb-4fea-9b22-534fa0a1d080",
+      "title": "你好",
+      "eventId": "17eec48f-c878-49a2-9a05-327f32f9c162",
+      "timestamp": "2026-09-01T07:35:18.548Z",
+      "category": "internal_meta",
+      "estimatedTokens": 27963,
+      "characters": 111851
+    },
+    {
+      "conversationId": "d127a522-10eb-4fea-9b22-534fa0a1d080",
+      "title": "你好",
+      "eventId": "b8380ff1-6c8a-4ba9-9573-324c4f79e5d2",
+      "timestamp": "2026-09-01T11:13:47.333Z",
+      "category": "assistant_thinking",
+      "estimatedTokens": 20217,
+      "characters": 66072
+    },
+    {
+      "conversationId": "4681b6dd-b505-42bd-bec9-7cf07d876e2a",
+      "title": "看眼我能做的杭州岗位",
+      "eventId": "4032fada-ad9f-4c14-84c1-92a372e49636",
+      "timestamp": "2026-09-02T13:42:52.970Z",
+      "category": "assistant_thinking",
+      "estimatedTokens": 11755,
+      "characters": 39424
+    },
+    {
+      "conversationId": "d127a522-10eb-4fea-9b22-534fa0a1d080",
+      "title": "你好",
+      "eventId": "7b9434f2-0819-4a24-a160-47fa194d292e",
+      "timestamp": "2026-08-31T13:23:14.487Z",
+      "category": "assistant_thinking",
+      "estimatedTokens": 5824,
+      "characters": 23233
+    },
+    {
+      "conversationId": "d127a522-10eb-4fea-9b22-534fa0a1d080",
+      "title": "你好",
+      "eventId": "7823a621-afd7-4c58-b6c3-43eab7982262",
+      "timestamp": "2026-09-01T07:04:41.831Z",
+      "category": "assistant_thinking",
+      "estimatedTokens": 5154,
+      "characters": 16912
+    },
+    {
+      "conversationId": "598433e9-119a-4f4f-b016-d67310844e0a",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "ef6a38cf-70a4-4b82-b490-6b74e05ed5c2",
+      "timestamp": "2026-09-03T08:30:33.494Z",
+      "category": "assistant_thinking",
+      "estimatedTokens": 4586,
+      "characters": 14087
+    },
+    {
+      "conversationId": "598433e9-119a-4f4f-b016-d67310844e0a",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "e1e97530-29d7-4c10-a2bc-279686fb69fc",
+      "timestamp": "2026-09-03T08:42:01.787Z",
+      "category": "tool_result:FindReferralEntryPoints",
+      "estimatedTokens": 3961,
+      "characters": 9448
+    },
+    {
+      "conversationId": "d127a522-10eb-4fea-9b22-534fa0a1d080",
+      "title": "你好",
+      "eventId": "fec52a4c-4ce4-4624-a344-31c45dc4e838",
+      "timestamp": "2026-09-01T07:22:49.709Z",
+      "category": "tool_result:RankOpportunitiesToPursue",
+      "estimatedTokens": 3767,
+      "characters": 8606
+    },
+    {
+      "conversationId": "4681b6dd-b505-42bd-bec9-7cf07d876e2a",
+      "title": "看眼我能做的杭州岗位",
+      "eventId": "2836f43d-2543-41c1-b1b9-98ddf7f6164d",
+      "timestamp": "2026-09-03T03:36:12.834Z",
+      "category": "assistant_thinking",
+      "estimatedTokens": 3678,
+      "characters": 13131
+    },
+    {
+      "conversationId": "4681b6dd-b505-42bd-bec9-7cf07d876e2a",
+      "title": "看眼我能做的杭州岗位",
+      "eventId": "d69c8d7e-7b20-4e19-bb6a-b070d9d878ef",
+      "timestamp": "2026-09-02T14:02:59.325Z",
+      "category": "tool_result:Read",
+      "estimatedTokens": 3576,
+      "characters": 8394
+    },
+    {
+      "conversationId": "d127a522-10eb-4fea-9b22-534fa0a1d080",
+      "title": "你好",
+      "eventId": "ab1ddb19-c97a-45b8-88e4-cc2b6fa4c0bb",
+      "timestamp": "2026-08-31T13:18:04.338Z",
+      "category": "assistant_thinking",
+      "estimatedTokens": 3284,
+      "characters": 13135
+    },
+    {
+      "conversationId": "d127a522-10eb-4fea-9b22-534fa0a1d080",
+      "title": "你好",
+      "eventId": "2db30476-ae71-4189-b389-5789bbd42f91",
+      "timestamp": "2026-08-31T13:16:41.658Z",
+      "category": "assistant_thinking",
+      "estimatedTokens": 3128,
+      "characters": 12503
+    },
+    {
+      "conversationId": "4681b6dd-b505-42bd-bec9-7cf07d876e2a",
+      "title": "看眼我能做的杭州岗位",
+      "eventId": "c40da63a-597a-49f5-ae3d-5dab044cc5da",
+      "timestamp": "2026-09-02T13:50:23.188Z",
+      "category": "tool_result:CompareProfileWithRequirements",
+      "estimatedTokens": 3086,
+      "characters": 6767
+    },
+    {
+      "conversationId": "d127a522-10eb-4fea-9b22-534fa0a1d080",
+      "title": "你好",
+      "eventId": "8f78d890-2143-4fa5-833c-202107a425b1",
+      "timestamp": "2026-08-31T13:56:21.087Z",
+      "category": "assistant_thinking",
+      "estimatedTokens": 2986,
+      "characters": 9415
+    },
+    {
+      "conversationId": "d127a522-10eb-4fea-9b22-534fa0a1d080",
+      "title": "你好",
+      "eventId": "ec0c7815-22c7-420a-84e8-bf154dbb0411",
+      "timestamp": "2026-08-31T13:20:39.041Z",
+      "category": "assistant_thinking",
+      "estimatedTokens": 2802,
+      "characters": 11207
+    },
+    {
+      "conversationId": "44db3df3-6a0f-4968-9e15-14b937affc33",
+      "title": "SkillTool 生命周期验收",
+      "eventId": "a4298356-5ec7-4667-9dc7-507a1c4e42cf",
+      "timestamp": "2026-09-02T06:28:05.701Z",
+      "category": "tool_result:UnderstandRealWorkProfile",
+      "estimatedTokens": 2798,
+      "characters": 7984
+    },
+    {
+      "conversationId": "d127a522-10eb-4fea-9b22-534fa0a1d080",
+      "title": "你好",
+      "eventId": "7e0962cf-697f-4fdb-be89-23061290e37d",
+      "timestamp": "2026-08-31T15:07:34.161Z",
+      "category": "tool_result:RankOpportunitiesToPursue",
+      "estimatedTokens": 2776,
+      "characters": 5908
+    }
+  ]
+}

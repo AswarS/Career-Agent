@@ -40,6 +40,7 @@ export const CAREER_AGENT_API_ROUTE_PATTERNS = {
   settingsApiTest: `${CAREER_AGENT_API_BASE_PATH}/settings/api/test`,
   settingsMcpGithub: `${CAREER_AGENT_API_BASE_PATH}/settings/mcp/github`,
   settingsMcpGithubTest: `${CAREER_AGENT_API_BASE_PATH}/settings/mcp/github/test`,
+  gatewayMonitorSummary: `${CAREER_AGENT_API_BASE_PATH}/gateway-monitor/summary`,
 } as const;
 
 export const CAREER_AGENT_API_ROUTE_DESCRIPTORS = [

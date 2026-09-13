@@ -1,0 +1,18 @@
+{
+  "tool_name": "CareerDirectionSynthesis",
+  "user_facing_name": "职业方向提炼与分析",
+  "search_hint": "synthesize career directions from a list of verified job opportunities",
+  "preserve_existing": true,
+  "always_load": true,
+  "read_only": false,
+  "child_tools": [
+    "WebFetch"
+  ],
+  "input": {
+    "verified_opportunity_list": {
+      "type": "json",
+      "required": true,
+      "description": "从公开来源检索的真实职位发布集合，包含职位名称、组织、地点、发布日期和来源链接。"
+    }
+  }
+}

@@ -311,10 +311,10 @@ async function* queryLoop(
   // so per-iteration firing would ask sideQuery the same question N times.
   // Consume point polls settledAt (never blocks). `using` disposes on all
   // generator exit paths — see MemoryPrefetch for dispose/telemetry semantics.
-  using pendingMemoryPrefetch = startRelevantMemoryPrefetch(
-    state.messages,
-    state.toolUseContext,
-  );
+  using pendingMemoryPrefetch =
+    querySource === "agent:skill-action"
+      ? undefined
+      : startRelevantMemoryPrefetch(state.messages, state.toolUseContext);
 
   // eslint-disable-next-line no-constant-condition
   while (true) {

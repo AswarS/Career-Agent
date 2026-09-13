@@ -1,0 +1,25 @@
+{
+  "relation_id": "sample_relation_006",
+  "relation_signature": "obj_opportunity_count_per_direction_e364981b+obj_target_role_description_a95e58fe+obj_weekly_time_availability_091b9ec3->obj_additional_context_5dbfe614",
+  "input_object_ids": [
+    "obj_opportunity_count_per_direction_e364981b",
+    "obj_target_role_description_a95e58fe",
+    "obj_weekly_time_availability_091b9ec3"
+  ],
+  "output_object_id": "obj_additional_context_5dbfe614",
+  "k": 3,
+  "label": "t([obj_opportunity_count_per_direction_e364981b,obj_target_role_description_a95e58fe,obj_weekly_time_availability_091b9ec3],obj_additional_context_5dbfe614)",
+  "context_contract": {
+    "mode": "fused_scenario",
+    "profile_ids": [
+      "profile_ui_001"
+    ],
+    "scenario_ids": [
+      "scenario_fused"
+    ],
+    "binding_ids": [
+      "binding_001"
+    ],
+    "integration_reason": "all sampled objects share a compatible context scope"
+  }
+}

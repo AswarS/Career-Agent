@@ -1,0 +1,49 @@
+[
+  {
+    "id": "success_complete_input",
+    "user_query": "我找到了这些真实的岗位机会，帮我归纳一下背后的职业方向，包括典型的日常职责和交付成果。",
+    "available_context": {
+      "verified_opportunity_list": "包含 5 个算法工程师和 3 个数据分析师的岗位对象，带有详细职责文本。"
+    },
+    "expected_outcome": "success",
+    "must_include": [
+      "career_direction_exploration_results",
+      "typical_responsibilities",
+      "deliverables"
+    ],
+    "must_not_include": [
+      "user_capability_assessment",
+      "learning_plan"
+    ]
+  },
+  {
+    "id": "insufficient_empty_list",
+    "user_query": "帮我看看这份真实岗位清单，总结一下它们主要属于哪些职业方向。",
+    "available_context": {
+      "verified_opportunity_list": []
+    },
+    "expected_outcome": "insufficient_input",
+    "must_include": [
+      "insufficient_input",
+      "empty list"
+    ],
+    "must_not_include": [
+      "career_direction_exploration_results"
+    ]
+  },
+  {
+    "id": "boundary_no_text_but_urls",
+    "user_query": "根据这份岗位清单，帮我提炼出几个潜在的职业方向。",
+    "available_context": {
+      "verified_opportunity_list": "包含 3 个岗位对象，仅有 title 和 source_url，无职责文本。"
+    },
+    "expected_outcome": "success",
+    "must_include": [
+      "WebFetch",
+      "career_direction_exploration_results"
+    ],
+    "must_not_include": [
+      "hallucinated_responsibilities"
+    ]
+  }
+]

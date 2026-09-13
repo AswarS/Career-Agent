@@ -198,6 +198,10 @@ const BUILTIN_SOURCES: Record<string, SourceEntry> = {
     file: 'CrescoAI-Backend/backend/src/tools/FileReadTool/FileReadTool.ts',
     export: 'FileReadTool',
   },
+  PdfParse: {
+    file: 'CrescoAI-Backend/backend/src/tools/PdfParseTool/PdfParseTool.ts',
+    export: 'PdfParseTool',
+  },
   Edit: {
     file: 'CrescoAI-Backend/backend/src/tools/FileEditTool/FileEditTool.ts',
     export: 'FileEditTool',

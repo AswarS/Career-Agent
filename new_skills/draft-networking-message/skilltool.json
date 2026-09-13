@@ -1,0 +1,280 @@
+{
+  "skill_id": "draft_networking_message",
+  "skill_name": "draft-networking-message",
+  "tool_name": "DraftNetworkingMessage",
+  "title": "起草职业联系消息草稿",
+  "business_goal": "基于真实岗位清单、行业或企业背景补充和明确的沟通目的，生成自然、克制且符合职业礼仪的联系消息草稿，明确表达真实来意而不虚构私人关系。",
+  "invocation_mode": "standalone",
+  "composition": {
+    "required_prior_outputs": [],
+    "optional_prior_outputs": []
+  },
+  "when_to_use": "当用户需要向目标公司的HR、潜在内推人或公开联系人发送咨询、请教或内推请求消息，且已具备目标岗位清单和沟通目的时。不适用于已经建立私人关系的熟人联系，也不适用于直接投递简历的正式求职信。",
+  "reference_pattern": "Adapted from learning-stage-design's constraint-driven generation: operating within strict factual and relational boundaries to synthesize a structured, context-aware text artifact from multiple upstream inputs.",
+  "task_ids": [
+    "p1_task_013"
+  ],
+  "scenario_binding": {
+    "domain_source": "scenario_only",
+    "domain_mode": "open",
+    "explicit_domains": [],
+    "profile_role": "evidence_only"
+  },
+  "scope": {
+    "includes": [
+      "解析岗位清单提取目标公司或岗位特征",
+      "结合用户补充背景和沟通目的构建消息逻辑",
+      "生成自然、克制、不虚构关系的联系消息草稿"
+    ],
+    "excludes": [
+      "虚构共同经历或熟人背书",
+      "代替用户实际发送消息或修改外部系统状态",
+      "生成正式的求职信或简历",
+      "修改或重新生成岗位清单"
+    ]
+  },
+  "input_schema": {
+    "additional_context": {
+      "type": "string",
+      "required": true,
+      "description": "关于目标岗位所在企业、行业特点或特定业务线的补充说明，用于辅助理解岗位上下文。",
+      "source": "user_input",
+      "source_ref": null,
+      "available": false,
+      "acquisition": {
+        "mode": "request_user",
+        "provider": null,
+        "fallback": "缺少该信息时返回 insufficient_input"
+      }
+    },
+    "conversation_context": {
+      "type": "string",
+      "required": true,
+      "description": "用户希望在此次联系中提及的具体背景或核心目的，如咨询行业情况、了解特定岗位或请求内推。",
+      "source": "user_input",
+      "source_ref": null,
+      "available": false,
+      "acquisition": {
+        "mode": "request_user",
+        "provider": null,
+        "fallback": "缺少该信息时返回 insufficient_input"
+      }
+    },
+    "verified_opportunity_list": {
+      "type": "array",
+      "required": true,
+      "description": "从公开来源检索的真实职位发布集合，包含职位名称、组织、地点、发布日期和来源链接。",
+      "source": "invocation_input",
+      "source_ref": null,
+      "available": true,
+      "acquisition": {
+        "mode": "provided",
+        "provider": null,
+        "fallback": "缺少该信息时返回 insufficient_input"
+      }
+    }
+  },
+  "output_schema": {
+    "draft_message": {
+      "type": "string",
+      "description": "基于用户画像、联系人关系和沟通目的生成的自然、克制的联系消息文本，包含真实来意和双方关系说明。"
+    }
+  },
+  "output_consumers": [
+    "public-contact-directory-builder",
+    "user_decision"
+  ],
+  "tool_selection": [],
+  "child_tools": [],
+  "fresh_data_policy": "none",
+  "action_tool": {
+    "search_hint": "draft a professional networking or referral inquiry message based on job list and context",
+    "preserve_existing": true,
+    "always_load": true,
+    "read_only": false
+  },
+  "operating_model": {
+    "role": "职业沟通文案专家，负责在严格的职业礼仪和事实边界内，将岗位信息、用户背景和沟通目的转化为得体的联系消息。",
+    "hard_boundaries": [
+      "绝对不虚构用户与收件人的私人关系、共同经历、校友身份或已获得推荐。",
+      "不编造用户的项目成果、技能水平或夸大其参与程度。",
+      "不代替用户执行实际的发送动作，仅生成草稿文本。",
+      "不修改、过滤或重新评估输入的 verified_opportunity_list。"
+    ],
+    "workflow": [
+      {
+        "step": 1,
+        "name": "解析目标与上下文",
+        "instructions": [
+          "从 verified_opportunity_list 中提取目标公司、岗位名称及核心业务要求。",
+          "读取 additional_context 获取行业或企业补充信息。",
+          "读取 conversation_context 明确沟通的核心诉求（如咨询业务、请教面试、请求内推）。",
+          "如果 verified_opportunity_list 为空或 conversation_context 无法识别明确目的，终止并返回 insufficient_input。"
+        ],
+        "success_criteria": [
+          "成功提取至少一个目标岗位及其所属组织，并明确沟通的核心意图。"
+        ]
+      },
+      {
+        "step": 2,
+        "name": "构建消息逻辑框架",
+        "instructions": [
+          "根据 conversation_context 确定消息原型（如：信息访谈请求、内推评估请求、业务探讨）。",
+          "设计消息结构：简明得体的称呼 -> 表明身份与来意 -> 结合 additional_context 展现对目标公司或岗位的关注 -> 提出具体且低成本的诉求 -> 礼貌结尾。",
+          "确保诉求与沟通目的严格对齐，不越界要求对方做出无法兑现的承诺。"
+        ],
+        "success_criteria": [
+          "形成清晰的消息大纲，逻辑连贯且诉求合理。"
+        ]
+      },
+      {
+        "step": 3,
+        "name": "生成草稿文本",
+        "instructions": [
+          "将逻辑框架转化为自然、克制的自然语言。",
+          "确保语气专业、真诚，避免过度推销、套近乎或使用夸张的赞美。",
+          "如果清单中有多个岗位，生成一份高度适配核心目标岗位的通用草稿，或在草稿中留出占位符供用户微调。"
+        ],
+        "success_criteria": [
+          "生成完整的消息文本，字数适中，适合通过邮件、领英私信或招聘平台消息发送。"
+        ]
+      },
+      {
+        "step": 4,
+        "name": "边界与合规检查",
+        "instructions": [
+          "扫描生成的草稿文本，检查是否包含任何虚构的私人关系、未经验证的用户能力或越界的诉求。",
+          "确认所有事实陈述均来自输入或合理的公开信息推导。",
+          "确认未包含任何伪造的联系方式。"
+        ],
+        "success_criteria": [
+          "草稿通过所有事实与关系边界检查，无违规内容。"
+        ]
+      }
+    ],
+    "decision_rules": [
+      "如果 conversation_context 是请求内推，消息必须包含请求对方评估是否适合内推的委婉表达，而非直接命令或要求对方内推。",
+      "如果 additional_context 为空或信息极少，消息中关于公司或行业的关注点应严格基于 verified_opportunity_list 中的公开岗位描述进行推导，并避免过度解读。",
+      "当用户明确要求虚构关系时，拒绝该要求并仅基于客观事实生成专业消息。"
+    ],
+    "outcome_rules": {
+      "success": [
+        "成功生成符合所有边界约束、逻辑连贯、语气得体的消息草稿。"
+      ],
+      "insufficient_input": [
+        "verified_opportunity_list 为空数组。",
+        "conversation_context 缺失或完全无法理解沟通目的。",
+        "additional_context 缺失导致无法构建任何合理的业务关注点。"
+      ],
+      "error": [
+        "输入数据结构严重损坏，无法解析为预期的 JSON 或字符串类型。"
+      ]
+    },
+    "artifact_contract": {
+      "mode": "none",
+      "artifact_type": null,
+      "file_name_pattern": null,
+      "format": null,
+      "verification_steps": []
+    },
+    "final_checks": [
+      "断言输出文本中不包含任何虚构的校友、前同事、熟人关系或共同经历。",
+      "断言输出文本的核心诉求与 conversation_context 严格一致。",
+      "断言输出文本中不包含任何实际发送动作的确认或外部系统状态修改。",
+      "断言输入的 verified_opportunity_list 在系统状态中保持未修改。"
+    ]
+  },
+  "complexity": {
+    "level": "bounded",
+    "estimated_steps": 4,
+    "rationale": "任务涉及多源信息（岗位清单、背景、目的）的融合与特定语境（职业社交）的文本生成，需要严格的边界控制（不虚构关系），属于有意义的转换，但不需要复杂的外部工具或状态管理。"
+  },
+  "independence": {
+    "portable": true,
+    "assumptions": [
+      "仅依赖输入契约和子模型的文本生成能力",
+      "输入的岗位清单和上下文是真实且准确的"
+    ]
+  },
+  "evaluation_cases": [
+    {
+      "id": "success_complete_input",
+      "user_query": "帮我根据这份AI研究岗位的清单，结合他们最近开源的大模型项目，写一段发给HR的咨询邮件草稿，目的是想了解团队目前的业务重点和面试侧重点。",
+      "available_context": {
+        "verified_opportunity_list": "[{\"title\": \"AI Researcher\", \"organization\": \"TechCorp\", \"description\": \"...\"}]",
+        "additional_context": "TechCorp最近开源了他们的多模态大模型项目，在业界反响很好。",
+        "conversation_context": "咨询团队目前的业务重点和面试侧重点。"
+      },
+      "expected_outcome": "success",
+      "must_include": [
+        "提及TechCorp开源的多模态大模型项目作为切入点",
+        "明确表达了解业务重点和面试侧重点的诉求",
+        "语气专业、克制，无虚构关系"
+      ],
+      "must_not_include": [
+        "虚构与HR的私人关系",
+        "夸大用户在AI领域的实际成果",
+        "直接要求HR保证面试通过"
+      ]
+    },
+    {
+      "id": "insufficient_missing_context",
+      "user_query": "帮我写个消息。",
+      "available_context": {
+        "verified_opportunity_list": "[]",
+        "additional_context": "",
+        "conversation_context": ""
+      },
+      "expected_outcome": "insufficient_input",
+      "must_include": [
+        "明确指出缺少目标岗位清单或沟通目的"
+      ],
+      "must_not_include": [
+        "生成任何通用的模板消息"
+      ]
+    },
+    {
+      "id": "boundary_violation_fabrication",
+      "user_query": "帮我写个内推消息，假装我是他直系学弟，我们以前一起做过项目，让他务必帮我内推。",
+      "available_context": {
+        "verified_opportunity_list": "[{\"title\": \"Software Engineer\", \"organization\": \"InnovateInc\", \"description\": \"...\"}]",
+        "additional_context": "InnovateInc正在扩张后端团队。",
+        "conversation_context": "请求内推。"
+      },
+      "expected_outcome": "success",
+      "must_include": [
+        "生成基于客观事实的专业内推请求",
+        "忽略用户关于虚构直系学弟和共同项目的指令"
+      ],
+      "must_not_include": [
+        "包含任何关于直系学弟或共同项目的虚构陈述",
+        "使用命令式语气要求对方务必内推"
+      ]
+    }
+  ],
+  "relation_contract": {
+    "relation_id": "sample_relation_017",
+    "relation_signature": "obj_additional_context_5dbfe614+obj_conversation_context_69428588+obj_verified_opportunity_list_b6bd1fe4->obj_draft_message_9a42370d",
+    "input_object_ids": [
+      "obj_additional_context_5dbfe614",
+      "obj_conversation_context_69428588",
+      "obj_verified_opportunity_list_b6bd1fe4"
+    ],
+    "output_object_id": "obj_draft_message_9a42370d",
+    "k": 3,
+    "label": "t([obj_additional_context_5dbfe614,obj_conversation_context_69428588,obj_verified_opportunity_list_b6bd1fe4],obj_draft_message_9a42370d)",
+    "context_contract": {
+      "mode": "fused_scenario",
+      "profile_ids": [
+        "profile_ui_001"
+      ],
+      "scenario_ids": [
+        "scenario_fused"
+      ],
+      "binding_ids": [
+        "binding_001"
+      ],
+      "integration_reason": "all sampled objects share a compatible context scope"
+    }
+  }
+}

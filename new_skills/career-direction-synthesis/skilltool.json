@@ -1,0 +1,252 @@
+{
+  "skill_id": "career_direction_synthesis",
+  "skill_name": "career-direction-synthesis",
+  "tool_name": "CareerDirectionSynthesis",
+  "title": "职业方向提炼与分析",
+  "business_goal": "基于已收集的真实岗位清单，聚类并提炼出核心职业方向，结构化输出每个方向的典型职责、交付成果、协作模式和进入要求，为后续职业选择提供认知基础。",
+  "invocation_mode": "standalone",
+  "composition": {
+    "required_prior_outputs": [],
+    "optional_prior_outputs": []
+  },
+  "when_to_use": "当用户已经收集了一批真实岗位机会，需要理解这些岗位背后的宏观职业方向、日常职责和进入门槛时使用。不用于搜索新岗位、评估用户自身能力或制定学习计划。",
+  "reference_pattern": "借鉴 career-competency-model 的证据提取与结构化建模方法，但将数据源从外部搜索替换为对已有岗位清单的语义聚类与抽象。",
+  "task_ids": [
+    "p1_task_001"
+  ],
+  "scenario_binding": {
+    "domain_source": "scenario_only",
+    "domain_mode": "open",
+    "explicit_domains": [],
+    "profile_role": "evidence_only"
+  },
+  "scope": {
+    "includes": [
+      "岗位清单语义聚类",
+      "职业方向抽象",
+      "职责、交付、协作、要求结构化提取"
+    ],
+    "excludes": [
+      "搜索新岗位",
+      "评估用户能力",
+      "制定验证计划",
+      "修改原始岗位清单"
+    ]
+  },
+  "input_schema": {
+    "verified_opportunity_list": {
+      "type": "array",
+      "required": true,
+      "description": "从公开来源检索的真实职位发布集合，包含职位名称、组织、地点、发布日期和来源链接。",
+      "source": "invocation_input",
+      "source_ref": null,
+      "available": true,
+      "acquisition": {
+        "mode": "provided",
+        "provider": null,
+        "fallback": "缺少该信息时返回 insufficient_input"
+      }
+    }
+  },
+  "output_schema": {
+    "career_direction_exploration_results": {
+      "type": "object",
+      "description": "潜在职业方向的结构化分析或列表，包含典型职责、交付成果、协作模式、进入要求及代表性岗位示例等初步了解信息。"
+    }
+  },
+  "output_consumers": [
+    "tailored-resume-generator",
+    "user_decision"
+  ],
+  "tool_selection": [
+    {
+      "tool_name": "WebFetch",
+      "usage_mode": "conditional",
+      "reason": "当岗位清单中仅提供来源链接而缺乏详细的工作职责和任职要求文本时，需要抓取页面以提取方向特征。",
+      "condition": "清单中的岗位对象缺少足够的职责或要求文本描述，仅包含 URL。",
+      "fallback": "仅基于清单中已有的文本信息进行抽象，若文本过少则在输出中标注信息不足。"
+    }
+  ],
+  "child_tools": [
+    "WebFetch"
+  ],
+  "harness_tools": [],
+  "fresh_data_policy": "optional",
+  "action_tool": {
+    "search_hint": "synthesize career directions from a list of verified job opportunities",
+    "preserve_existing": true,
+    "always_load": true,
+    "read_only": false
+  },
+  "operating_model": {
+    "role": "职业方向分析师，负责将具体的岗位实例集合归纳、抽象为结构化的职业方向特征。",
+    "hard_boundaries": [
+      "仅使用提供的岗位清单及通过 WebFetch 获取的对应页面内容，不引入外部无关岗位或虚构岗位。",
+      "不评估用户是否适合这些方向，不生成学习计划或验证行动。",
+      "保留事实边界，不夸大或捏造岗位清单中未体现的职责或要求。"
+    ],
+    "workflow": [
+      {
+        "step": 1,
+        "name": "Validate and Enrich Input",
+        "instructions": [
+          "检查 verified_opportunity_list 是否非空。",
+          "遍历清单，检查每个岗位对象是否包含足够的职责和要求文本。",
+          "若文本缺失或过少，使用 WebFetch 抓取 source_url 获取详情页，提取核心职责与要求。"
+        ],
+        "success_criteria": [
+          "所有岗位均具备可用于语义分析的职责或要求文本，或已标记为文本不足。"
+        ]
+      },
+      {
+        "step": 2,
+        "name": "Semantic Clustering",
+        "instructions": [
+          "基于岗位名称、职责和要求文本，将岗位聚类为若干个潜在的职业方向。",
+          "聚类依据应为工作本质、核心技能和交付目标的相似性，而非仅仅是行业或公司名称。"
+        ],
+        "success_criteria": [
+          "生成至少 1 个且不超过 5 个具有明显区分度的职业方向簇。"
+        ]
+      },
+      {
+        "step": 3,
+        "name": "Direction Characteristic Extraction",
+        "instructions": [
+          "对每个职业方向簇，提取并总结以下维度：典型职责 (typical_responsibilities)、交付成果 (deliverables)、协作模式 (collaboration_mode)、进入要求 (entry_requirements)。",
+          "从簇中选取 1 至 3 个最具代表性的岗位作为示例 (representative_examples)，保留原始链接。"
+        ],
+        "success_criteria": [
+          "每个方向均包含上述四个维度的结构化描述及代表性岗位示例。"
+        ]
+      },
+      {
+        "step": 4,
+        "name": "Artifact Generation",
+        "instructions": [
+          "将结果组装为 career_direction_exploration_results 对象。",
+          "使用 Write 工具将结果写入 career-direction-exploration.json。",
+          "使用 Read 工具读回文件进行验证。"
+        ],
+        "success_criteria": [
+          "文件成功写入且读回内容与预期结构一致。"
+        ]
+      }
+    ],
+    "decision_rules": [
+      "聚类时，若两个岗位的核心交付物和技术栈高度重合，则归为同一方向；若工作本质不同，即使在同一公司也必须拆分。",
+      "进入要求仅提取清单中明确列出的硬性条件，不推断隐性要求。"
+    ],
+    "outcome_rules": {
+      "success": [
+        "成功对清单进行聚类并输出包含所有必需维度的结构化方向分析。"
+      ],
+      "insufficient_input": [
+        "verified_opportunity_list 为空，或所有岗位均无链接且无文本描述，导致无法进行任何语义聚类。"
+      ],
+      "error": [
+        "WebFetch 抓取全部失败且清单本身无文本，或文件写入与读回失败。"
+      ]
+    },
+    "artifact_contract": {
+      "mode": "write_file",
+      "artifact_type": "CareerDirectionExploration",
+      "file_name_pattern": "career-direction-exploration.json",
+      "format": "json",
+      "verification_steps": [
+        "Read back the written file.",
+        "Verify JSON structure contains an array of directions.",
+        "Verify each direction has typical_responsibilities, deliverables, collaboration_mode, entry_requirements, and representative_examples."
+      ]
+    },
+    "final_checks": [
+      "确认输出未包含对用户能力的评估或建议。",
+      "确认所有代表性岗位示例均来自原始 verified_opportunity_list。",
+      "确认文件已成功读回且结构完整。",
+      "调用 ReturnSkillResult 返回结果。"
+    ]
+  },
+  "complexity": {
+    "level": "bounded",
+    "estimated_steps": 4,
+    "rationale": "涉及语义聚类、多维度特征提取和结构化输出，超越了简单的格式化，但边界清晰，不需要拆分为多个独立 Skill。"
+  },
+  "independence": {
+    "portable": true,
+    "assumptions": [
+      "仅依赖输入的岗位清单、外部网页抓取和文件系统。"
+    ]
+  },
+  "evaluation_cases": [
+    {
+      "id": "success_complete_input",
+      "user_query": "我找到了这些真实的岗位机会，帮我归纳一下背后的职业方向，包括典型的日常职责和交付成果。",
+      "available_context": {
+        "verified_opportunity_list": "包含 5 个算法工程师和 3 个数据分析师的岗位对象，带有详细职责文本。"
+      },
+      "expected_outcome": "success",
+      "must_include": [
+        "career_direction_exploration_results",
+        "typical_responsibilities",
+        "deliverables"
+      ],
+      "must_not_include": [
+        "user_capability_assessment",
+        "learning_plan"
+      ]
+    },
+    {
+      "id": "insufficient_empty_list",
+      "user_query": "帮我看看这份真实岗位清单，总结一下它们主要属于哪些职业方向。",
+      "available_context": {
+        "verified_opportunity_list": []
+      },
+      "expected_outcome": "insufficient_input",
+      "must_include": [
+        "insufficient_input",
+        "empty list"
+      ],
+      "must_not_include": [
+        "career_direction_exploration_results"
+      ]
+    },
+    {
+      "id": "boundary_no_text_but_urls",
+      "user_query": "根据这份岗位清单，帮我提炼出几个潜在的职业方向。",
+      "available_context": {
+        "verified_opportunity_list": "包含 3 个岗位对象，仅有 title 和 source_url，无职责文本。"
+      },
+      "expected_outcome": "success",
+      "must_include": [
+        "WebFetch",
+        "career_direction_exploration_results"
+      ],
+      "must_not_include": [
+        "hallucinated_responsibilities"
+      ]
+    }
+  ],
+  "relation_contract": {
+    "relation_id": "sample_relation_001",
+    "relation_signature": "obj_verified_opportunity_list_b6bd1fe4->obj_career_direction_exploration_results_33aeb77c",
+    "input_object_ids": [
+      "obj_verified_opportunity_list_b6bd1fe4"
+    ],
+    "output_object_id": "obj_career_direction_exploration_results_33aeb77c",
+    "k": 1,
+    "label": "t([obj_verified_opportunity_list_b6bd1fe4],obj_career_direction_exploration_results_33aeb77c)",
+    "context_contract": {
+      "mode": "fused_scenario",
+      "profile_ids": [
+        "profile_ui_001"
+      ],
+      "scenario_ids": [
+        "scenario_fused"
+      ],
+      "binding_ids": [
+        "binding_001"
+      ],
+      "integration_reason": "all sampled objects share a compatible context scope"
+    }
+  }
+}

@@ -9,12 +9,12 @@
 | 指标 | 值 |
 | --- | --- |
 | Manifest 版本 | `1.0` |
-| 生成时间 | `2026-08-27T17:57:08.187Z` |
-| 源码版本 | `feat/skill-e2e-runtime` / `def303721b73`（dirty） |
-| Tool 记录数 | 33 |
-| 不同 Tool 名称数 | 31 |
-| Harness Tool | 28 |
-| Skill Tool | 5 |
+| 生成时间 | `2026-09-01T11:03:13.082Z` |
+| 源码版本 | `<unknown>` / `<unknown>`（dirty） |
+| Tool 记录数 | 66 |
+| 不同 Tool 名称数 | 64 |
+| Harness Tool | 29 |
+| Skill Tool | 37 |
 | Resource 数 | 14 |
 | 带 Resource I/O 的 Tool | 20 |
 | 缺少 output_schema 的 Tool | 1 |
@@ -43,36 +43,36 @@
 
 | 分类 | 数量 |
 | --- | --- |
-| `network.conversation` | 31 |
+| `network.conversation` | 64 |
 | `network.profile_refresh` | 2 |
 
 ### 按 Tool 类型
 
 | 分类 | 数量 |
 | --- | --- |
-| `harness_tool` | 28 |
-| `skill_tool` | 5 |
+| `harness_tool` | 29 |
+| `skill_tool` | 37 |
 
 ### 按 Availability
 
 | 分类 | 数量 |
 | --- | --- |
-| `available` | 32 |
+| `available` | 65 |
 | `conditional` | 1 |
 
 ### 按 Loading
 
 | 分类 | 数量 |
 | --- | --- |
-| `deferred` | 7 |
-| `eager` | 26 |
+| `deferred` | 8 |
+| `eager` | 58 |
 
 ### 按源码类型
 
 | 分类 | 数量 |
 | --- | --- |
-| `builtin` | 24 |
-| `generated_skill_action` | 5 |
+| `builtin` | 25 |
+| `generated_skill_action` | 37 |
 | `service` | 4 |
 
 ### Resource 类型
@@ -114,13 +114,30 @@ I/O 缩写：`C` = consumes，`P` = produces，`R` = reads，`W` = writes。
 | ID | 名称 | 类型 | Context | Availability | Loading | Resource I/O |
 | --- | --- | --- | --- | --- | --- | --- |
 | `network.conversation:harness_tool:ActivateLearningPlan` | `ActivateLearningPlan` | `harness_tool` | `network.conversation` | `available` | `eager` | `C1/P0/R0/W1` |
+| `network.conversation:skill_tool:ApplicationFocusBrief` | `ApplicationFocusBrief` | `skill_tool` | `network.conversation` | `available` | `eager` | `C0/P0/R0/W0` |
+| `network.conversation:skill_tool:ApplicationMaterialsFactCheck` | `ApplicationMaterialsFactCheck` | `skill_tool` | `network.conversation` | `available` | `eager` | `C0/P0/R0/W0` |
+| `network.conversation:skill_tool:ApplicationTrackingStatusRecorder` | `ApplicationTrackingStatusRecorder` | `skill_tool` | `network.conversation` | `available` | `eager` | `C0/P0/R0/W0` |
 | `network.conversation:harness_tool:AskUserQuestion` | `AskUserQuestion` | `harness_tool` | `network.conversation` | `available` | `eager` | `C0/P0/R0/W0` |
 | `network.conversation:skill_tool:BaselineAssessment` | `BaselineAssessment` | `skill_tool` | `network.conversation` | `available` | `eager` | `C0/P1/R0/W0` |
 | `network.conversation:harness_tool:Bash` | `Bash` | `harness_tool` | `network.conversation` | `available` | `eager` | `C0/P1/R0/W0` |
+| `network.conversation:skill_tool:BuildBaseResumeBank` | `BuildBaseResumeBank` | `skill_tool` | `network.conversation` | `available` | `eager` | `C0/P0/R0/W0` |
+| `network.conversation:skill_tool:BuildSubmissionChecklist` | `BuildSubmissionChecklist` | `skill_tool` | `network.conversation` | `available` | `eager` | `C0/P0/R0/W0` |
+| `network.conversation:skill_tool:BuildWeeklyChecklist` | `BuildWeeklyChecklist` | `skill_tool` | `network.conversation` | `available` | `eager` | `C0/P0/R0/W0` |
 | `network.conversation:skill_tool:CareerCompetencyModel` | `CareerCompetencyModel` | `skill_tool` | `network.conversation` | `available` | `eager` | `C0/P1/R0/W0` |
+| `network.conversation:skill_tool:CheckMaterialFormatCompliance` | `CheckMaterialFormatCompliance` | `skill_tool` | `network.conversation` | `available` | `eager` | `C0/P0/R0/W0` |
+| `network.conversation:skill_tool:CompareProfileWithRequirements` | `CompareProfileWithRequirements` | `skill_tool` | `network.conversation` | `available` | `eager` | `C0/P0/R0/W0` |
+| `network.conversation:skill_tool:DirectionValidationActionPlanner` | `DirectionValidationActionPlanner` | `skill_tool` | `network.conversation` | `available` | `eager` | `C0/P0/R0/W0` |
+| `network.conversation:skill_tool:DraftContactMessage` | `DraftContactMessage` | `skill_tool` | `network.conversation` | `available` | `eager` | `C0/P0/R0/W0` |
+| `network.conversation:skill_tool:DraftCoverLetter` | `DraftCoverLetter` | `skill_tool` | `network.conversation` | `available` | `eager` | `C0/P0/R0/W0` |
 | `network.conversation:harness_tool:Edit` | `Edit` | `harness_tool` | `network.conversation` | `available` | `eager` | `C0/P0/R0/W0` |
 | `network.conversation:harness_tool:EnterPlanMode` | `EnterPlanMode` | `harness_tool` | `network.conversation` | `available` | `deferred` | `C0/P0/R0/W1` |
+| `network.conversation:skill_tool:EntryRequirementsReport` | `EntryRequirementsReport` | `skill_tool` | `network.conversation` | `available` | `eager` | `C0/P0/R0/W0` |
 | `network.conversation:harness_tool:ExitPlanMode` | `ExitPlanMode` | `harness_tool` | `network.conversation` | `available` | `deferred` | `C0/P0/R1/W1` |
+| `network.conversation:skill_tool:ExploreCareerDirections` | `ExploreCareerDirections` | `skill_tool` | `network.conversation` | `available` | `eager` | `C0/P0/R0/W0` |
+| `network.conversation:skill_tool:ExtractApplicationRequirements` | `ExtractApplicationRequirements` | `skill_tool` | `network.conversation` | `available` | `eager` | `C0/P0/R0/W0` |
+| `network.conversation:skill_tool:FindRealOpportunities` | `FindRealOpportunities` | `skill_tool` | `network.conversation` | `available` | `eager` | `C0/P0/R0/W0` |
+| `network.conversation:skill_tool:FindReferralEntryPoints` | `FindReferralEntryPoints` | `skill_tool` | `network.conversation` | `available` | `eager` | `C0/P0/R0/W0` |
+| `network.conversation:skill_tool:FollowupPrioritization` | `FollowupPrioritization` | `skill_tool` | `network.conversation` | `available` | `eager` | `C0/P0/R0/W0` |
 | `network.conversation:harness_tool:GetLearningState` | `GetLearningState` | `harness_tool` | `network.conversation` | `available` | `eager` | `C0/P1/R1/W0` |
 | `network.conversation:harness_tool:Glob` | `Glob` | `harness_tool` | `network.conversation` | `available` | `eager` | `C0/P0/R0/W0` |
 | `network.conversation:harness_tool:Grep` | `Grep` | `harness_tool` | `network.conversation` | `available` | `eager` | `C0/P0/R0/W0` |
@@ -128,14 +145,30 @@ I/O 缩写：`C` = consumes，`P` = produces，`R` = reads，`W` = writes。
 | `network.conversation:skill_tool:LearningPlan` | `LearningPlan` | `skill_tool` | `network.conversation` | `available` | `eager` | `C2/P1/R0/W0` |
 | `network.conversation:skill_tool:LearningProgressAssessment` | `LearningProgressAssessment` | `skill_tool` | `network.conversation` | `available` | `eager` | `C1/P1/R1/W0` |
 | `network.conversation:skill_tool:LearningStageDesign` | `LearningStageDesign` | `skill_tool` | `network.conversation` | `available` | `eager` | `C1/P1/R1/W0` |
+| `network.conversation:skill_tool:NarrowDirectionsToValidate` | `NarrowDirectionsToValidate` | `skill_tool` | `network.conversation` | `available` | `eager` | `C0/P0/R0/W0` |
+| `network.conversation:skill_tool:NetworkActionPlan` | `NetworkActionPlan` | `skill_tool` | `network.conversation` | `available` | `eager` | `C0/P0/R0/W0` |
+| `network.conversation:skill_tool:NetworkContactMatcher` | `NetworkContactMatcher` | `skill_tool` | `network.conversation` | `available` | `eager` | `C0/P0/R0/W0` |
+| `network.conversation:skill_tool:NetworkLeadVerification` | `NetworkLeadVerification` | `skill_tool` | `network.conversation` | `available` | `eager` | `C0/P0/R0/W0` |
 | `network.conversation:harness_tool:NotebookEdit` | `NotebookEdit` | `harness_tool` | `network.conversation` | `available` | `deferred` | `C0/P0/R0/W0` |
+| `network.conversation:skill_tool:OpportunityAvailabilityCheck` | `OpportunityAvailabilityCheck` | `skill_tool` | `network.conversation` | `available` | `eager` | `C0/P0/R0/W0` |
+| `network.conversation:skill_tool:OrganizationCredibilityAssessment` | `OrganizationCredibilityAssessment` | `skill_tool` | `network.conversation` | `available` | `eager` | `C0/P0/R0/W0` |
+| `network.conversation:skill_tool:OutreachLeadSequencing` | `OutreachLeadSequencing` | `skill_tool` | `network.conversation` | `available` | `eager` | `C0/P0/R0/W0` |
+| `network.conversation:harness_tool:PdfParse` | `PdfParse` | `harness_tool` | `network.conversation` | `available` | `deferred` | `C0/P0/R0/W0` |
+| `network.conversation:skill_tool:PrepareInformationalInterviews` | `PrepareInformationalInterviews` | `skill_tool` | `network.conversation` | `available` | `eager` | `C0/P0/R0/W0` |
+| `network.conversation:skill_tool:RankOpportunitiesToPursue` | `RankOpportunitiesToPursue` | `skill_tool` | `network.conversation` | `available` | `eager` | `C0/P0/R0/W0` |
 | `network.conversation:harness_tool:Read` | `Read` | `harness_tool` | `network.conversation` | `available` | `eager` | `C0/P0/R0/W0` |
+| `network.conversation:skill_tool:RecordMeetingOutcome` | `RecordMeetingOutcome` | `skill_tool` | `network.conversation` | `available` | `eager` | `C0/P0/R0/W0` |
 | `network.conversation:harness_tool:ReturnSkillResult` | `ReturnSkillResult` | `harness_tool` | `network.conversation` | `available` | `eager` | `C1/P0/R0/W1` |
+| `network.conversation:skill_tool:ReviewOutreachDrafts` | `ReviewOutreachDrafts` | `skill_tool` | `network.conversation` | `available` | `eager` | `C0/P0/R0/W0` |
+| `network.conversation:skill_tool:ReviseMaterialsWithFactCheckResults` | `ReviseMaterialsWithFactCheckResults` | `skill_tool` | `network.conversation` | `available` | `eager` | `C0/P0/R0/W0` |
+| `network.conversation:skill_tool:RewriteProjectAccountsForOpportunity` | `RewriteProjectAccountsForOpportunity` | `skill_tool` | `network.conversation` | `available` | `eager` | `C0/P0/R0/W0` |
 | `network.conversation:harness_tool:Skill` | `Skill` | `harness_tool` | `network.conversation` | `available` | `eager` | `C0/P1/R0/W0` |
+| `network.conversation:skill_tool:TailorResumeForOpportunity` | `TailorResumeForOpportunity` | `skill_tool` | `network.conversation` | `available` | `eager` | `C0/P0/R0/W0` |
 | `network.conversation:harness_tool:TaskOutput` | `TaskOutput` | `harness_tool` | `network.conversation` | `available` | `deferred` | `C1/P0/R0/W0` |
 | `network.conversation:harness_tool:TaskStop` | `TaskStop` | `harness_tool` | `network.conversation` | `available` | `deferred` | `C1/P0/R0/W0` |
 | `network.conversation:harness_tool:TodoWrite` | `TodoWrite` | `harness_tool` | `network.conversation` | `available` | `deferred` | `C0/P0/R0/W0` |
 | `network.conversation:harness_tool:ToolSearch` | `ToolSearch` | `harness_tool` | `network.conversation` | `conditional` | `eager` | `C0/P0/R0/W0` |
+| `network.conversation:skill_tool:UnderstandRealWorkProfile` | `UnderstandRealWorkProfile` | `skill_tool` | `network.conversation` | `available` | `eager` | `C0/P0/R0/W0` |
 | `network.conversation:harness_tool:UpdateLearningPlan` | `UpdateLearningPlan` | `harness_tool` | `network.conversation` | `available` | `eager` | `C1/P1/R1/W1` |
 | `network.conversation:harness_tool:UpdateLearningProgress` | `UpdateLearningProgress` | `harness_tool` | `network.conversation` | `available` | `eager` | `C2/P0/R0/W1` |
 | `network.conversation:harness_tool:VideoGenerate` | `VideoGenerate` | `harness_tool` | `network.conversation` | `available` | `eager` | `C0/P0/R0/W0` |
@@ -151,11 +184,43 @@ I/O 缩写：`C` = consumes，`P` = produces，`R` = reads，`W` = writes。
 
 | Tool ID | Tool 名称 | 来源 Skill | 入口模式 |
 | --- | --- | --- | --- |
+| `network.conversation:skill_tool:ApplicationFocusBrief` | `ApplicationFocusBrief` | `application-focus-brief` | `action-tool` |
+| `network.conversation:skill_tool:ApplicationMaterialsFactCheck` | `ApplicationMaterialsFactCheck` | `application-materials-fact-check` | `action-tool` |
+| `network.conversation:skill_tool:ApplicationTrackingStatusRecorder` | `ApplicationTrackingStatusRecorder` | `application-tracking-status-recorder` | `action-tool` |
 | `network.conversation:skill_tool:BaselineAssessment` | `BaselineAssessment` | `baseline-assessment` | `action-tool` |
+| `network.conversation:skill_tool:BuildBaseResumeBank` | `BuildBaseResumeBank` | `build-base-resume-bank` | `action-tool` |
+| `network.conversation:skill_tool:BuildSubmissionChecklist` | `BuildSubmissionChecklist` | `build-submission-checklist` | `action-tool` |
+| `network.conversation:skill_tool:BuildWeeklyChecklist` | `BuildWeeklyChecklist` | `build-weekly-checklist` | `action-tool` |
 | `network.conversation:skill_tool:CareerCompetencyModel` | `CareerCompetencyModel` | `career-competency-model` | `action-tool` |
+| `network.conversation:skill_tool:CheckMaterialFormatCompliance` | `CheckMaterialFormatCompliance` | `check-material-format-compliance` | `action-tool` |
+| `network.conversation:skill_tool:CompareProfileWithRequirements` | `CompareProfileWithRequirements` | `compare-profile-with-requirements` | `action-tool` |
+| `network.conversation:skill_tool:DirectionValidationActionPlanner` | `DirectionValidationActionPlanner` | `direction-validation-action-planner` | `action-tool` |
+| `network.conversation:skill_tool:DraftContactMessage` | `DraftContactMessage` | `draft-contact-message` | `action-tool` |
+| `network.conversation:skill_tool:DraftCoverLetter` | `DraftCoverLetter` | `draft-targeted-cover-letter` | `action-tool` |
+| `network.conversation:skill_tool:EntryRequirementsReport` | `EntryRequirementsReport` | `understand-entry-requirements` | `action-tool` |
+| `network.conversation:skill_tool:ExploreCareerDirections` | `ExploreCareerDirections` | `explore-career-directions` | `action-tool` |
+| `network.conversation:skill_tool:ExtractApplicationRequirements` | `ExtractApplicationRequirements` | `extract-application-requirements` | `action-tool` |
+| `network.conversation:skill_tool:FindRealOpportunities` | `FindRealOpportunities` | `find-real-opportunities` | `action-tool` |
+| `network.conversation:skill_tool:FindReferralEntryPoints` | `FindReferralEntryPoints` | `find-referral-entry-points` | `action-tool` |
+| `network.conversation:skill_tool:FollowupPrioritization` | `FollowupPrioritization` | `followup-prioritization` | `action-tool` |
 | `network.conversation:skill_tool:LearningPlan` | `LearningPlan` | `learning-plan` | `action-tool` |
 | `network.conversation:skill_tool:LearningProgressAssessment` | `LearningProgressAssessment` | `learning-progress-assessment` | `action-tool` |
 | `network.conversation:skill_tool:LearningStageDesign` | `LearningStageDesign` | `learning-stage-design` | `action-tool` |
+| `network.conversation:skill_tool:NarrowDirectionsToValidate` | `NarrowDirectionsToValidate` | `narrow-directions-to-validate` | `action-tool` |
+| `network.conversation:skill_tool:NetworkActionPlan` | `NetworkActionPlan` | `network-action-plan` | `action-tool` |
+| `network.conversation:skill_tool:NetworkContactMatcher` | `NetworkContactMatcher` | `network-contact-matcher` | `action-tool` |
+| `network.conversation:skill_tool:NetworkLeadVerification` | `NetworkLeadVerification` | `network-lead-verification` | `action-tool` |
+| `network.conversation:skill_tool:OpportunityAvailabilityCheck` | `OpportunityAvailabilityCheck` | `opportunity-availability-check` | `action-tool` |
+| `network.conversation:skill_tool:OrganizationCredibilityAssessment` | `OrganizationCredibilityAssessment` | `organization-credibility-assessment` | `action-tool` |
+| `network.conversation:skill_tool:OutreachLeadSequencing` | `OutreachLeadSequencing` | `outreach-lead-sequencing` | `action-tool` |
+| `network.conversation:skill_tool:PrepareInformationalInterviews` | `PrepareInformationalInterviews` | `prepare-informational-interviews` | `action-tool` |
+| `network.conversation:skill_tool:RankOpportunitiesToPursue` | `RankOpportunitiesToPursue` | `rank-opportunities-to-pursue` | `action-tool` |
+| `network.conversation:skill_tool:RecordMeetingOutcome` | `RecordMeetingOutcome` | `record-meeting-outcome` | `action-tool` |
+| `network.conversation:skill_tool:ReviewOutreachDrafts` | `ReviewOutreachDrafts` | `review-outreach-drafts` | `action-tool` |
+| `network.conversation:skill_tool:ReviseMaterialsWithFactCheckResults` | `ReviseMaterialsWithFactCheckResults` | `revise-materials-with-fact-check-results` | `action-tool` |
+| `network.conversation:skill_tool:RewriteProjectAccountsForOpportunity` | `RewriteProjectAccountsForOpportunity` | `rewrite-project-accounts-for-opportunity` | `action-tool` |
+| `network.conversation:skill_tool:TailorResumeForOpportunity` | `TailorResumeForOpportunity` | `tailor-resume-for-opportunity` | `action-tool` |
+| `network.conversation:skill_tool:UnderstandRealWorkProfile` | `UnderstandRealWorkProfile` | `understand-real-work` | `action-tool` |
 
 ## Conditional Tool
 

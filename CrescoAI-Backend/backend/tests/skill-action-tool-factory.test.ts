@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import {
   GENERATED_FILE_MARKER,
   buildSkillActionToolPlan,
+  pruneStaleGeneratedSkillActionTools,
   renderSkillActionTool,
   writeSkillActionToolPlan,
 } from '../scripts/generate-skill-action-tools.js'
@@ -102,6 +103,8 @@ describe('offline Skill Action Tool factory', () => {
     expect(source).toContain("const SKILL_NAME = \"domain-map\" as const")
     expect(source).toContain('domain: z.string().trim().min(1)')
     expect(source).toContain('executeSkillAction({')
+    expect(source).toContain('alwaysLoad: false')
+    expect(source).toContain('shouldDefer: true')
     expect(source).not.toContain('legacy-skill')
     expect(() => new Bun.Transpiler({ loader: 'ts' }).transformSync(source)).not.toThrow()
   })
@@ -156,6 +159,33 @@ describe('offline Skill Action Tool factory', () => {
     expect(await readFile(plan.registryFile, 'utf8')).toContain(
       'BaselineAssessmentTool',
     )
+  })
+
+  test('prunes only stale factory-generated Tool directories', async () => {
+    const fixture = await createFixture()
+    await writeSkill({ skillsDir: fixture.skillsDir, name: 'active-skill' })
+    const staleDir = join(fixture.toolsDir, 'StaleSkillTool')
+    const manualDir = join(fixture.toolsDir, 'ManualTool')
+    await mkdir(staleDir, { recursive: true })
+    await mkdir(manualDir, { recursive: true })
+    await writeFile(
+      join(staleDir, 'StaleSkillTool.ts'),
+      `${GENERATED_FILE_MARKER}\nexport const StaleSkillTool = {}\n`,
+      'utf8',
+    )
+    await writeFile(
+      join(manualDir, 'ManualTool.ts'),
+      'export const ManualTool = {}\n',
+      'utf8',
+    )
+
+    const plan = await buildSkillActionToolPlan(fixture)
+    await writeSkillActionToolPlan(plan)
+    expect(await pruneStaleGeneratedSkillActionTools(plan, fixture.toolsDir)).toEqual([
+      'StaleSkillTool',
+    ])
+    await expect(readFile(join(staleDir, 'StaleSkillTool.ts'), 'utf8')).rejects.toThrow()
+    expect(await readFile(join(manualDir, 'ManualTool.ts'), 'utf8')).toContain('ManualTool')
   })
 
   test('rejects generated Tool name collisions', async () => {

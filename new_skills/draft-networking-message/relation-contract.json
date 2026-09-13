@@ -1,0 +1,25 @@
+{
+  "relation_id": "sample_relation_017",
+  "relation_signature": "obj_additional_context_5dbfe614+obj_conversation_context_69428588+obj_verified_opportunity_list_b6bd1fe4->obj_draft_message_9a42370d",
+  "input_object_ids": [
+    "obj_additional_context_5dbfe614",
+    "obj_conversation_context_69428588",
+    "obj_verified_opportunity_list_b6bd1fe4"
+  ],
+  "output_object_id": "obj_draft_message_9a42370d",
+  "k": 3,
+  "label": "t([obj_additional_context_5dbfe614,obj_conversation_context_69428588,obj_verified_opportunity_list_b6bd1fe4],obj_draft_message_9a42370d)",
+  "context_contract": {
+    "mode": "fused_scenario",
+    "profile_ids": [
+      "profile_ui_001"
+    ],
+    "scenario_ids": [
+      "scenario_fused"
+    ],
+    "binding_ids": [
+      "binding_001"
+    ],
+    "integration_reason": "all sampled objects share a compatible context scope"
+  }
+}

@@ -1,0 +1,60 @@
+[
+  {
+    "id": "success_complete_input",
+    "user_query": "我刚才写好了给腾讯微信事业群的联系草稿，结合我告诉你的跟进习惯，帮我找找他们家还有哪些公开的校友或内推渠道，整理个名单给我。",
+    "available_context": {
+      "draft_message": "您好，我是XX大学计算机系的硕士生，对微信事业群的后台开发岗位非常感兴趣...",
+      "follow_up_preferences": {
+        "preferred_channel": "LinkedIn",
+        "follow_up_frequency": "weekly",
+        "priority_rules": "official_referral_system > alumni_network > public_email"
+      }
+    },
+    "expected_outcome": "success",
+    "must_include": [
+      "public_contact_directory 数组",
+      "包含腾讯或微信相关的内推系统或校友网络链接",
+      "每个条目包含 priority_rank 和 source_url"
+    ],
+    "must_not_include": [
+      "虚构的私人邮箱",
+      "修改后的联系草稿"
+    ]
+  },
+  {
+    "id": "insufficient_missing_organization",
+    "user_query": "帮我找找公开联系人，这是我的草稿和我的偏好。",
+    "available_context": {
+      "draft_message": "您好，我对贵公司的技术岗位很感兴趣，希望能有机会交流。",
+      "follow_up_preferences": {
+        "preferred_channel": "email"
+      }
+    },
+    "expected_outcome": "insufficient_input",
+    "must_include": [
+      "指出草稿中未明确具体的目标组织名称"
+    ],
+    "must_not_include": [
+      "猜测一个公司并进行搜索"
+    ]
+  },
+  {
+    "id": "boundary_no_public_channels",
+    "user_query": "帮我找一下这家初创公司（名为X）的公开校友和内推途径。",
+    "available_context": {
+      "draft_message": "您好，我对X公司的AI算法岗位感兴趣...",
+      "follow_up_preferences": {
+        "preferred_channel": "LinkedIn"
+      }
+    },
+    "expected_outcome": "insufficient_input",
+    "must_include": [
+      "说明未找到X公司的公开校友网络或官方内推渠道",
+      "建议用户通过草稿中的直接联系人进行跟进"
+    ],
+    "must_not_include": [
+      "编造一个内推链接",
+      "返回空数组并标记为 success"
+    ]
+  }
+]

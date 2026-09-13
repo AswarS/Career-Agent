@@ -1,0 +1,23 @@
+{
+  "relation_id": "sample_relation_004",
+  "relation_signature": "obj_conversation_context_69428588->obj_opportunity_list_69061269",
+  "input_object_ids": [
+    "obj_conversation_context_69428588"
+  ],
+  "output_object_id": "obj_opportunity_list_69061269",
+  "k": 1,
+  "label": "t([obj_conversation_context_69428588],obj_opportunity_list_69061269)",
+  "context_contract": {
+    "mode": "fused_scenario",
+    "profile_ids": [
+      "profile_ui_001"
+    ],
+    "scenario_ids": [
+      "scenario_fused"
+    ],
+    "binding_ids": [
+      "binding_001"
+    ],
+    "integration_reason": "all sampled objects share a compatible context scope"
+  }
+}

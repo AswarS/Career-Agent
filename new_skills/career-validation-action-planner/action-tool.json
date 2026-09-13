@@ -1,0 +1,21 @@
+{
+  "tool_name": "CareerValidationActionPlanner",
+  "user_facing_name": "目标岗位验证与准备计划生成",
+  "search_hint": "generate a structured career validation and preparation action plan based on application history and target job requirements",
+  "preserve_existing": true,
+  "always_load": true,
+  "read_only": false,
+  "child_tools": [],
+  "input": {
+    "application_records": {
+      "type": "json",
+      "required": true,
+      "description": "用户历史投递的岗位申请记录集合，包含目标岗位、所属公司、投递时间、当前流转状态及最后交互时间等事实数据。"
+    },
+    "target_opportunity": {
+      "type": "json",
+      "required": true,
+      "description": "单个目标职位的详细信息，包括职位名称、所属组织、工作职责和任职要求。"
+    }
+  }
+}

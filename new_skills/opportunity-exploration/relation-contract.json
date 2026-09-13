@@ -1,0 +1,24 @@
+{
+  "relation_id": "sample_relation_016",
+  "relation_signature": "obj_additional_context_5dbfe614+obj_validation_action_preferences_2070a4ab->obj_opportunity_list_69061269",
+  "input_object_ids": [
+    "obj_additional_context_5dbfe614",
+    "obj_validation_action_preferences_2070a4ab"
+  ],
+  "output_object_id": "obj_opportunity_list_69061269",
+  "k": 2,
+  "label": "t([obj_additional_context_5dbfe614,obj_validation_action_preferences_2070a4ab],obj_opportunity_list_69061269)",
+  "context_contract": {
+    "mode": "fused_scenario",
+    "profile_ids": [
+      "profile_ui_001"
+    ],
+    "scenario_ids": [
+      "scenario_fused"
+    ],
+    "binding_ids": [
+      "binding_001"
+    ],
+    "integration_reason": "all sampled objects share a compatible context scope"
+  }
+}

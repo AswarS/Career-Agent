@@ -1,0 +1,50 @@
+[
+  {
+    "id": "success_with_alumni",
+    "user_query": "帮我看看我最近投递的这些公司里，有没有我的校友，整理一份联系人名单。",
+    "available_context": {
+      "application_tracking_report": "包含目标公司 A 和 B 的申请记录。",
+      "user_educational_institutions": "某某大学"
+    },
+    "expected_outcome": "success",
+    "must_include": [
+      "public_contact_directory 数组中包含公司 A 或 B 的校友线索。",
+      "每个线索包含 source_url 和 verification_status。"
+    ],
+    "must_not_include": [
+      "编造私人手机号或邮箱。",
+      "修改申请追踪报告的内容。"
+    ]
+  },
+  {
+    "id": "insufficient_no_companies",
+    "user_query": "帮我找找目标公司的内推入口。",
+    "available_context": {
+      "application_tracking_report": "空报告，无目标公司。",
+      "user_educational_institutions": "某某大学"
+    },
+    "expected_outcome": "insufficient_input",
+    "must_include": [
+      "说明 application_tracking_report 中未包含目标公司信息。"
+    ],
+    "must_not_include": [
+      "尝试搜索通用内推入口。"
+    ]
+  },
+  {
+    "id": "boundary_no_alumni_found",
+    "user_query": "结合我的申请追踪报告和就读学校，帮我提取一下这些公司里的校友。",
+    "available_context": {
+      "application_tracking_report": "包含目标公司 C。",
+      "user_educational_institutions": "某某大学"
+    },
+    "expected_outcome": "success",
+    "must_include": [
+      "public_contact_directory 可能为空数组，或仅包含公司 C 的公开 HR/招聘联系人。",
+      "明确说明未找到直接校友线索。"
+    ],
+    "must_not_include": [
+      "虚构校友名字。"
+    ]
+  }
+]

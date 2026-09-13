@@ -1,0 +1,51 @@
+[
+  {
+    "id": "success_complete_input",
+    "user_query": "我打算申请这个算法工程师岗位（附上JD），这是我之前的投递记录和面试反馈，帮我结合这些经验，制定一个接下来两周的验证和准备计划。",
+    "available_context": {
+      "application_records": "[{\"company\": \"A\", \"status\": \"interview_failed\", \"feedback\": \"缺乏大模型微调经验\"}, {\"company\": \"B\", \"status\": \"resume_rejected\"}]",
+      "target_opportunity": "{\"title\": \"Algorithm Engineer\", \"requirements\": [\"PyTorch\", \"LLM fine-tuning\", \"Python\"]}"
+    },
+    "expected_outcome": "success",
+    "must_include": [
+      "包含针对 LLM fine-tuning 缺口的具体学习或验证步骤",
+      "estimated_hours 为正数",
+      "rationale 引用了 A 公司的面试反馈"
+    ],
+    "must_not_include": [
+      "编造 B 公司的具体拒信原因",
+      "自动向 A 或 B 公司重新投递简历"
+    ]
+  },
+  {
+    "id": "insufficient_empty_records",
+    "user_query": "帮我看看这个目标岗位的要求，给我列一个具体的行动计划。",
+    "available_context": {
+      "application_records": "[]",
+      "target_opportunity": "{\"title\": \"Data Scientist\", \"requirements\": [\"SQL\", \"Python\"]}"
+    },
+    "expected_outcome": "insufficient_input",
+    "must_include": [
+      "指出 application_records 为空，无法结合历史经验制定计划"
+    ],
+    "must_not_include": [
+      "基于假设的历史记录生成计划"
+    ]
+  },
+  {
+    "id": "boundary_no_feedback",
+    "user_query": "这是我过往的投递情况，请帮我规划一下接下来的验证行动步骤。",
+    "available_context": {
+      "application_records": "[{\"company\": \"C\", \"status\": \"pending\", \"days_since_apply\": 30}]",
+      "target_opportunity": "{\"title\": \"Backend Engineer\", \"requirements\": [\"Go\", \"Microservices\"]}"
+    },
+    "expected_outcome": "success",
+    "must_include": [
+      "针对 C 公司长期 pending 状态提出跟进或策略调整建议",
+      "不编造 C 公司的具体内部反馈"
+    ],
+    "must_not_include": [
+      "捏造 C 公司 HR 的具体回复内容"
+    ]
+  }
+]

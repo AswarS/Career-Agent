@@ -1,0 +1,29 @@
+{
+  "tool_name": "RoleContextResearch",
+  "user_facing_name": "目标岗位背景上下文调研",
+  "search_hint": "research industry context, business lines, and company characteristics for a target role",
+  "preserve_existing": true,
+  "always_load": true,
+  "read_only": false,
+  "child_tools": [
+    "WebSearch",
+    "WebFetch"
+  ],
+  "input": {
+    "opportunity_count_per_direction": {
+      "type": "number",
+      "required": true,
+      "description": "每个探索的职业方向需要检索的真实岗位机会数量。"
+    },
+    "target_role_description": {
+      "type": "string",
+      "required": true,
+      "description": "目标岗位的职责说明、任职要求、技能要求或相关公开链接文本，用于解析岗位核心要求。"
+    },
+    "weekly_time_availability": {
+      "type": "number",
+      "required": true,
+      "description": "用户每周可用于执行职业验证行动的小时数。"
+    }
+  }
+}

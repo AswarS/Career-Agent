@@ -1,0 +1,141 @@
+{
+  "version": 1,
+  "profile": "career-agent-core",
+  "retained": [
+    "application-focus-brief",
+    "application-materials-fact-check",
+    "application-tracking-status-recorder",
+    "build-base-resume-bank",
+    "build-submission-checklist",
+    "build-weekly-checklist",
+    "check-material-format-compliance",
+    "compare-profile-with-requirements",
+    "direction-validation-action-planner",
+    "draft-contact-message",
+    "draft-targeted-cover-letter",
+    "explore-career-directions",
+    "extract-application-requirements",
+    "find-real-opportunities",
+    "find-referral-entry-points",
+    "followup-prioritization",
+    "narrow-directions-to-validate",
+    "network-action-plan",
+    "network-contact-matcher",
+    "network-lead-verification",
+    "opportunity-availability-check",
+    "organization-credibility-assessment",
+    "outreach-lead-sequencing",
+    "prepare-informational-interviews",
+    "rank-opportunities-to-pursue",
+    "record-meeting-outcome",
+    "review-outreach-drafts",
+    "revise-materials-with-fact-check-results",
+    "rewrite-project-accounts-for-opportunity",
+    "tailor-resume-for-opportunity",
+    "understand-entry-requirements",
+    "understand-real-work"
+  ],
+  "retired": {
+    "check-missing-application-documents": {
+      "merged_into": "build-submission-checklist",
+      "reason": "Missing-document detection is one status in a submission checklist."
+    },
+    "compare-material-requirements": {
+      "merged_into": "extract-application-requirements",
+      "reason": "Requirement extraction already produces normalized material constraints that can be compared in conversation."
+    },
+    "compare-opportunity-targets": {
+      "merged_into": "rank-opportunities-to-pursue",
+      "reason": "Both compare verified opportunities against user criteria and evidence."
+    },
+    "compare-roles-or-directions": {
+      "merged_into": "narrow-directions-to-validate",
+      "reason": "Direction comparison is the ranking step performed while narrowing candidates."
+    },
+    "draft-email-out-of-cover-letter": {
+      "merged_into": "draft-targeted-cover-letter",
+      "reason": "Compressing a completed letter into an email is a lightweight conversational rewrite, not a separate workflow capability."
+    },
+    "draft-informational-interview-outreach": {
+      "merged_into": "draft-contact-message",
+      "reason": "Informational outreach is a contact-message intent."
+    },
+    "draft-outreach-message": {
+      "merged_into": "draft-contact-message",
+      "reason": "Requirement clarification outreach is a contact-message intent."
+    },
+    "evidence-gap-plan": {
+      "merged_into": "compare-profile-with-requirements",
+      "reason": "Both map verified user evidence to opportunity requirements and identify gaps."
+    },
+    "info-conversation-prep": {
+      "merged_into": "prepare-informational-interviews",
+      "reason": "Both create grounded goals and questions for an information conversation."
+    },
+    "list-unverified-facts-for-supplement": {
+      "merged_into": "application-materials-fact-check",
+      "reason": "Unverified facts are already an output class of application fact checking."
+    },
+    "material-prep-planning": {
+      "merged_into": "rank-opportunities-to-pursue",
+      "reason": "Material preparation priority follows opportunity priority and can be scheduled by the weekly checklist."
+    },
+    "outreach-lead-comparison": {
+      "merged_into": "outreach-lead-sequencing",
+      "reason": "Lead comparison exists to produce a contact order, which sequencing already returns."
+    },
+    "prepare-informational-questions": {
+      "merged_into": "prepare-informational-interviews",
+      "reason": "Clarifying questions are a specialized informational-interview question set."
+    },
+    "prepare-project-showcase-sheet": {
+      "merged_into": "rewrite-project-accounts-for-opportunity",
+      "reason": "The core evidence-bound project rewrite is retained; one-page formatting can be handled in normal conversation."
+    },
+    "preview-likely-evaluation-questions": {
+      "merged_into": "understand-entry-requirements",
+      "reason": "Likely questions are a lightweight derivative of entry requirements and evidence gaps."
+    },
+    "response-digest-synthesis": {
+      "merged_into": "followup-prioritization",
+      "reason": "Both turn application responses into prioritized next actions."
+    },
+    "role-context-brief": {
+      "merged_into": "understand-real-work",
+      "reason": "Role context, daily work, deliverables, and collaboration evidence substantially overlap."
+    },
+    "translate-application-material": {
+      "merged_into": "tailor-resume-for-opportunity",
+      "reason": "Translation is a general model capability and does not justify a dedicated deferred Tool."
+    }
+  },
+  "overrides": {
+    "build-submission-checklist": {
+      "search_hint": "check missing application documents and build a final submission checklist from requirements and prepared materials"
+    },
+    "compare-profile-with-requirements": {
+      "search_hint": "compare verified user evidence with role requirements, identify evidence gaps, and list facts that still need confirmation"
+    },
+    "draft-contact-message": {
+      "search_hint": "draft a restrained contact message for networking, informational interviews, referrals, or application requirement clarification"
+    },
+    "followup-prioritization": {
+      "search_hint": "digest application responses and prioritize who to follow up with and what to do next"
+    },
+    "narrow-directions-to-validate": {
+      "search_hint": "compare, narrow, and rank candidate career directions for validation using user evidence and constraints"
+    },
+    "prepare-informational-interviews": {
+      "search_hint": "prepare grounded goals and questions for an informational interview or role conversation"
+    },
+    "rank-opportunities-to-pursue": {
+      "search_hint": "compare and rank verified job opportunities and decide where application preparation effort should go first"
+    },
+    "rewrite-project-accounts-for-opportunity": {
+      "search_hint": "rewrite verified project experience for a target opportunity or project showcase while preserving factual boundaries"
+    },
+    "understand-real-work": {
+      "search_hint": "research role context, daily work, deliverables, collaborators, and team environment from public evidence"
+    }
+  }
+}

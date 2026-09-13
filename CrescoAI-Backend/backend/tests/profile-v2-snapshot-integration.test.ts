@@ -433,7 +433,7 @@ describe('Profile V2 snapshot integration', () => {
     });
   });
 
-  test('interactive and refresh Profile tools use isolated schema caches', () => {
+  test('interactive and refresh Profile tools use isolated schema caches', async () => {
     const interactive = createProductProfileTools({
       userId: 1,
       conversationId: 'conversation',
@@ -453,6 +453,8 @@ describe('Profile V2 snapshot integration', () => {
       .toBe('product-profile-interactive');
     expect(interactive.find((tool) => tool.name === 'profile_update')?.schemaCacheNamespace)
       .toBe('product-profile-interactive');
+    expect(await interactive.find((tool) => tool.name === 'profile_read')?.prompt())
+      .toContain('{"source":"relevant","query":"a non-empty description of the current career task"}');
     expect(refresh.find((tool) => tool.name === 'profile_read')?.schemaCacheNamespace)
       .toBe('product-profile-refresh');
     expect(refresh.find((tool) => tool.name === 'profile_update')?.schemaCacheNamespace)

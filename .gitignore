@@ -9,6 +9,10 @@
 /skills2/
 /web_app_skills/
 
+# Local Windows launchers
+/start_windows.cmd
+/start_windows.ps1
+
 # Scratch archives
 *.zip
 *.rar

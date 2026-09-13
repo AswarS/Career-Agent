@@ -150,7 +150,10 @@ export function parseConversationMemorySummary(content: string): ParsedSummary {
   const topics = [...match[2].matchAll(/^##\s+(.+?)\s*$/gm)].map((item) =>
     item[1].trim(),
   )
-  return { frontmatter, body: match[2].trimEnd(), topics }
+  // Blank lines between YAML frontmatter and the first Markdown heading are
+  // conventional and do not change the document structure. Normalize outer
+  // body whitespace before validating the required H1.
+  return { frontmatter, body: match[2].trim(), topics }
 }
 
 export function validateConversationMemorySummary(

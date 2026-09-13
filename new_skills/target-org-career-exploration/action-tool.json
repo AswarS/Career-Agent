@@ -1,0 +1,19 @@
+{
+  "tool_name": "TargetOrgCareerExploration",
+  "user_facing_name": "目标组织职业方向探索",
+  "search_hint": "explore career directions and role requirements within specific target organizations",
+  "preserve_existing": true,
+  "always_load": true,
+  "read_only": false,
+  "child_tools": [
+    "WebSearch",
+    "WebFetch"
+  ],
+  "input": {
+    "target_organizations": {
+      "type": "json",
+      "required": true,
+      "description": "用户需要寻找公开联系人或内推途径的特定公司或组织列表。"
+    }
+  }
+}

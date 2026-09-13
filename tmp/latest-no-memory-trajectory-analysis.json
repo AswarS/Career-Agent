@@ -1,0 +1,692 @@
+{
+  "schema_version": "1.0",
+  "analyzed_at": "2026-09-13T17:32:35.541Z",
+  "user_id": 1,
+  "conversation_id": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+  "notes": {
+    "exact_usage": "Provider-reported usage. processed_input = input + cache_creation + cache_read.",
+    "payload_estimate": "CJK ~= 1 token/character; other text ~= 1 token/4 characters. Used only to locate content hotspots."
+  },
+  "totals": {
+    "api_calls": 10,
+    "input": 206425,
+    "cacheCreation": 0,
+    "cacheRead": 0,
+    "output": 22749,
+    "processedInput": 206425,
+    "total": 229174
+  },
+  "trajectory_distribution": {
+    "count": 1,
+    "sum": 229174,
+    "min": 229174,
+    "mean": 229174,
+    "p25": 229174,
+    "p50": 229174,
+    "p75": 229174,
+    "p90": 229174,
+    "p95": 229174,
+    "max": 229174
+  },
+  "api_call_distribution": {
+    "count": 10,
+    "sum": 229174,
+    "min": 11522,
+    "mean": 22917,
+    "p25": 21906,
+    "p50": 22099,
+    "p75": 24411,
+    "p90": 28190,
+    "p95": 28190,
+    "max": 34036
+  },
+  "trajectory_histogram": [
+    {
+      "bucket": "<10k",
+      "count": 0
+    },
+    {
+      "bucket": "10k-50k",
+      "count": 0
+    },
+    {
+      "bucket": "50k-100k",
+      "count": 0
+    },
+    {
+      "bucket": "100k-250k",
+      "count": 1
+    },
+    {
+      "bucket": "250k-1m",
+      "count": 0
+    },
+    {
+      "bucket": ">=1m",
+      "count": 0
+    }
+  ],
+  "top_trajectories": [
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "apiCalls": 10,
+      "payloadEstimatedTokens": 28625,
+      "payloadByCategory": {
+        "user_text": 26,
+        "assistant_thinking": 22970,
+        "tool_input:ToolSearch": 89,
+        "tool_input:profile_read": 42,
+        "tool_result:ToolSearch": 111,
+        "tool_result:profile_read": 9,
+        "assistant_text": 1178,
+        "tool_input:profile_update": 554,
+        "tool_input:AskUserQuestion": 566,
+        "tool_result:profile_update": 182,
+        "tool_result:AskUserQuestion": 201,
+        "tool_input:Grep": 33,
+        "tool_result:Grep": 57,
+        "tool_input:FindReferralEntryPoints": 306,
+        "tool_result:FindReferralEntryPoints": 2301
+      },
+      "input": 206425,
+      "cacheCreation": 0,
+      "cacheRead": 0,
+      "output": 22749,
+      "processedInput": 206425,
+      "total": 229174
+    }
+  ],
+  "payload_categories": [
+    {
+      "category": "assistant_thinking",
+      "estimatedTokens": 22970
+    },
+    {
+      "category": "tool_result:FindReferralEntryPoints",
+      "estimatedTokens": 2301
+    },
+    {
+      "category": "assistant_text",
+      "estimatedTokens": 1178
+    },
+    {
+      "category": "tool_input:AskUserQuestion",
+      "estimatedTokens": 566
+    },
+    {
+      "category": "tool_input:profile_update",
+      "estimatedTokens": 554
+    },
+    {
+      "category": "tool_input:FindReferralEntryPoints",
+      "estimatedTokens": 306
+    },
+    {
+      "category": "tool_result:AskUserQuestion",
+      "estimatedTokens": 201
+    },
+    {
+      "category": "tool_result:profile_update",
+      "estimatedTokens": 182
+    },
+    {
+      "category": "tool_result:ToolSearch",
+      "estimatedTokens": 111
+    },
+    {
+      "category": "tool_input:ToolSearch",
+      "estimatedTokens": 89
+    },
+    {
+      "category": "tool_result:Grep",
+      "estimatedTokens": 57
+    },
+    {
+      "category": "tool_input:profile_read",
+      "estimatedTokens": 42
+    },
+    {
+      "category": "tool_input:Grep",
+      "estimatedTokens": 33
+    },
+    {
+      "category": "user_text",
+      "estimatedTokens": 26
+    },
+    {
+      "category": "tool_result:profile_read",
+      "estimatedTokens": 9
+    }
+  ],
+  "top_api_calls": [
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "216a2b00-2a8e-4500-b7c4-15d8091a28da",
+      "timestamp": "2026-09-13T17:24:05.721Z",
+      "model": "GLM-5.3",
+      "stopReason": "tool_use",
+      "tools": [
+        "AskUserQuestion"
+      ],
+      "input": 22194,
+      "cacheCreation": 0,
+      "cacheRead": 0,
+      "output": 11842,
+      "processedInput": 22194,
+      "total": 34036
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "40ce6ec6-cd3d-4324-92be-5ca99ce25b9b",
+      "timestamp": "2026-09-13T17:25:36.053Z",
+      "model": "GLM-5.3",
+      "stopReason": "tool_use",
+      "tools": [
+        "Grep"
+      ],
+      "input": 22974,
+      "cacheCreation": 0,
+      "cacheRead": 0,
+      "output": 5216,
+      "processedInput": 22974,
+      "total": 28190
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "c4b0ab21-cebc-4516-8bf6-e857da47cf62",
+      "timestamp": "2026-09-13T17:28:17.387Z",
+      "model": "GLM-5.3",
+      "stopReason": "end_turn",
+      "tools": [],
+      "input": 26535,
+      "cacheCreation": 0,
+      "cacheRead": 0,
+      "output": 1543,
+      "processedInput": 26535,
+      "total": 28078
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "36c246be-1cc7-47c6-985e-1f9fc0760d27",
+      "timestamp": "2026-09-13T17:25:46.654Z",
+      "model": "GLM-5.3",
+      "stopReason": "tool_use",
+      "tools": [
+        "FindReferralEntryPoints"
+      ],
+      "input": 23749,
+      "cacheCreation": 0,
+      "cacheRead": 0,
+      "output": 662,
+      "processedInput": 23749,
+      "total": 24411
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "37586ba4-9683-42e6-a722-b8b517b8b246",
+      "timestamp": "2026-09-13T17:25:48.418Z",
+      "model": "GLM-5.3",
+      "stopReason": "tool_use",
+      "tools": [
+        "ToolSearch"
+      ],
+      "input": 23956,
+      "cacheCreation": 0,
+      "cacheRead": 0,
+      "output": 23,
+      "processedInput": 23956,
+      "total": 23979
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "1adb0fd9-c01e-4c45-8c78-886df9580c20",
+      "timestamp": "2026-09-13T17:20:07.339Z",
+      "model": "GLM-5.3",
+      "stopReason": "tool_use",
+      "tools": [
+        "profile_read"
+      ],
+      "input": 21724,
+      "cacheCreation": 0,
+      "cacheRead": 0,
+      "output": 375,
+      "processedInput": 21724,
+      "total": 22099
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "19a1e00f-5305-4672-aa72-a1a6a1eb4333",
+      "timestamp": "2026-09-13T17:20:12.709Z",
+      "model": "GLM-5.3",
+      "stopReason": "tool_use",
+      "tools": [
+        "ToolSearch"
+      ],
+      "input": 21850,
+      "cacheCreation": 0,
+      "cacheRead": 0,
+      "output": 71,
+      "processedInput": 21850,
+      "total": 21921
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "170a41e4-304a-4d99-aa9c-c62f3208318b",
+      "timestamp": "2026-09-13T17:20:10.003Z",
+      "model": "GLM-5.3",
+      "stopReason": "tool_use",
+      "tools": [
+        "ToolSearch"
+      ],
+      "input": 21809,
+      "cacheCreation": 0,
+      "cacheRead": 0,
+      "output": 97,
+      "processedInput": 21809,
+      "total": 21906
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "b59f726d-e943-4986-828a-5972c1b4f86e",
+      "timestamp": "2026-09-13T17:20:51.626Z",
+      "model": "GLM-5.3",
+      "stopReason": "end_turn",
+      "tools": [],
+      "input": 10337,
+      "cacheCreation": 0,
+      "cacheRead": 0,
+      "output": 2695,
+      "processedInput": 10337,
+      "total": 13032
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "2b759c22-c984-4282-8d8f-c16e2ae727fd",
+      "timestamp": "2026-09-13T17:25:52.046Z",
+      "model": "GLM-5.3",
+      "stopReason": "tool_use",
+      "tools": [
+        "FindReferralEntryPoints"
+      ],
+      "input": 11297,
+      "cacheCreation": 0,
+      "cacheRead": 0,
+      "output": 225,
+      "processedInput": 11297,
+      "total": 11522
+    }
+  ],
+  "top_payloads": [
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "2d6c2bf6-11fa-42b5-8ce5-9e9739da4797",
+      "timestamp": "2026-09-13T17:24:05.711Z",
+      "category": "assistant_thinking",
+      "estimatedTokens": 12637,
+      "characters": 42880
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "5de09d81-4a36-4f31-8e35-67707f08ef0b",
+      "timestamp": "2026-09-13T17:25:36.046Z",
+      "category": "assistant_thinking",
+      "estimatedTokens": 5465,
+      "characters": 20337
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "5f5e6e63-0262-46f3-85fd-a0a539a764d2",
+      "timestamp": "2026-09-13T17:20:51.623Z",
+      "category": "assistant_thinking",
+      "estimatedTokens": 2966,
+      "characters": 10675
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "19b27bf5-670c-4c89-8179-026ff16bcd57",
+      "timestamp": "2026-09-13T17:27:58.085Z",
+      "category": "tool_result:FindReferralEntryPoints",
+      "estimatedTokens": 2224,
+      "characters": 6128
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "3f5a85ce-9b8f-4318-8bea-5c77c328f033",
+      "timestamp": "2026-09-13T17:28:17.386Z",
+      "category": "assistant_thinking",
+      "estimatedTokens": 807,
+      "characters": 3123
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "c4b0ab21-cebc-4516-8bf6-e857da47cf62",
+      "timestamp": "2026-09-13T17:28:17.387Z",
+      "category": "assistant_text",
+      "estimatedTokens": 790,
+      "characters": 1346
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "17dfb472-a7c2-4ef0-8882-8a8777509b5f",
+      "timestamp": "2026-09-13T17:25:46.653Z",
+      "category": "assistant_thinking",
+      "estimatedTokens": 594,
+      "characters": 2316
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "216a2b00-2a8e-4500-b7c4-15d8091a28da",
+      "timestamp": "2026-09-13T17:24:05.721Z",
+      "category": "tool_input:AskUserQuestion",
+      "estimatedTokens": 566,
+      "characters": 1169
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "b2b9dc25-95f5-4d97-bdd2-073d9eb19cfa",
+      "timestamp": "2026-09-13T17:20:07.335Z",
+      "category": "assistant_thinking",
+      "estimatedTokens": 379,
+      "characters": 1466
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "b59f726d-e943-4986-828a-5972c1b4f86e",
+      "timestamp": "2026-09-13T17:20:51.626Z",
+      "category": "assistant_text",
+      "estimatedTokens": 328,
+      "characters": 396
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "2b759c22-c984-4282-8d8f-c16e2ae727fd",
+      "timestamp": "2026-09-13T17:25:52.046Z",
+      "category": "tool_input:FindReferralEntryPoints",
+      "estimatedTokens": 270,
+      "characters": 517
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "549a2a73-a073-4d92-87da-1deaa33a9a1d",
+      "timestamp": "2026-09-13T17:24:19.908Z",
+      "category": "tool_result:AskUserQuestion",
+      "estimatedTokens": 201,
+      "characters": 359
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "a6069433-425e-4682-9577-a87ca107edbd",
+      "timestamp": "2026-09-13T17:25:36.052Z",
+      "category": "tool_input:profile_update",
+      "estimatedTokens": 97,
+      "characters": 195
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "af0ffe1e-ec26-4db5-8d2b-0496a47556eb",
+      "timestamp": "2026-09-13T17:20:10.002Z",
+      "category": "assistant_thinking",
+      "estimatedTokens": 82,
+      "characters": 326
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "67944103-95f6-495e-a7fa-fc1fe7b8cc83",
+      "timestamp": "2026-09-13T17:24:05.716Z",
+      "category": "tool_input:profile_update",
+      "estimatedTokens": 82,
+      "characters": 168
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "7b272e21-e175-40fc-954d-d0965dec39b1",
+      "timestamp": "2026-09-13T17:25:46.765Z",
+      "category": "tool_result:FindReferralEntryPoints",
+      "estimatedTokens": 77,
+      "characters": 306
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "cfaa1fe7-8584-4a6e-8dd5-6a6c11b8ff7c",
+      "timestamp": "2026-09-13T17:25:36.053Z",
+      "category": "tool_input:profile_update",
+      "estimatedTokens": 70,
+      "characters": 161
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "17388582-1686-4696-b341-0bbbe55a0add",
+      "timestamp": "2026-09-13T17:25:36.051Z",
+      "category": "tool_input:profile_update",
+      "estimatedTokens": 69,
+      "characters": 152
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "171302ed-e517-4f2c-a239-5d13fefac4c2",
+      "timestamp": "2026-09-13T17:25:36.052Z",
+      "category": "tool_input:profile_update",
+      "estimatedTokens": 69,
+      "characters": 159
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "bc133120-ee52-4fd0-87e0-f1142df7f1c4",
+      "timestamp": "2026-09-13T17:25:46.654Z",
+      "category": "tool_input:profile_update",
+      "estimatedTokens": 69,
+      "characters": 174
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "2b717a92-9aa6-4184-be06-437569fdb283",
+      "timestamp": "2026-09-13T17:20:12.720Z",
+      "category": "tool_result:ToolSearch",
+      "estimatedTokens": 63,
+      "characters": 249
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "28948fc1-17b2-4353-abe9-f78206bca559",
+      "timestamp": "2026-09-13T17:25:36.050Z",
+      "category": "assistant_text",
+      "estimatedTokens": 60,
+      "characters": 69
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "6470a452-3081-4c88-b439-8bfeeeccf9aa",
+      "timestamp": "2026-09-13T17:25:36.556Z",
+      "category": "tool_result:Grep",
+      "estimatedTokens": 57,
+      "characters": 214
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "bf9ce449-735b-4e50-9e3c-10985151822f",
+      "timestamp": "2026-09-13T17:25:36.051Z",
+      "category": "tool_input:profile_update",
+      "estimatedTokens": 54,
+      "characters": 150
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "03d03ce3-6abd-44ad-95ce-fd26395918d0",
+      "timestamp": "2026-09-13T17:25:36.053Z",
+      "category": "tool_input:profile_update",
+      "estimatedTokens": 44,
+      "characters": 128
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "1adb0fd9-c01e-4c45-8c78-886df9580c20",
+      "timestamp": "2026-09-13T17:20:07.339Z",
+      "category": "tool_input:profile_read",
+      "estimatedTokens": 42,
+      "characters": 68
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "4668e208-87dc-4c3e-a36d-8e0fc4471df7",
+      "timestamp": "2026-09-13T17:20:12.709Z",
+      "category": "assistant_thinking",
+      "estimatedTokens": 40,
+      "characters": 157
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "36c246be-1cc7-47c6-985e-1f9fc0760d27",
+      "timestamp": "2026-09-13T17:25:46.654Z",
+      "category": "tool_input:FindReferralEntryPoints",
+      "estimatedTokens": 36,
+      "characters": 80
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "40ce6ec6-cd3d-4324-92be-5ca99ce25b9b",
+      "timestamp": "2026-09-13T17:25:36.053Z",
+      "category": "tool_input:Grep",
+      "estimatedTokens": 33,
+      "characters": 132
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "87ecf6f6-4448-4510-baa0-dc22f58d9d6e",
+      "timestamp": "2026-09-13T17:25:48.431Z",
+      "category": "tool_result:ToolSearch",
+      "estimatedTokens": 32,
+      "characters": 128
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "19a1e00f-5305-4672-aa72-a1a6a1eb4333",
+      "timestamp": "2026-09-13T17:20:12.709Z",
+      "category": "tool_input:ToolSearch",
+      "estimatedTokens": 31,
+      "characters": 123
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "170a41e4-304a-4d99-aa9c-c62f3208318b",
+      "timestamp": "2026-09-13T17:20:10.003Z",
+      "category": "tool_input:ToolSearch",
+      "estimatedTokens": 29,
+      "characters": 116
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "390261a2-76c5-4fca-8b0c-e42bbae9bb2e",
+      "timestamp": "2026-09-13T17:25:46.763Z",
+      "category": "tool_result:profile_update",
+      "estimatedTokens": 26,
+      "characters": 103
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "1ccaa3c5-d791-457c-9eea-32dbf987e02a",
+      "timestamp": "2026-09-13T17:25:36.244Z",
+      "category": "tool_result:profile_update",
+      "estimatedTokens": 25,
+      "characters": 100
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "788a860e-d52a-4bea-bc92-72ad9a995d0e",
+      "timestamp": "2026-09-13T17:24:05.917Z",
+      "category": "tool_result:profile_update",
+      "estimatedTokens": 24,
+      "characters": 95
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "af608e88-f63a-44a6-89b2-feefb4f8ca16",
+      "timestamp": "2026-09-13T17:25:36.146Z",
+      "category": "tool_result:profile_update",
+      "estimatedTokens": 24,
+      "characters": 95
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "9030db74-665c-4e31-aa6c-6aa712582c41",
+      "timestamp": "2026-09-13T17:25:36.375Z",
+      "category": "tool_result:profile_update",
+      "estimatedTokens": 24,
+      "characters": 94
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "b60a063c-cb7a-40ec-a450-3e8dcd9557a9",
+      "timestamp": "2026-09-13T17:25:36.405Z",
+      "category": "tool_result:profile_update",
+      "estimatedTokens": 24,
+      "characters": 94
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "b75e8644-b2c0-45c4-87eb-9f91a69f2a4a",
+      "timestamp": "2026-09-13T17:25:36.554Z",
+      "category": "tool_result:profile_update",
+      "estimatedTokens": 24,
+      "characters": 95
+    },
+    {
+      "conversationId": "e3a192ed-b52d-4306-97dc-fd774a0ba738",
+      "title": "帮我寻找浙大可用的阿里人脉做内推",
+      "eventId": "d2335ea3-d542-4cc9-aec3-ec7cf4184249",
+      "timestamp": "2026-09-13T17:20:00.548Z",
+      "category": "user_text",
+      "estimatedTokens": 16,
+      "characters": 16
+    }
+  ]
+}

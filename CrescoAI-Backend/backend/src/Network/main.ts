@@ -41,8 +41,10 @@ async function bootstrap() {
     }),
   );
 
-  await app.listen(process.env.PORT ?? 4000);
-  console.log(`Server started on http://localhost:${process.env.PORT ?? 4000}`);
+  const port = process.env.PORT ?? 4000;
+  const host = process.env.HOST?.trim() || '0.0.0.0';
+  await app.listen(port, host);
+  console.log(`Server started on http://${host}:${port}`);
   const skipAuth = process.env.CAREER_AGENT_SKIP_AUTH?.trim().toLowerCase();
   if (skipAuth === '1' || skipAuth === 'true' || skipAuth === 'yes' || skipAuth === 'on') {
     console.warn(

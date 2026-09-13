@@ -11,6 +11,7 @@ import { getGeneratedSkillActionTools } from './tools/generatedSkillActionTools.
 import { BashTool } from './tools/BashTool/BashTool.js'
 import { FileEditTool } from './tools/FileEditTool/FileEditTool.js'
 import { FileReadTool } from './tools/FileReadTool/FileReadTool.js'
+import { PdfParseTool } from './tools/PdfParseTool/PdfParseTool.js'
 import { FileWriteTool } from './tools/FileWriteTool/FileWriteTool.js'
 import { GlobTool } from './tools/GlobTool/GlobTool.js'
 import { NotebookEditTool } from './tools/NotebookEditTool/NotebookEditTool.js'
@@ -209,6 +210,7 @@ export function getAllBaseTools(): Tools {
     ...(hasEmbeddedSearchTools() ? [] : [GlobTool, GrepTool]),
     ExitPlanModeV2Tool,
     FileReadTool,
+    PdfParseTool,
     FileEditTool,
     FileWriteTool,
     NotebookEditTool,

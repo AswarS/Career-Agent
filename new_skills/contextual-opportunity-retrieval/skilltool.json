@@ -1,0 +1,260 @@
+{
+  "skill_id": "contextual_opportunity_retrieval",
+  "skill_name": "contextual-opportunity-retrieval",
+  "tool_name": "ContextualOpportunityRetrieval",
+  "title": "沟通背景岗位检索",
+  "business_goal": "根据用户提供的沟通背景与目的，检索并结构化整理相关的真实目标岗位清单，为人际沟通或信息访谈提供具体的岗位案例和讨论素材。",
+  "invocation_mode": "standalone",
+  "composition": {
+    "required_prior_outputs": [],
+    "optional_prior_outputs": []
+  },
+  "when_to_use": "当用户准备进行信息访谈、内推咨询或向他人请教特定岗位情况，需要获取真实的岗位JD作为沟通素材时触发。不用于评估用户能力、制定学习计划或生成沟通话术。",
+  "reference_pattern": "参考 career-competency-model 的结构化外部研究模式，聚焦于特定沟通上下文下的真实岗位JD检索与结构化提取，而非构建通用能力模型。",
+  "task_ids": [
+    "p1_task_004"
+  ],
+  "scenario_binding": {
+    "domain_source": "scenario_only",
+    "domain_mode": "open",
+    "explicit_domains": [],
+    "profile_role": "evidence_only"
+  },
+  "scope": {
+    "includes": [
+      "解析沟通上下文提取检索特征",
+      "检索真实岗位JD",
+      "提取并结构化岗位核心信息"
+    ],
+    "excludes": [
+      "评估用户背景与岗位的匹配度",
+      "生成沟通话术或消息草稿",
+      "推断未提及的行业或岗位范围"
+    ]
+  },
+  "input_schema": {
+    "conversation_context": {
+      "type": "string",
+      "required": true,
+      "description": "用户希望在此次联系中提及的具体背景或核心目的，如咨询行业情况、了解特定岗位或请求内推。",
+      "source": "user_input",
+      "source_ref": null,
+      "available": false,
+      "acquisition": {
+        "mode": "request_user",
+        "provider": null,
+        "fallback": "缺少该信息时返回 insufficient_input"
+      }
+    }
+  },
+  "output_schema": {
+    "opportunity_list": {
+      "type": "array",
+      "description": "目标职位列表，包括职位名称、所属组织、工作职责和任职要求。"
+    }
+  },
+  "output_consumers": [
+    "user_decision"
+  ],
+  "tool_selection": [
+    {
+      "tool_name": "WebSearch",
+      "usage_mode": "conditional",
+      "reason": "需要获取最新、真实的公开岗位信息以支撑沟通素材",
+      "condition": "输入提供了明确的行业、岗位或公司特征，需要检索外部真实JD",
+      "fallback": "返回 insufficient_input，并提示用户提供更具体的检索特征"
+    },
+    {
+      "tool_name": "WebFetch",
+      "usage_mode": "conditional",
+      "reason": "需要深入读取特定岗位JD页面以提取详细职责和要求",
+      "condition": "WebSearch 返回了高相关性的岗位页面链接",
+      "fallback": "仅使用 WebSearch 的摘要信息，并在输出中标注详细信息缺失"
+    }
+  ],
+  "child_tools": [
+    "WebSearch",
+    "WebFetch"
+  ],
+  "harness_tools": [],
+  "fresh_data_policy": "required",
+  "action_tool": {
+    "search_hint": "retrieve real job descriptions based on conversation context",
+    "preserve_existing": true,
+    "always_load": true,
+    "read_only": false
+  },
+  "operating_model": {
+    "role": "岗位信息检索与结构化专家",
+    "hard_boundaries": [
+      "仅检索和提取公开可验证的真实岗位信息，绝不捏造JD内容",
+      "不评估用户背景与岗位的匹配度，不输出任何适合度判断",
+      "不生成沟通话术、消息草稿或行动计划",
+      "严格基于用户提供的 conversation_context 提取目标岗位特征，不擅自扩大行业或岗位范围"
+    ],
+    "workflow": [
+      {
+        "step": 1,
+        "name": "解析沟通上下文",
+        "instructions": [
+          "读取 conversation_context 输入",
+          "提取目标行业、岗位名称、公司类型或特定业务线等关键检索特征",
+          "若输入过于模糊无法提取有效特征，直接终止并返回 insufficient_input"
+        ],
+        "success_criteria": [
+          "成功提取至少一个明确的岗位或行业检索特征"
+        ]
+      },
+      {
+        "step": 2,
+        "name": "检索真实岗位",
+        "instructions": [
+          "使用 WebSearch 工具，结合提取的特征构建检索词（如 '目标行业 目标岗位 招聘 JD'）",
+          "优先选择知名招聘平台、公司官网或权威职业社区的最新发布",
+          "收集至少 3 个高相关性的岗位页面链接"
+        ],
+        "success_criteria": [
+          "获取至少 3 个包含真实岗位信息的 URL"
+        ]
+      },
+      {
+        "step": 3,
+        "name": "提取与结构化信息",
+        "instructions": [
+          "使用 WebFetch 读取收集到的岗位页面",
+          "从原文中提取职位名称、所属组织、工作职责和任职要求",
+          "若 WebFetch 失败，则降级使用 WebSearch 摘要，并标记详细信息缺失"
+        ],
+        "success_criteria": [
+          "每个岗位均包含名称、组织、职责、要求和来源链接五个核心字段"
+        ]
+      },
+      {
+        "step": 4,
+        "name": "验证与输出",
+        "instructions": [
+          "检查所有 source_url 是否为有效的 HTTP/HTTPS 链接",
+          "确认输出中不包含任何匹配度评估或沟通话术",
+          "将结果组装为 opportunity_list 数组并返回"
+        ],
+        "success_criteria": [
+          "输出格式完全符合 schema，且无越界内容"
+        ]
+      }
+    ],
+    "decision_rules": [
+      "检索词必须直接来源于 conversation_context 中的显式提及或合理直接推断",
+      "每个岗位必须包含可验证的来源链接，无链接的岗位不计入最终清单",
+      "职责和要求必须从原文提取，不得用通用描述或模型幻觉替换"
+    ],
+    "outcome_rules": {
+      "success": [
+        "成功检索并结构化至少 3 个真实岗位",
+        "每个岗位包含完整的五个核心字段且来源链接有效"
+      ],
+      "insufficient_input": [
+        "conversation_context 过于模糊，无法提取有效的检索特征",
+        "网络检索无法找到任何相关的真实岗位信息"
+      ],
+      "error": [
+        "WebSearch 或 WebFetch 工具调用发生系统性失败"
+      ]
+    },
+    "artifact_contract": {
+      "mode": "none",
+      "artifact_type": null,
+      "file_name_pattern": null,
+      "format": null,
+      "verification_steps": []
+    },
+    "final_checks": [
+      "检查 opportunity_list 是否为非空数组",
+      "检查每个元素是否包含 title, organization, responsibilities, requirements, source_url",
+      "检查 source_url 是否为有效的 HTTP/HTTPS 链接",
+      "确认未包含任何用户匹配度评估或沟通话术"
+    ]
+  },
+  "complexity": {
+    "level": "bounded",
+    "estimated_steps": 4,
+    "rationale": "包含上下文解析、外部检索、信息提取和结构化验证四个明确步骤，属于独立的信息检索与整合技能，无需拆分。"
+  },
+  "independence": {
+    "portable": true,
+    "assumptions": [
+      "仅依赖输入契约、外部模型 API 和 WebSearch/WebFetch 工具"
+    ]
+  },
+  "evaluation_cases": [
+    {
+      "id": "success_complete_input",
+      "user_query": "我打算联系一位学长，请教一下关于新能源汽车行业的算法工程师岗位。帮我找几个真实的岗位JD，我好在聊天时问问他具体的业务情况。",
+      "available_context": {
+        "conversation_context": "请教新能源汽车行业的算法工程师岗位"
+      },
+      "expected_outcome": "success",
+      "must_include": [
+        "opportunity_list 包含至少 3 个对象",
+        "每个对象包含 source_url 且为有效链接",
+        "包含新能源汽车或算法工程师相关的真实职责描述"
+      ],
+      "must_not_include": [
+        "包含用户匹配度评估",
+        "包含沟通话术草稿"
+      ]
+    },
+    {
+      "id": "insufficient_vague_context",
+      "user_query": "帮我找几个岗位聊聊。",
+      "available_context": {
+        "conversation_context": "找几个岗位聊聊"
+      },
+      "expected_outcome": "insufficient_input",
+      "must_include": [
+        "提示缺少具体的行业、岗位或沟通目的"
+      ],
+      "must_not_include": [
+        "返回任何捏造的岗位列表"
+      ]
+    },
+    {
+      "id": "boundary_no_assessment",
+      "user_query": "我想给一个在快消行业做市场的朋友发消息，了解一下品牌经理的日常。帮我列几个相关的真实岗位和任职要求，我看看能不能跟他探讨一下。",
+      "available_context": {
+        "conversation_context": "了解快消行业品牌经理的日常"
+      },
+      "expected_outcome": "success",
+      "must_include": [
+        "opportunity_list 包含快消行业品牌经理的真实JD",
+        "包含 source_url"
+      ],
+      "must_not_include": [
+        "包含'你很适合这个岗位'或'你的背景匹配'等评估性语句",
+        "包含'你可以这样跟朋友说'等话术生成"
+      ]
+    }
+  ],
+  "relation_contract": {
+    "relation_id": "sample_relation_004",
+    "relation_signature": "obj_conversation_context_69428588->obj_opportunity_list_69061269",
+    "input_object_ids": [
+      "obj_conversation_context_69428588"
+    ],
+    "output_object_id": "obj_opportunity_list_69061269",
+    "k": 1,
+    "label": "t([obj_conversation_context_69428588],obj_opportunity_list_69061269)",
+    "context_contract": {
+      "mode": "fused_scenario",
+      "profile_ids": [
+        "profile_ui_001"
+      ],
+      "scenario_ids": [
+        "scenario_fused"
+      ],
+      "binding_ids": [
+        "binding_001"
+      ],
+      "integration_reason": "all sampled objects share a compatible context scope"
+    }
+  }
+}

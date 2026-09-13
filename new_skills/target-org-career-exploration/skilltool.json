@@ -1,0 +1,271 @@
+{
+  "skill_id": "target_org_career_exploration",
+  "skill_name": "target-org-career-exploration",
+  "tool_name": "TargetOrgCareerExploration",
+  "title": "目标组织职业方向探索",
+  "business_goal": "针对用户指定的目标组织，通过公开信息检索与分析，梳理出这些公司内部潜在的职业发展方向，输出包含典型职责、交付成果、协作模式、进入要求及代表性岗位示例的结构化报告，为后续的人脉联络或内推沟通提供事实基础。",
+  "invocation_mode": "standalone",
+  "composition": {
+    "required_prior_outputs": [],
+    "optional_prior_outputs": []
+  },
+  "when_to_use": "当用户明确了想要了解或联系的目标公司或组织列表，需要在建立联系或投递前深入了解这些组织内部的实际岗位方向、工作内容和能力要求时使用。不应在用户尚未确定目标组织，或仅需要通用行业与岗位分析而非特定组织内部情况时使用。",
+  "reference_pattern": "借鉴 career-competency-model 的结构化研究模式，将目标从通用职业转换为特定组织内的职业方向，强调从目标组织的公开招聘、官网、新闻等渠道获取特定于该组织的证据，并执行解析目标、收集证据、提取要求、结构化合成的标准工作流。",
+  "task_ids": [
+    "p1_task_021"
+  ],
+  "scenario_binding": {
+    "domain_source": "scenario_only",
+    "domain_mode": "open",
+    "explicit_domains": [],
+    "profile_role": "evidence_only"
+  },
+  "scope": {
+    "includes": [
+      "检索目标组织的公开岗位信息、业务线介绍与官方招聘页面",
+      "梳理目标组织内部存在的典型职业发展方向",
+      "总结各方向的典型职责、核心交付成果、日常协作模式、硬性进入要求及代表性岗位示例"
+    ],
+    "excludes": [
+      "评估用户自身背景、技能或经历与这些方向的匹配度",
+      "制定具体的求职策略、学习计划或验证行动",
+      "寻找具体的内推联系人、校友或公开人脉渠道",
+      "编造目标组织内部未公开的组织架构、岗位名称或业务细节"
+    ]
+  },
+  "input_schema": {
+    "target_organizations": {
+      "type": "array",
+      "required": true,
+      "description": "用户需要寻找公开联系人或内推途径的特定公司或组织列表。",
+      "source": "user_input",
+      "source_ref": null,
+      "available": false,
+      "acquisition": {
+        "mode": "request_user",
+        "provider": null,
+        "fallback": "缺少该信息时返回 insufficient_input"
+      }
+    }
+  },
+  "output_schema": {
+    "career_direction_exploration_results": {
+      "type": "object",
+      "description": "潜在职业方向的结构化分析或列表，包含典型职责、交付成果、协作模式、进入要求及代表性岗位示例等初步了解信息。"
+    }
+  },
+  "output_consumers": [
+    "tailored-resume-generator",
+    "user_decision"
+  ],
+  "tool_selection": [
+    {
+      "tool_name": "WebSearch",
+      "usage_mode": "conditional",
+      "reason": "需要检索目标组织的最新公开招聘信息、业务线介绍和岗位方向，以获取真实的外部证据。",
+      "condition": "输入的目标组织需要补充公开上下文或需要最新的岗位数据。",
+      "fallback": "若无法检索到任何公开信息，返回 insufficient_input 并列出缺乏证据的组织。"
+    },
+    {
+      "tool_name": "WebFetch",
+      "usage_mode": "conditional",
+      "reason": "需要深入读取目标组织的官方招聘页面或业务介绍页面，以提取详细的岗位职责和能力要求。",
+      "condition": "WebSearch 返回了高价值的官方页面链接，且摘要信息不足以支撑结构化分析。",
+      "fallback": "仅依赖 WebSearch 返回的摘要信息进行保守分析，并在来源中标注信息有限。"
+    }
+  ],
+  "child_tools": [
+    "WebSearch",
+    "WebFetch"
+  ],
+  "harness_tools": [],
+  "fresh_data_policy": "required",
+  "action_tool": {
+    "search_hint": "explore career directions and role requirements within specific target organizations",
+    "preserve_existing": true,
+    "always_load": true,
+    "read_only": false
+  },
+  "operating_model": {
+    "role": "职业情报分析师，专注于从公开渠道提取特定组织的岗位方向与能力要求事实，为后续沟通提供客观依据。",
+    "hard_boundaries": [
+      "仅分析用户明确提供的 target_organizations 列表，绝不擅自扩展、替换或推断其他组织。",
+      "绝不评估用户个人背景、技能或经历与这些方向的匹配度，不输出任何关于用户适合或不适合的建议。",
+      "绝不编造目标组织内部未公开的组织架构、岗位名称或业务细节；所有结论必须有可验证的公开来源支撑。",
+      "不寻找、不推荐具体的联系人、内推渠道或人脉网络，仅输出职业方向与岗位要求的客观分析。"
+    ],
+    "workflow": [
+      {
+        "step": 1,
+        "name": "解析目标与范围",
+        "instructions": [
+          "读取 target_organizations 输入，确认列表非空且包含有效的组织名称字符串。",
+          "若列表为空或包含无法识别的无效实体，立即终止并返回 insufficient_input。"
+        ],
+        "success_criteria": [
+          "成功解析出至少一个有效的目标组织名称，并准备进入检索阶段。"
+        ]
+      },
+      {
+        "step": 2,
+        "name": "收集组织公开证据",
+        "instructions": [
+          "对每个目标组织，使用 WebSearch 检索其官方招聘页面、careers 站点、近期新闻或业务线介绍。优先使用 site:company.com careers 或 jobs 等限定词。",
+          "评估搜索结果，若发现高价值的官方岗位列表或业务介绍页，使用 WebFetch 深入读取页面内容。",
+          "记录每个组织收集到的有效信息来源 URL。"
+        ],
+        "success_criteria": [
+          "为每个目标组织收集到至少一个可靠的公开信息来源，或明确记录该组织公开信息极度匮乏。"
+        ]
+      },
+      {
+        "step": 3,
+        "name": "提取方向与要求",
+        "instructions": [
+          "从收集到的证据中，识别该组织内实际存在的典型职业方向（如：算法研究、后端工程、产品经理等），避免使用过于宽泛的行业通用分类。",
+          "针对每个识别出的方向，提取典型职责、核心交付成果、日常协作模式、硬性进入要求（学历、技能、经验）以及代表性岗位示例。",
+          "若某组织公开信息有限，仅列出可验证的少数方向，如实记录信息局限性，不强行扩充。"
+        ],
+        "success_criteria": [
+          "每个识别出的职业方向都具备职责、交付物、协作模式、要求和示例五个维度的结构化信息。"
+        ]
+      },
+      {
+        "step": 4,
+        "name": "结构化合成与验证",
+        "instructions": [
+          "将提取的信息组织为 career_direction_exploration_results 结构，以目标组织名称为键。",
+          "确保每个方向条目都附带至少一个信息来源链接。",
+          "执行最终检查，确认输出中不包含任何用户背景评估、匹配度建议或联系人推荐。",
+          "调用 ReturnSkillResult 返回最终 JSON。"
+        ],
+        "success_criteria": [
+          "输出 JSON 结构完整，覆盖所有输入组织，且严格遵循硬边界限制。"
+        ]
+      }
+    ],
+    "decision_rules": [
+      "方向划分必须基于目标组织实际发布的岗位类别或官方业务线划分，而非子模型内部的通用职业知识。",
+      "信息来源必须优先采用目标组织的官方域名（如 careers.company.com 或 company.com/about），第三方招聘平台信息仅作为补充。",
+      "当多个来源对同一岗位的要求存在冲突时，优先采信目标组织官方 careers 页面的描述，并在输出中注明差异。"
+    ],
+    "outcome_rules": {
+      "success": [
+        "成功为所有输入的目标组织生成了包含职责、交付物、协作模式、要求和示例的结构化方向分析。",
+        "所有事实陈述都附带了至少一个公开来源链接。"
+      ],
+      "insufficient_input": [
+        "target_organizations 输入为空或格式无效。",
+        "所有目标组织均无法通过公开网络检索到任何有效的岗位或业务信息，导致无法生成任何实质性分析。"
+      ],
+      "error": [
+        "网络检索工具连续失败且无备用方案。",
+        "序列化输出 JSON 时发生不可恢复的结构错误。"
+      ]
+    },
+    "artifact_contract": {
+      "mode": "none",
+      "artifact_type": null,
+      "file_name_pattern": null,
+      "format": null,
+      "verification_steps": []
+    },
+    "final_checks": [
+      "确认输出中绝对不包含任何对用户个人背景、技能、经历或匹配度的评估与建议。",
+      "确认每个职业方向都至少包含典型职责、交付成果、协作模式、进入要求和代表性岗位五个维度。",
+      "确认所有关于目标组织的事实陈述都附带了至少一个可验证的公开来源链接。",
+      "确认没有编造目标组织内部未公开的组织架构、岗位名称或业务细节。",
+      "确认没有输出任何具体的联系人、内推渠道或人脉网络推荐。"
+    ]
+  },
+  "complexity": {
+    "level": "bounded",
+    "estimated_steps": 4,
+    "rationale": "需要针对多个组织进行网络检索、信息提取和结构化合成，涉及多步推理和信息整合，不是简单的格式转换，但边界清晰，不需要拆分为多个 Skill。"
+  },
+  "independence": {
+    "portable": true,
+    "assumptions": [
+      "仅依赖输入的组织名称、WebSearch 和 WebFetch 工具以及子模型的分析能力。",
+      "目标组织在公开网络上存在至少部分可访问的招聘或业务信息。"
+    ]
+  },
+  "evaluation_cases": [
+    {
+      "id": "success_complete_input",
+      "user_query": "我准备找腾讯和字节跳动的内推。在联系他们之前，帮我先探索一下这两家公司里有哪些潜在的职业发展方向，包括典型职责、交付成果、协作模式和进入要求。",
+      "available_context": {
+        "target_organizations": [
+          "腾讯",
+          "字节跳动"
+        ]
+      },
+      "expected_outcome": "success",
+      "must_include": [
+        "包含腾讯和字节跳动两个组织的键值对",
+        "每个组织下包含至少两个职业方向",
+        "每个方向包含职责、交付成果、协作模式、进入要求、代表性岗位和来源链接"
+      ],
+      "must_not_include": [
+        "任何关于用户计算机背景是否匹配这些方向的评估",
+        "具体的内推联系人姓名或邮箱"
+      ]
+    },
+    {
+      "id": "insufficient_empty_orgs",
+      "user_query": "帮我探索一下目标公司的职业方向。",
+      "available_context": {
+        "target_organizations": []
+      },
+      "expected_outcome": "insufficient_input",
+      "must_include": [
+        "明确指出 target_organizations 列表为空"
+      ],
+      "must_not_include": [
+        "自行假设或推断用户可能想去的公司"
+      ]
+    },
+    {
+      "id": "boundary_no_user_assessment",
+      "user_query": "我是学计算机的，帮我看看阿里和美团有哪些方向适合我，并分析一下我的优势。",
+      "available_context": {
+        "target_organizations": [
+          "阿里巴巴",
+          "美团"
+        ]
+      },
+      "expected_outcome": "success",
+      "must_include": [
+        "阿里巴巴和美团的职业方向客观分析",
+        "各方向的进入要求和职责说明"
+      ],
+      "must_not_include": [
+        "任何关于用户计算机专业背景是否适合这些方向的结论",
+        "对用户个人优势的分析或匹配度打分"
+      ]
+    }
+  ],
+  "relation_contract": {
+    "relation_id": "sample_relation_021",
+    "relation_signature": "obj_target_organizations_7c75160f->obj_career_direction_exploration_results_33aeb77c",
+    "input_object_ids": [
+      "obj_target_organizations_7c75160f"
+    ],
+    "output_object_id": "obj_career_direction_exploration_results_33aeb77c",
+    "k": 1,
+    "label": "t([obj_target_organizations_7c75160f],obj_career_direction_exploration_results_33aeb77c)",
+    "context_contract": {
+      "mode": "fused_scenario",
+      "profile_ids": [
+        "profile_ui_001"
+      ],
+      "scenario_ids": [
+        "scenario_fused"
+      ],
+      "binding_ids": [
+        "binding_001"
+      ],
+      "integration_reason": "all sampled objects share a compatible context scope"
+    }
+  }
+}

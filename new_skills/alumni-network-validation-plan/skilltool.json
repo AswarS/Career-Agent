@@ -1,0 +1,262 @@
+{
+  "skill_id": "alumni_network_validation_plan",
+  "skill_name": "alumni-network-validation-plan",
+  "tool_name": "AlumniNetworkValidationPlan",
+  "title": "校友网络职业验证行动计划",
+  "business_goal": "结合用户的简历格式偏好和教育经历，生成一份结构化的、按时间顺序排列的职业验证行动计划，涵盖简历准备和校友网络拓展的具体步骤。",
+  "invocation_mode": "standalone",
+  "composition": {
+    "required_prior_outputs": [],
+    "optional_prior_outputs": []
+  },
+  "when_to_use": "当用户希望通过校友网络探索职业方向，并需要一份结合其简历格式偏好和学校背景的具体行动计划时使用。不用于直接生成简历内容、直接发送联系消息或搜索具体的校友联系人。",
+  "reference_pattern": "借鉴 learning-plan 的结构化步骤设计和约束处理，将职业规划约束转化为可执行的验证行动序列。",
+  "task_ids": [
+    "p1_task_024"
+  ],
+  "scenario_binding": {
+    "domain_source": "scenario_only",
+    "domain_mode": "open",
+    "explicit_domains": [],
+    "profile_role": "evidence_only"
+  },
+  "scope": {
+    "includes": [
+      "制定简历准备步骤（结合格式偏好）",
+      "规划校友网络拓展步骤（结合教育经历）",
+      "安排任务优先级和预期耗时"
+    ],
+    "excludes": [
+      "直接撰写简历内容",
+      "生成具体的联系消息草稿",
+      "搜索和提供真实的校友联系人列表",
+      "执行外部投递或发送动作"
+    ]
+  },
+  "input_schema": {
+    "resume_format_preferences": {
+      "type": "object",
+      "required": true,
+      "description": "用户对简历的语言、篇幅、排版格式等个性化要求。",
+      "source": "user_input",
+      "source_ref": null,
+      "available": false,
+      "acquisition": {
+        "mode": "request_user",
+        "provider": null,
+        "fallback": "缺少该信息时返回 insufficient_input"
+      }
+    },
+    "user_educational_institutions": {
+      "type": "string",
+      "required": true,
+      "description": "用户就读的学校或大学，用于筛选和识别相关的校友网络。",
+      "source": "user_input",
+      "source_ref": null,
+      "available": false,
+      "acquisition": {
+        "mode": "request_user",
+        "provider": null,
+        "fallback": "缺少该信息时返回 insufficient_input"
+      }
+    }
+  },
+  "output_schema": {
+    "career_validation_action_plan": {
+      "type": "object",
+      "description": "按时间顺序排列的验证行动步骤，包含具体任务、预期耗时、优先级和建议执行顺序。"
+    }
+  },
+  "output_consumers": [
+    "user_decision"
+  ],
+  "tool_selection": [],
+  "child_tools": [],
+  "fresh_data_policy": "none",
+  "action_tool": {
+    "search_hint": "plan alumni network career validation actions based on resume preferences and education",
+    "preserve_existing": true,
+    "always_load": true,
+    "read_only": false
+  },
+  "operating_model": {
+    "role": "职业规划与行动设计专家，负责将用户的背景约束转化为可执行的验证步骤。",
+    "hard_boundaries": [
+      "不生成具体的简历文本或联系消息草稿，只规划准备步骤。",
+      "不搜索或提供具体的校友联系人信息，只规划寻找和联系校友的方法与渠道。",
+      "不假设用户的具体目标行业或岗位，计划必须保持方向验证的开放性。"
+    ],
+    "workflow": [
+      {
+        "step": 1,
+        "name": "解析输入约束",
+        "instructions": [
+          "提取 resume_format_preferences 中的关键约束（如语言、篇幅、排版重点）。",
+          "提取 user_educational_institutions 中的学校名称及可能的校友网络特征。"
+        ],
+        "success_criteria": [
+          "明确识别出所有格式偏好字段和学校名称。"
+        ]
+      },
+      {
+        "step": 2,
+        "name": "设计简历准备阶段",
+        "instructions": [
+          "根据格式偏好，规划简历梳理、内容匹配和排版调整的具体步骤。",
+          "为每个子步骤分配预期耗时（基于常规求职准备经验，单次任务1-2小时）。"
+        ],
+        "success_criteria": [
+          "生成的步骤明确体现了输入的格式偏好约束。"
+        ]
+      },
+      {
+        "step": 3,
+        "name": "设计校友网络拓展阶段",
+        "instructions": [
+          "基于学校信息，规划如何利用校友数据库、LinkedIn、校友会等渠道筛选目标校友。",
+          "制定接触策略和准备动作（如准备符合偏好的简历附件）。"
+        ],
+        "success_criteria": [
+          "生成的步骤明确引用了输入的学校背景，并提供了可操作的渠道建议。"
+        ]
+      },
+      {
+        "step": 4,
+        "name": "整合与排序",
+        "instructions": [
+          "将上述步骤按逻辑依赖和时间顺序排列。",
+          "分配优先级（如：简历准备优先于校友联系）。",
+          "组装为最终的 career_validation_action_plan 对象。"
+        ],
+        "success_criteria": [
+          "输出包含至少3个具体行动步骤，每个步骤包含预期耗时和优先级，且逻辑顺序合理。"
+        ]
+      }
+    ],
+    "decision_rules": [
+      "简历准备步骤必须优先于校友联系步骤，因为联系时需要提供符合偏好的简历。",
+      "耗时估算应基于常规求职准备经验，若未提供用户周可用时间，则按常规单次任务1-2小时估算。"
+    ],
+    "outcome_rules": {
+      "success": [
+        "成功生成包含至少3个具体行动步骤的计划。",
+        "每个步骤包含预期耗时和优先级。",
+        "计划明确体现了输入的格式偏好和学校背景。"
+      ],
+      "insufficient_input": [
+        "缺少 resume_format_preferences。",
+        "缺少 user_educational_institutions。"
+      ],
+      "error": [
+        "输入数据格式损坏无法解析。"
+      ]
+    },
+    "artifact_contract": {
+      "mode": "none",
+      "artifact_type": null,
+      "file_name_pattern": null,
+      "format": null,
+      "verification_steps": []
+    },
+    "final_checks": [
+      "检查输出是否包含按时间排序的步骤列表。",
+      "检查每个步骤是否包含预期耗时和优先级。",
+      "检查计划中是否体现了对 resume_format_preferences 的引用。",
+      "检查计划中是否体现了对 user_educational_institutions 的引用。"
+    ]
+  },
+  "complexity": {
+    "level": "bounded",
+    "estimated_steps": 4,
+    "rationale": "任务需要将两个维度的用户约束（格式偏好、学校）转化为一个多步骤的执行计划，涉及逻辑排序和耗时估算，属于有意义的业务规划，不需要拆分，也不应只是简单的格式包装。"
+  },
+  "independence": {
+    "portable": true,
+    "assumptions": [
+      "仅依赖输入契约和外部模型API。"
+    ]
+  },
+  "evaluation_cases": [
+    {
+      "id": "success_complete_input",
+      "user_query": "我想通过联系母校的校友来探索职业方向，请帮我制定一个详细的行动计划，包括按照我的简历格式偏好准备简历，以及后续联系校友的具体步骤。",
+      "available_context": {
+        "resume_format_preferences": {
+          "language": "zh",
+          "length": "1 page",
+          "focus": "projects"
+        },
+        "user_educational_institutions": "某某大学"
+      },
+      "expected_outcome": "success",
+      "must_include": [
+        "包含简历准备步骤",
+        "包含校友联系步骤",
+        "体现1页和中文偏好",
+        "体现某某大学"
+      ],
+      "must_not_include": [
+        "直接生成简历内容",
+        "提供具体的校友姓名和联系方式"
+      ]
+    },
+    {
+      "id": "insufficient_missing_preferences",
+      "user_query": "帮我制定一个校友网络验证计划，我的学校是某某大学。",
+      "available_context": {
+        "user_educational_institutions": "某某大学"
+      },
+      "expected_outcome": "insufficient_input",
+      "must_include": [
+        "指出缺少简历格式偏好"
+      ],
+      "must_not_include": [
+        "编造简历格式偏好"
+      ]
+    },
+    {
+      "id": "boundary_no_external_search",
+      "user_query": "帮我制定计划，并直接给我某某大学在腾讯工作的校友名单和邮箱。",
+      "available_context": {
+        "resume_format_preferences": {
+          "language": "en",
+          "length": "2 pages"
+        },
+        "user_educational_institutions": "某某大学"
+      },
+      "expected_outcome": "success",
+      "must_include": [
+        "规划寻找校友的渠道和步骤",
+        "拒绝提供具体的校友名单和邮箱"
+      ],
+      "must_not_include": [
+        "编造校友联系方式",
+        "调用外部搜索工具获取私人信息"
+      ]
+    }
+  ],
+  "relation_contract": {
+    "relation_id": "sample_relation_024",
+    "relation_signature": "obj_resume_format_preferences_451d9160+obj_user_educational_institutions_44818bdc->obj_career_validation_action_plan_62361312",
+    "input_object_ids": [
+      "obj_resume_format_preferences_451d9160",
+      "obj_user_educational_institutions_44818bdc"
+    ],
+    "output_object_id": "obj_career_validation_action_plan_62361312",
+    "k": 2,
+    "label": "t([obj_resume_format_preferences_451d9160,obj_user_educational_institutions_44818bdc],obj_career_validation_action_plan_62361312)",
+    "context_contract": {
+      "mode": "fused_scenario",
+      "profile_ids": [
+        "profile_ui_001"
+      ],
+      "scenario_ids": [
+        "scenario_fused"
+      ],
+      "binding_ids": [
+        "binding_001"
+      ],
+      "integration_reason": "all sampled objects share a compatible context scope"
+    }
+  }
+}

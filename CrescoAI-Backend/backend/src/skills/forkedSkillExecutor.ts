@@ -139,7 +139,10 @@ export async function executeForkedPromptSkill(input: {
       canUseTool: input.canUseTool,
       isAsync: false,
       forkContextMessages,
-      querySource: 'agent:custom',
+      // The parent snapshot already contains the memories selected for this
+      // turn. Mark lifecycle-managed Action Skills separately so query() does
+      // not launch another memory-selection side query for the child.
+      querySource: lifecycleInvocation ? 'agent:skill-action' : 'agent:custom',
       model: input.command.model as ModelAlias | undefined,
       availableTools: input.context.options.tools,
       override: { agentId },

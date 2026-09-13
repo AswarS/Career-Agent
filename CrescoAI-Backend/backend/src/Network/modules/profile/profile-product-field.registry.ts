@@ -89,7 +89,9 @@ export function normalizeProfileProductValue(
   if (definition.codec === 'date') {
     if (value === null || value === '' || value === undefined) return null;
     if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value.trim())) {
-      throw new Error(`${definition.fieldKey} must use YYYY-MM-DD`);
+      throw new Error(
+        `${definition.fieldKey} must use YYYY-MM-DD; do not invent a month or day from a year-only answer—ask the user or omit this update`,
+      );
     }
     const normalized = value.trim();
     const parsed = new Date(`${normalized}T00:00:00Z`);

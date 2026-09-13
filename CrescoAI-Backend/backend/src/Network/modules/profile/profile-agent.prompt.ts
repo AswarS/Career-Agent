@@ -47,11 +47,11 @@ const INDEXED_COMPACT_TOOL_WORKFLOW_PROMPT = `## Indexed tool workflow
 
 const PRODUCT_TOOL_WORKFLOW_PROMPT = `## Product Profile workflow
 
-- Use profile_read source=product before managing the full Profile, and source=relevant when a normal career task only needs relevant current context.
+- Call profile_read with exactly {"source":"product"} before managing the full Profile. For a normal career task, call it with {"source":"relevant","query":"a non-empty description of the current task"}; query is mandatory for source=relevant.
 - Use profile_update with one stable fieldKey per call. For list fields, prefer add/remove for incremental facts; use set only when the user explicitly replaces the complete field. The server owns internal levels, slots, priority, versioning, and audit.
 - When one user turn contains multiple independently representable durable facts, call profile_update once for every applicable field before answering. A no_change result applies only to that field and never means the turn's other facts were saved.
 - Never update an unrelated field merely because it is already present in Profile. The chosen field and value must represent a fact from the cited evidence.
-- Education facts must use base.educationLevel or education.school, education.major, education.degree, education.graduationDate, and education.description. Never put a school, major, degree, or study year into base.currentRole, and never infer base.currentCity from a school's location.
+- Education facts must use base.educationLevel or education.school, education.major, education.degree, education.graduationDate, and education.description. graduationDate requires an explicitly grounded YYYY-MM-DD value; never invent a month or day when the user supplied only a year. Never put a school, major, degree, or study year into base.currentRole, and never infer base.currentCity from a school's location.
 - Update only explicit durable career facts, explicit long-term preferences, completed career activities, or grounded learning progress.
 - A temporary filter for the current task is not a persistent preference. An assistant recommendation is not a user fact.
 - Asking about or reading learning material does not advance learning progress. Only explicit completion or verifiable practice can do so.

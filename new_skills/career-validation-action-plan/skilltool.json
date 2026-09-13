@@ -1,0 +1,275 @@
+{
+  "skill_id": "career_validation_action_plan",
+  "skill_name": "career-validation-action-plan",
+  "tool_name": "CareerValidationActionPlan",
+  "title": "求职验证与行动计划制定",
+  "business_goal": "综合材料缺口分析、目标岗位清单和目标组织列表，生成按优先级和时间顺序排序的求职验证行动计划，指导用户补齐材料、投递岗位和联系公司。",
+  "invocation_mode": "standalone",
+  "composition": {
+    "required_prior_outputs": [],
+    "optional_prior_outputs": []
+  },
+  "when_to_use": "当用户需要基于已有的材料缺口分析、目标岗位清单和目标公司列表，制定下一步的求职冲刺和验证行动计划时使用。不用于重新分析材料缺口、搜索新岗位、修改已有投递材料或代替用户执行外部发送动作。",
+  "reference_pattern": "借鉴 learning-plan 的结构：加载上游产物（缺口报告）、结合用户输入（目标岗位/公司）、进行优先级排序（基于缺口严重度和目标紧迫性）、生成阶段化/时间序列的行动路径。",
+  "task_ids": [
+    "p1_task_025"
+  ],
+  "scenario_binding": {
+    "domain_source": "scenario_only",
+    "domain_mode": "open",
+    "explicit_domains": [],
+    "profile_role": "evidence_only"
+  },
+  "scope": {
+    "includes": [
+      "综合缺口与目标进行优先级排序",
+      "生成带时间线和预期耗时的具体行动步骤",
+      "区分材料补齐、人脉联络和正式投递的执行顺序"
+    ],
+    "excludes": [
+      "重新评估或修改材料缺口分析报告",
+      "搜索或推荐新的目标岗位和公司",
+      "修改简历或生成投递材料",
+      "代替用户向外部系统发送消息或执行投递"
+    ]
+  },
+  "input_schema": {
+    "gap_analysis_report": {
+      "type": "object",
+      "required": true,
+      "description": "结构化评估目标岗位要求与提供的投递材料之间的契合度，识别缺失元素并建议具体改进。",
+      "source": "invocation_input",
+      "source_ref": null,
+      "available": true,
+      "acquisition": {
+        "mode": "provided",
+        "provider": null,
+        "fallback": "缺少该信息时返回 insufficient_input"
+      }
+    },
+    "opportunity_list": {
+      "type": "array",
+      "required": true,
+      "description": "目标职位列表，包括职位名称、所属组织、工作职责和任职要求。",
+      "source": "user_input",
+      "source_ref": null,
+      "available": false,
+      "acquisition": {
+        "mode": "request_user",
+        "provider": null,
+        "fallback": "缺少该信息时返回 insufficient_input"
+      }
+    },
+    "target_organizations": {
+      "type": "array",
+      "required": true,
+      "description": "用户需要寻找公开联系人或内推途径的特定公司或组织列表。",
+      "source": "user_input",
+      "source_ref": null,
+      "available": false,
+      "acquisition": {
+        "mode": "request_user",
+        "provider": null,
+        "fallback": "缺少该信息时返回 insufficient_input"
+      }
+    }
+  },
+  "output_schema": {
+    "career_validation_action_plan": {
+      "type": "object",
+      "description": "按时间顺序排列的验证行动步骤，包含具体任务、预期耗时、优先级和建议执行顺序。"
+    }
+  },
+  "output_consumers": [
+    "user_decision"
+  ],
+  "tool_selection": [],
+  "child_tools": [],
+  "fresh_data_policy": "none",
+  "action_tool": {
+    "search_hint": "generate a prioritized job search validation and action plan from gap analysis and target lists",
+    "preserve_existing": true,
+    "always_load": true,
+    "read_only": false
+  },
+  "operating_model": {
+    "role": "求职策略规划师，负责将静态的缺口分析和目标列表转化为动态的、可执行的行动计划。",
+    "hard_boundaries": [
+      "不得修改或重新生成 gap_analysis_report 中的缺口事实。",
+      "不得编造目标岗位或公司的不存在信息。",
+      "不得生成直接对外发送的消息或执行投递动作的指令。",
+      "必须严格基于提供的输入进行优先级排序和时间估算。"
+    ],
+    "workflow": [
+      {
+        "step": 1,
+        "name": "加载并验证输入",
+        "instructions": [
+          "检查 gap_analysis_report 的结构，提取关键缺口（如缺失的技能、项目经验、特定材料）。",
+          "解析 opportunity_list 中的岗位详情和 target_organizations 中的公司列表。",
+          "确认所有必填输入均非空且结构完整。"
+        ],
+        "success_criteria": [
+          "成功提取至少一个有效缺口、一个目标岗位和一个目标组织。"
+        ]
+      },
+      {
+        "step": 2,
+        "name": "缺口与目标映射",
+        "instructions": [
+          "将材料缺口与 opportunity_list 中的岗位要求进行交叉比对。",
+          "识别出阻碍投递或面试的核心阻塞点（Blockers），区分阻塞性缺口和非阻塞性优化项。",
+          "评估 target_organizations 的人脉联络需求。"
+        ],
+        "success_criteria": [
+          "明确列出每个缺口对应的受影响岗位或公司，并标记阻塞级别。"
+        ]
+      },
+      {
+        "step": 3,
+        "name": "优先级排序",
+        "instructions": [
+          "根据缺口的严重性（是否阻断投递）、岗位的紧迫性和公司的优先级对行动项进行排序。",
+          "应用决策规则：阻塞性缺口优先于非阻塞性优化；同一优先级按准备材料、寻找人脉、正式投递的逻辑顺序排列。"
+        ],
+        "success_criteria": [
+          "生成一个逻辑连贯、无循环依赖的行动项优先级队列。"
+        ]
+      },
+      {
+        "step": 4,
+        "name": "生成行动计划",
+        "instructions": [
+          "将排序后的行动项转化为具体的步骤，包括任务描述、预期耗时（基于常规求职经验估算）、优先级标签和建议的执行顺序。",
+          "构建 career_validation_action_plan 对象，确保时间线呈递增顺序。"
+        ],
+        "success_criteria": [
+          "输出包含至少 3 个具体行动步骤的计划，且每个步骤都有明确的耗时估算和优先级。"
+        ]
+      }
+    ],
+    "decision_rules": [
+      "阻塞性缺口（如缺少核心技能证明或必要材料）的优先级始终高于非阻塞性优化。",
+      "同一优先级的任务，按准备材料、寻找人脉/内推、正式投递的逻辑顺序排列。",
+      "耗时估算必须基于任务复杂度给出合理范围，不得凭空捏造精确到分钟的绝对时间。",
+      "若 gap_analysis_report 显示无材料缺口，则跳过材料补齐步骤，直接生成以投递和人脉联络为主的计划。"
+    ],
+    "outcome_rules": {
+      "success": [
+        "成功生成包含至少 3 个具体行动步骤的计划，且步骤逻辑连贯、优先级合理。",
+        "所有行动步骤均引用了输入中的具体缺口、岗位或公司。"
+      ],
+      "insufficient_input": [
+        "gap_analysis_report 为空或无法解析。",
+        "opportunity_list 或 target_organizations 为空数组。"
+      ],
+      "error": [
+        "输入格式严重损坏导致无法提取任何有效信息。"
+      ]
+    },
+    "artifact_contract": {
+      "mode": "none",
+      "artifact_type": null,
+      "file_name_pattern": null,
+      "format": null,
+      "verification_steps": []
+    },
+    "final_checks": [
+      "检查所有行动步骤是否都引用了 gap_analysis_report 中的具体缺口或 opportunity_list 中的具体岗位。",
+      "检查时间线是否呈递增顺序，无逻辑倒置。",
+      "检查每个步骤是否包含优先级标签和预期耗时。",
+      "检查输出中没有任何直接对外发送消息或执行投递的动作指令。"
+    ]
+  },
+  "complexity": {
+    "level": "bounded",
+    "estimated_steps": 4,
+    "rationale": "需要综合多维度的输入（缺口、岗位、公司）进行逻辑排序和时间规划，属于复杂的决策规划，但不需要外部搜索或文件读写，边界清晰。"
+  },
+  "independence": {
+    "portable": true,
+    "assumptions": [
+      "仅依赖输入契约和模型推理能力",
+      "不依赖任何外部数据库或内部服务状态"
+    ]
+  },
+  "evaluation_cases": [
+    {
+      "id": "success_complete_input",
+      "user_query": "我整理了一些想投的岗位和公司，结合之前的材料缺口分析，帮我排个序，制定一个接下来的求职行动计划。",
+      "available_context": {
+        "gap_analysis_report": "包含缺失生产部署经验和缺少业务指标证明的缺口。",
+        "opportunity_list": "包含 3 个算法工程师岗位。",
+        "target_organizations": "包含 2 家目标互联网公司。"
+      },
+      "expected_outcome": "success",
+      "must_include": [
+        "包含补齐材料、寻找内推和正式投递的阶段性步骤",
+        "每个步骤带有优先级和预期耗时"
+      ],
+      "must_not_include": [
+        "修改缺口报告的内容",
+        "生成直接发送给 HR 的消息草稿"
+      ]
+    },
+    {
+      "id": "insufficient_missing_gap",
+      "user_query": "帮我制定求职计划，目标岗位和公司如下...",
+      "available_context": {
+        "gap_analysis_report": null,
+        "opportunity_list": "包含 2 个岗位。",
+        "target_organizations": "包含 1 家公司。"
+      },
+      "expected_outcome": "insufficient_input",
+      "must_include": [
+        "明确指出缺少 gap_analysis_report"
+      ],
+      "must_not_include": [
+        "尝试猜测或生成默认的缺口分析"
+      ]
+    },
+    {
+      "id": "boundary_no_gaps",
+      "user_query": "我的材料已经准备完美了，没有缺口，帮我针对这些岗位和公司制定接下来的投递和联系人脉计划。",
+      "available_context": {
+        "gap_analysis_report": "显示所有材料已齐备，无缺失元素。",
+        "opportunity_list": "包含 3 个岗位。",
+        "target_organizations": "包含 2 家公司。"
+      },
+      "expected_outcome": "success",
+      "must_include": [
+        "跳过材料补齐步骤",
+        "直接生成以投递和人脉联络为主的行动计划"
+      ],
+      "must_not_include": [
+        "报错提示缺少缺口",
+        "强行编造不存在的材料缺口"
+      ]
+    }
+  ],
+  "relation_contract": {
+    "relation_id": "sample_relation_025",
+    "relation_signature": "obj_gap_analysis_report_059d482e+obj_opportunity_list_69061269+obj_target_organizations_7c75160f->obj_career_validation_action_plan_62361312",
+    "input_object_ids": [
+      "obj_gap_analysis_report_059d482e",
+      "obj_opportunity_list_69061269",
+      "obj_target_organizations_7c75160f"
+    ],
+    "output_object_id": "obj_career_validation_action_plan_62361312",
+    "k": 3,
+    "label": "t([obj_gap_analysis_report_059d482e,obj_opportunity_list_69061269,obj_target_organizations_7c75160f],obj_career_validation_action_plan_62361312)",
+    "context_contract": {
+      "mode": "fused_scenario",
+      "profile_ids": [
+        "profile_ui_001"
+      ],
+      "scenario_ids": [
+        "scenario_fused"
+      ],
+      "binding_ids": [
+        "binding_001"
+      ],
+      "integration_reason": "all sampled objects share a compatible context scope"
+    }
+  }
+}

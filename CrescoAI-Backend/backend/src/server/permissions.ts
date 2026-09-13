@@ -32,6 +32,7 @@ const DANGEROUS_TOOLS = new Set([
 /** Tools classified as "read-only" — safe in any context */
 const READ_ONLY_TOOLS = new Set([
   'Read',
+  'PdfParse',
   'Glob',
   'Grep',
   'LS',

@@ -27,6 +27,11 @@ export const router = createRouter({
       component: PraxisSsoPage,
     },
     {
+      path: '/internal/gateway-token-monitor',
+      name: 'gateway-token-monitor',
+      component: () => import('../pages/GatewayMonitorPage.vue'),
+    },
+    {
       path: '/',
       component: AppShell,
       children: [

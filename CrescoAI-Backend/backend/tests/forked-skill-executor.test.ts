@@ -96,6 +96,7 @@ describe('forked Skill executor', () => {
       source: 'built-in',
     })
     expect(captured?.forkContextMessages).not.toBe(parentMessages)
+    expect(captured?.querySource).toBe('agent:skill-action')
     expect(promptText(captured!.promptMessages)).toContain(
       '"assessment_target":"backend engineering"',
     )

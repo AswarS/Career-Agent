@@ -1,0 +1,25 @@
+{
+  "relation_id": "sample_relation_020",
+  "relation_signature": "obj_application_materials_a7ffdc5a+obj_career_direction_exploration_results_33aeb77c+obj_user_profile_a68fe1bb->obj_tailored_resume_4f0d5521",
+  "input_object_ids": [
+    "obj_application_materials_a7ffdc5a",
+    "obj_career_direction_exploration_results_33aeb77c",
+    "obj_user_profile_a68fe1bb"
+  ],
+  "output_object_id": "obj_tailored_resume_4f0d5521",
+  "k": 3,
+  "label": "t([obj_application_materials_a7ffdc5a,obj_career_direction_exploration_results_33aeb77c,obj_user_profile_a68fe1bb],obj_tailored_resume_4f0d5521)",
+  "context_contract": {
+    "mode": "fused_scenario",
+    "profile_ids": [
+      "profile_ui_001"
+    ],
+    "scenario_ids": [
+      "scenario_fused"
+    ],
+    "binding_ids": [
+      "binding_001"
+    ],
+    "integration_reason": "all sampled objects share a compatible context scope"
+  }
+}

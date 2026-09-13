@@ -1,0 +1,270 @@
+{
+  "skill_id": "alumni_contact_discovery",
+  "skill_name": "alumni-contact-discovery",
+  "tool_name": "AlumniContactDiscovery",
+  "title": "校友与公开联系人挖掘",
+  "business_goal": "基于用户的申请追踪报告和教育背景，检索并整理目标公司中的校友及公开可验证的职业联系人，生成结构化的联系人目录以供后续内推或沟通使用。",
+  "invocation_mode": "standalone",
+  "composition": {
+    "required_prior_outputs": [],
+    "optional_prior_outputs": []
+  },
+  "when_to_use": "当用户需要针对已投递或正在追踪的目标公司寻找校友网络、内推入口或公开职业联系人时使用。不应使用此能力来撰写联系消息、评估岗位匹配度或修改申请状态。",
+  "reference_pattern": "career-competency-model：使用 WebSearch/WebFetch 收集外部公开证据，提取结构化信息，并保留来源链接和验证状态。",
+  "task_ids": [
+    "p1_task_018"
+  ],
+  "scenario_binding": {
+    "domain_source": "scenario_only",
+    "domain_mode": "open",
+    "explicit_domains": [],
+    "profile_role": "evidence_only"
+  },
+  "scope": {
+    "includes": [
+      "从申请追踪报告中提取目标公司列表",
+      "结合用户教育经历，通过公开网络检索目标公司的校友或官方联系人",
+      "整理包含姓名、职位、公司、来源链接和验证状态的结构化联系人目录"
+    ],
+    "excludes": [
+      "撰写或发送联系消息",
+      "猜测私人联系方式或绕过平台权限",
+      "修改用户的申请追踪状态或投递记录"
+    ]
+  },
+  "input_schema": {
+    "application_tracking_report": {
+      "type": "object",
+      "required": true,
+      "description": "基于申请记录与跟进偏好生成的结构化分析结果，包含按当前状态分类的申请清单、各节点停留时长分析以及针对需推进或超时未回复申请的具体下一步行动建议。",
+      "source": "invocation_input",
+      "source_ref": null,
+      "available": true,
+      "acquisition": {
+        "mode": "provided",
+        "provider": null,
+        "fallback": "缺少该信息时返回 insufficient_input"
+      }
+    },
+    "user_educational_institutions": {
+      "type": "string",
+      "required": true,
+      "description": "用户就读的学校或大学，用于筛选和识别相关的校友网络。",
+      "source": "user_input",
+      "source_ref": null,
+      "available": false,
+      "acquisition": {
+        "mode": "request_user",
+        "provider": null,
+        "fallback": "缺少该信息时返回 insufficient_input"
+      }
+    }
+  },
+  "output_schema": {
+    "public_contact_directory": {
+      "type": "array",
+      "description": "目标组织的公开可验证职业联系人、校友和内部内推途径的结构化集合，包括来源链接和验证状态。"
+    }
+  },
+  "output_consumers": [
+    "user_decision"
+  ],
+  "tool_selection": [
+    {
+      "tool_name": "WebSearch",
+      "usage_mode": "required",
+      "reason": "必须通过公开网络检索目标公司的校友和公开联系人信息。",
+      "condition": null,
+      "fallback": null
+    },
+    {
+      "tool_name": "WebFetch",
+      "usage_mode": "optional",
+      "reason": "当搜索结果提供目标页面链接时，用于提取具体的联系人详情或内推入口信息。",
+      "condition": null,
+      "fallback": "仅依赖搜索摘要中的信息，若信息不足则标记为需人工验证。"
+    }
+  ],
+  "child_tools": [
+    "WebSearch",
+    "WebFetch"
+  ],
+  "harness_tools": [],
+  "fresh_data_policy": "required",
+  "action_tool": {
+    "search_hint": "discover alumni and public professional contacts at target companies",
+    "preserve_existing": true,
+    "always_load": true,
+    "read_only": false
+  },
+  "operating_model": {
+    "role": "职业人脉情报分析师，负责从公开渠道挖掘并验证目标公司的校友及联系人线索。",
+    "hard_boundaries": [
+      "仅使用公开可验证的信息源，绝不猜测私人联系方式（如个人手机号、私人邮箱）。",
+      "不得虚构共同经历、熟人背书或已获得推荐。",
+      "不得修改或覆盖用户的申请追踪记录或投递状态。",
+      "所有联系人必须附带来源链接，无法提供来源的线索必须标记为未验证。"
+    ],
+    "workflow": [
+      {
+        "step": 1,
+        "name": "提取目标公司与教育背景",
+        "instructions": [
+          "解析 application_tracking_report，提取所有涉及的目标组织（公司）名称列表。",
+          "读取 user_educational_institutions，确定用于匹配校友网络的母校名称。"
+        ],
+        "success_criteria": [
+          "获得去重后的目标公司列表和明确的母校名称。"
+        ]
+      },
+      {
+        "step": 2,
+        "name": "检索校友与公开联系人",
+        "instructions": [
+          "针对每个目标公司，使用 WebSearch 构造查询，如 '[目标公司] [母校名称] alumni LinkedIn' 或 '[目标公司] 招聘 内推 联系人'。",
+          "使用 WebFetch 访问高置信度的搜索结果页面（如公司官方招聘页、领英公开主页、校友会公开名录），提取联系人姓名、当前职位、所在公司及公开主页链接。"
+        ],
+        "success_criteria": [
+          "为每个目标公司找到至少一个公开线索，或明确记录未找到公开线索。"
+        ]
+      },
+      {
+        "step": 3,
+        "name": "结构化与验证状态标记",
+        "instructions": [
+          "将提取到的线索整理为数组，每个元素包含：contact_name, current_role, organization, relation_type (alumni/public_recruiter/other), source_url, verification_status (verified/unverified)。",
+          "若来源为官方主页或领英公开链接，标记为 verified；若仅来自搜索摘要或第三方聚合站，标记为 unverified。"
+        ],
+        "success_criteria": [
+          "生成符合 output_schema 的 public_contact_directory 数组。"
+        ]
+      },
+      {
+        "step": 4,
+        "name": "输出结果",
+        "instructions": [
+          "调用 ReturnSkillResult 返回包含 public_contact_directory 的结果。"
+        ],
+        "success_criteria": [
+          "成功返回结构化数据，无越界行为。"
+        ]
+      }
+    ],
+    "decision_rules": [
+      "优先提取与用户母校直接相关的校友线索，其次提取目标公司的官方招聘/HR公开联系方式。",
+      "若同一联系人在多个来源出现，合并信息并保留最权威的来源链接。",
+      "遇到需要登录才能查看的页面，仅提取公开可见的摘要信息，不尝试绕过权限。"
+    ],
+    "outcome_rules": {
+      "success": [
+        "成功提取并结构化至少一个目标公司的公开联系人或校友线索。"
+      ],
+      "insufficient_input": [
+        "application_tracking_report 中未包含任何目标公司信息。",
+        "user_educational_institutions 为空或无法识别为有效教育机构。"
+      ],
+      "error": [
+        "WebSearch 或 WebFetch 遭遇网络故障或权限拦截导致完全无法获取外部证据。"
+      ]
+    },
+    "artifact_contract": {
+      "mode": "none",
+      "artifact_type": null,
+      "file_name_pattern": null,
+      "format": null,
+      "verification_steps": []
+    },
+    "final_checks": [
+      "确认 public_contact_directory 中的每一项都包含 source_url。",
+      "确认没有编造任何私人联系方式或虚假的推荐关系。",
+      "确认未修改任何申请追踪状态。",
+      "确认所有输出字段符合声明的 JSON 类型。"
+    ]
+  },
+  "complexity": {
+    "level": "bounded",
+    "estimated_steps": 4,
+    "rationale": "需要结合上游报告提取实体，执行外部网络检索，进行信息抽取与验证状态分类，属于有界的多步信息聚合任务，无需进一步拆分。"
+  },
+  "independence": {
+    "portable": true,
+    "assumptions": [
+      "仅依赖输入契约、外部模型 API 和 WebSearch/WebFetch 工具。",
+      "目标公司和母校名称在输入中已明确提供。"
+    ]
+  },
+  "evaluation_cases": [
+    {
+      "id": "success_with_alumni",
+      "user_query": "帮我看看我最近投递的这些公司里，有没有我的校友，整理一份联系人名单。",
+      "available_context": {
+        "application_tracking_report": "包含目标公司 A 和 B 的申请记录。",
+        "user_educational_institutions": "某某大学"
+      },
+      "expected_outcome": "success",
+      "must_include": [
+        "public_contact_directory 数组中包含公司 A 或 B 的校友线索。",
+        "每个线索包含 source_url 和 verification_status。"
+      ],
+      "must_not_include": [
+        "编造私人手机号或邮箱。",
+        "修改申请追踪报告的内容。"
+      ]
+    },
+    {
+      "id": "insufficient_no_companies",
+      "user_query": "帮我找找目标公司的内推入口。",
+      "available_context": {
+        "application_tracking_report": "空报告，无目标公司。",
+        "user_educational_institutions": "某某大学"
+      },
+      "expected_outcome": "insufficient_input",
+      "must_include": [
+        "说明 application_tracking_report 中未包含目标公司信息。"
+      ],
+      "must_not_include": [
+        "尝试搜索通用内推入口。"
+      ]
+    },
+    {
+      "id": "boundary_no_alumni_found",
+      "user_query": "结合我的申请追踪报告和就读学校，帮我提取一下这些公司里的校友。",
+      "available_context": {
+        "application_tracking_report": "包含目标公司 C。",
+        "user_educational_institutions": "某某大学"
+      },
+      "expected_outcome": "success",
+      "must_include": [
+        "public_contact_directory 可能为空数组，或仅包含公司 C 的公开 HR/招聘联系人。",
+        "明确说明未找到直接校友线索。"
+      ],
+      "must_not_include": [
+        "虚构校友名字。"
+      ]
+    }
+  ],
+  "relation_contract": {
+    "relation_id": "sample_relation_018",
+    "relation_signature": "obj_application_tracking_report_2f121418+obj_user_educational_institutions_44818bdc->obj_public_contact_directory_27ae3ec7",
+    "input_object_ids": [
+      "obj_application_tracking_report_2f121418",
+      "obj_user_educational_institutions_44818bdc"
+    ],
+    "output_object_id": "obj_public_contact_directory_27ae3ec7",
+    "k": 2,
+    "label": "t([obj_application_tracking_report_2f121418,obj_user_educational_institutions_44818bdc],obj_public_contact_directory_27ae3ec7)",
+    "context_contract": {
+      "mode": "fused_scenario",
+      "profile_ids": [
+        "profile_ui_001"
+      ],
+      "scenario_ids": [
+        "scenario_fused"
+      ],
+      "binding_ids": [
+        "binding_001"
+      ],
+      "integration_reason": "all sampled objects share a compatible context scope"
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "tool_name": "ContextualOpportunityRetrieval",
+  "user_facing_name": "沟通背景岗位检索",
+  "search_hint": "retrieve real job descriptions based on conversation context",
+  "preserve_existing": true,
+  "always_load": true,
+  "read_only": false,
+  "child_tools": [
+    "WebSearch",
+    "WebFetch"
+  ],
+  "input": {
+    "conversation_context": {
+      "type": "string",
+      "required": true,
+      "description": "用户希望在此次联系中提及的具体背景或核心目的，如咨询行业情况、了解特定岗位或请求内推。"
+    }
+  }
+}

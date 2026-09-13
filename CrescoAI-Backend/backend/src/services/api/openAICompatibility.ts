@@ -1,4 +1,9 @@
 import { randomUUID } from 'node:crypto'
+import {
+  recordGatewayRequest,
+  recordGatewayResponse,
+  type GatewayMonitorContext,
+} from './gatewayTokenMonitor.js'
 
 type FetchLike = (
   input: RequestInfo | URL,
@@ -9,6 +14,8 @@ interface OpenAICompatibilityFetchOptions {
   apiKey?: string
   baseUrl: string
   fetchImpl?: FetchLike
+  sessionId?: string
+  userId?: string
 }
 
 type UnknownRecord = Record<string, unknown>
@@ -76,25 +83,63 @@ function textFromContent(value: unknown): string {
   return [text, toolReferenceText].filter(Boolean).join('\n')
 }
 
-function getImmediateToolReferences(messages: unknown): Set<string> {
-  if (!Array.isArray(messages) || messages.length === 0) return new Set()
-  const latestMessage = messages[messages.length - 1]
-  if (!isRecord(latestMessage) || !Array.isArray(latestMessage.content)) {
-    return new Set()
-  }
+function getActiveToolReferences(messages: unknown): Set<string> {
+  if (!Array.isArray(messages)) return new Set()
 
   const references = new Set<string>()
-  for (const block of latestMessage.content) {
-    if (!isRecord(block) || block.type !== 'tool_result' || !Array.isArray(block.content)) {
-      continue
+  const pendingReferencedCalls = new Map<string, string>()
+  for (const message of messages) {
+    if (!isRecord(message)) continue
+    const content = message.content
+    const contentBlocks = Array.isArray(content) ? content.filter(isRecord) : []
+    const hasToolResult = contentBlocks.some(block => block.type === 'tool_result')
+
+    // A genuine user message starts a new turn. Tool results are also encoded
+    // with role=user by Anthropic, so they must not clear selected schemas.
+    if (
+      message.role === 'user' &&
+      !hasToolResult &&
+      (typeof content === 'string' || contentBlocks.length > 0)
+    ) {
+      references.clear()
+      pendingReferencedCalls.clear()
     }
-    for (const item of block.content) {
-      if (
-        isRecord(item) &&
-        item.type === 'tool_reference' &&
-        typeof item.tool_name === 'string'
-      ) {
-        references.add(item.tool_name)
+
+    if (message.role === 'user') {
+      for (const block of contentBlocks) {
+        if (block.type !== 'tool_result') continue
+        const toolUseId = String(block.tool_use_id ?? block.toolUseId ?? '')
+        const completedToolName = pendingReferencedCalls.get(toolUseId)
+        if (completedToolName && block.is_error !== true) {
+          references.delete(completedToolName)
+          pendingReferencedCalls.delete(toolUseId)
+        }
+        if (!Array.isArray(block.content)) {
+          continue
+        }
+        for (const item of block.content) {
+          if (
+            isRecord(item) &&
+            item.type === 'tool_reference' &&
+            typeof item.tool_name === 'string'
+          ) {
+            references.add(item.tool_name)
+          }
+        }
+      }
+    }
+
+    // Keep an invoked schema available until its call succeeds. Validation or
+    // runtime errors need the same schema present so the model can self-correct.
+    if (message.role === 'assistant') {
+      for (const block of contentBlocks) {
+        if (
+          block.type === 'tool_use' &&
+          typeof block.name === 'string' &&
+          references.has(block.name)
+        ) {
+          pendingReferencedCalls.set(String(block.id ?? ''), block.name)
+        }
       }
     }
   }
@@ -184,35 +229,52 @@ export function translateAnthropicRequestToOpenAI(input: UnknownRecord): Unknown
     }
   }
 
-  const allTools = (Array.isArray(input.tools) ? input.tools : [])
+  const rawTools = (Array.isArray(input.tools) ? input.tools : [])
     .filter(isRecord)
-    .map(tool => ({
+  const toOpenAITool = (tool: UnknownRecord) => ({
       type: 'function',
       function: {
         name: String(tool.name ?? ''),
         ...(typeof tool.description === 'string' ? { description: tool.description } : {}),
         parameters: normalizeFunctionParameters(tool.input_schema),
       },
-    }))
+    })
+  const allTools = rawTools.map(toOpenAITool)
+  // OpenAI-compatible APIs do not understand Anthropic's defer_loading flag.
+  // Sending those schemas anyway defeats ToolSearch and charges their tokens on
+  // every turn. Keep deferred definitions locally so a tool_reference follow-up
+  // can expose the selected schema, but omit them from ordinary requests.
+  const initiallyVisibleTools = rawTools
+    .filter(tool => tool.defer_loading !== true)
+    .map(toOpenAITool)
 
-  // Anthropic expands tool_reference blocks server-side and expects the model
-  // to call one of those tools next. OpenAI-compatible APIs have no equivalent
-  // protocol, so emulate that transition for exactly the immediate follow-up:
-  // expose only the referenced schemas and require one function call. Once the
-  // real tool returns, the latest message no longer contains tool_reference and
-  // the normal tool pool is restored.
-  const immediateToolReferences = getImmediateToolReferences(input.messages)
-  const referencedTools = immediateToolReferences.size
+  // OpenAI-compatible APIs do not expand Anthropic tool_reference blocks.
+  // Keep selected schemas loaded for the rest of the current user turn: the
+  // model may legitimately ask a question or update Profile before calling the
+  // deferred action. Keep normal tools visible too, and unload each selected
+  // schema after it is invoked or when the next genuine user turn starts.
+  const activeToolReferences = getActiveToolReferences(input.messages)
+  const referencedTools = activeToolReferences.size
     ? allTools.filter(tool => {
         const fn = isRecord(tool.function) ? tool.function : undefined
-        return typeof fn?.name === 'string' && immediateToolReferences.has(fn.name)
+        return typeof fn?.name === 'string' && activeToolReferences.has(fn.name)
       })
     : []
+  const visibleNames = new Set(initiallyVisibleTools.map(tool => {
+    const fn = isRecord(tool.function) ? tool.function : undefined
+    return typeof fn?.name === 'string' ? fn.name : ''
+  }))
+  const tools = [
+    ...initiallyVisibleTools,
+    ...referencedTools.filter(tool => {
+      const fn = isRecord(tool.function) ? tool.function : undefined
+      return typeof fn?.name === 'string' && !visibleNames.has(fn.name)
+    }),
+  ]
   const isToolReferenceFollowUp = referencedTools.length > 0
-  const tools = isToolReferenceFollowUp ? referencedTools : allTools
 
   const toolChoice = isToolReferenceFollowUp
-    ? 'required'
+    ? 'auto'
     : isRecord(input.tool_choice)
       ? input.tool_choice.type === 'tool'
         ? { type: 'function', function: { name: String(input.tool_choice.name ?? '') } }
@@ -311,6 +373,10 @@ class OpenAIStreamTranslator {
   private toolBlocks = new Map<number, { blockIndex: number; id: string; name: string }>()
   private finishReason: unknown = null
   private usage: unknown = null
+
+  getUsage(): unknown {
+    return this.usage
+  }
 
   push(chunk: UnknownRecord): UnknownRecord[] {
     const output: UnknownRecord[] = []
@@ -453,13 +519,27 @@ function translateOpenAIJsonToAnthropicStream(input: UnknownRecord): Response {
   })
 }
 
-function translateOpenAIStream(response: Response): Response {
+function translateOpenAIStream(
+  response: Response,
+  onComplete?: (
+    usage: unknown,
+    outcome: 'completed' | 'cancelled' | 'invalid_response',
+  ) => Promise<void>,
+): Response {
   if (!response.body) return response
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
   const encoder = new TextEncoder()
   const translator = new OpenAIStreamTranslator()
   let buffer = ''
+  let completionRecorded = false
+  const recordCompletion = async (
+    outcome: 'completed' | 'cancelled' | 'invalid_response',
+  ) => {
+    if (completionRecorded) return
+    completionRecorded = true
+    await onComplete?.(translator.getUsage(), outcome)
+  }
 
   const body = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -479,6 +559,7 @@ function translateOpenAIStream(response: Response): Response {
             if (!data) continue
             if (data === '[DONE]') {
               controller.enqueue(encoder.encode(encodeAnthropicSse(translator.finish())))
+              await recordCompletion('completed')
               controller.close()
               await reader.cancel().catch(() => {})
               return
@@ -497,15 +578,18 @@ function translateOpenAIStream(response: Response): Response {
           }
           if (done) {
             controller.enqueue(encoder.encode(encodeAnthropicSse(translator.finish())))
+            await recordCompletion('completed')
             controller.close()
             return
           }
         }
       } catch (error) {
+        await recordCompletion('invalid_response')
         controller.error(error)
       }
     },
     cancel() {
+      void recordCompletion('cancelled')
       return reader.cancel()
     },
   })
@@ -554,6 +638,15 @@ export function createOpenAICompatibilityFetch(
     const anthropicRequest = await readRequestJson(input, init)
     if (!anthropicRequest) return fetchImpl(input, init)
     const openAIRequest = translateAnthropicRequestToOpenAI(anthropicRequest)
+    const gatewayUrl = buildChatCompletionsUrl(options.baseUrl)
+    const monitorContext: GatewayMonitorContext = {
+      requestId: randomUUID(),
+      sessionId: options.sessionId,
+      userId: options.userId,
+      gatewayUrl,
+      startedAt: Date.now(),
+    }
+    await recordGatewayRequest(monitorContext, openAIRequest)
     const headers = new Headers(input instanceof Request ? input.headers : init?.headers)
     headers.delete('x-api-key')
     headers.delete('anthropic-version')
@@ -562,20 +655,62 @@ export function createOpenAICompatibilityFetch(
     headers.set('accept', openAIRequest.stream ? 'text/event-stream' : 'application/json')
     if (options.apiKey) headers.set('authorization', `Bearer ${options.apiKey}`)
 
-    const response = await fetchImpl(buildChatCompletionsUrl(options.baseUrl), {
-      ...init,
-      method: 'POST',
-      headers,
-      body: JSON.stringify(openAIRequest),
-    })
-    if (!response.ok) return response
+    let response: Response
+    try {
+      response = await fetchImpl(gatewayUrl, {
+        ...init,
+        method: 'POST',
+        headers,
+        body: JSON.stringify(openAIRequest),
+      })
+    } catch (error) {
+      await recordGatewayResponse(monitorContext, {
+        status: null,
+        outcome: 'network_error',
+        error,
+      })
+      throw error
+    }
+    if (!response.ok) {
+      await recordGatewayResponse(monitorContext, {
+        status: response.status,
+        outcome: 'http_error',
+      })
+      return response
+    }
     const contentType = response.headers.get('content-type')?.toLowerCase() ?? ''
     if (openAIRequest.stream === true && contentType.includes('text/event-stream')) {
-      return translateOpenAIStream(response)
+      return translateOpenAIStream(response, (usage, outcome) =>
+        recordGatewayResponse(monitorContext, {
+          status: response.status,
+          usage,
+          outcome,
+        }))
     }
 
-    const parsed = await response.json()
-    if (!isRecord(parsed)) return response
+    let parsed: unknown
+    try {
+      parsed = await response.json()
+    } catch (error) {
+      await recordGatewayResponse(monitorContext, {
+        status: response.status,
+        outcome: 'invalid_response',
+        error,
+      })
+      throw error
+    }
+    if (!isRecord(parsed)) {
+      await recordGatewayResponse(monitorContext, {
+        status: response.status,
+        outcome: 'invalid_response',
+      })
+      return response
+    }
+    await recordGatewayResponse(monitorContext, {
+      status: response.status,
+      usage: parsed.usage,
+      outcome: 'completed',
+    })
     if (openAIRequest.stream === true) {
       return translateOpenAIJsonToAnthropicStream(parsed)
     }

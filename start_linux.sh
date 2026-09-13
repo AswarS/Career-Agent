@@ -45,6 +45,7 @@ echo "[联调] 启动后端：http://localhost:4000"
   cd "$BACKEND_DIR"
   export CAREER_AGENT_SKIP_AUTH="${CAREER_AGENT_SKIP_AUTH:-true}"
   export CAREER_AGENT_SKIP_AUTH_USER_ID="${CAREER_AGENT_SKIP_AUTH_USER_ID:-1}"
+  export CAREER_AGENT_GATEWAY_MONITOR_ENABLED="${CAREER_AGENT_GATEWAY_MONITOR_ENABLED:-true}"
   exec bun run network:dev
 ) &
 BACKEND_PID=$!

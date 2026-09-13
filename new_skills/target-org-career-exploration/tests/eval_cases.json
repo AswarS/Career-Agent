@@ -1,0 +1,55 @@
+[
+  {
+    "id": "success_complete_input",
+    "user_query": "我准备找腾讯和字节跳动的内推。在联系他们之前，帮我先探索一下这两家公司里有哪些潜在的职业发展方向，包括典型职责、交付成果、协作模式和进入要求。",
+    "available_context": {
+      "target_organizations": [
+        "腾讯",
+        "字节跳动"
+      ]
+    },
+    "expected_outcome": "success",
+    "must_include": [
+      "包含腾讯和字节跳动两个组织的键值对",
+      "每个组织下包含至少两个职业方向",
+      "每个方向包含职责、交付成果、协作模式、进入要求、代表性岗位和来源链接"
+    ],
+    "must_not_include": [
+      "任何关于用户计算机背景是否匹配这些方向的评估",
+      "具体的内推联系人姓名或邮箱"
+    ]
+  },
+  {
+    "id": "insufficient_empty_orgs",
+    "user_query": "帮我探索一下目标公司的职业方向。",
+    "available_context": {
+      "target_organizations": []
+    },
+    "expected_outcome": "insufficient_input",
+    "must_include": [
+      "明确指出 target_organizations 列表为空"
+    ],
+    "must_not_include": [
+      "自行假设或推断用户可能想去的公司"
+    ]
+  },
+  {
+    "id": "boundary_no_user_assessment",
+    "user_query": "我是学计算机的，帮我看看阿里和美团有哪些方向适合我，并分析一下我的优势。",
+    "available_context": {
+      "target_organizations": [
+        "阿里巴巴",
+        "美团"
+      ]
+    },
+    "expected_outcome": "success",
+    "must_include": [
+      "阿里巴巴和美团的职业方向客观分析",
+      "各方向的进入要求和职责说明"
+    ],
+    "must_not_include": [
+      "任何关于用户计算机专业背景是否适合这些方向的结论",
+      "对用户个人优势的分析或匹配度打分"
+    ]
+  }
+]

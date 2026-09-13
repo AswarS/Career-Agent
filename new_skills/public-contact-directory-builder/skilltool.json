@@ -1,0 +1,305 @@
+{
+  "skill_id": "public_contact_directory_builder",
+  "skill_name": "public-contact-directory-builder",
+  "tool_name": "PublicContactDirectoryBuilder",
+  "title": "公开联系人目录整理",
+  "business_goal": "解析联系草稿提取目标组织，结合用户跟进偏好，检索并结构化该组织的公开联系人、校友及内推渠道，生成带优先级的联系人目录。",
+  "invocation_mode": "aggregate",
+  "composition": {
+    "required_prior_outputs": [
+      "draft_message"
+    ],
+    "optional_prior_outputs": []
+  },
+  "when_to_use": "当用户已经起草了联系消息（如内推或咨询），需要进一步挖掘目标公司的公开校友、内推渠道或关键联系人，并根据个人的跟进偏好（如频率、渠道）对这些联系人进行优先级排序时使用。不适用于从零开始寻找公司或起草初始消息。",
+  "reference_pattern": "借鉴 career-competency-model 的外部证据检索与结构化提取模式，以及 learning-plan 的基于用户约束进行优先级排序的模式。",
+  "task_ids": [
+    "p1_task_023"
+  ],
+  "scenario_binding": {
+    "domain_source": "scenario_only",
+    "domain_mode": "open",
+    "explicit_domains": [],
+    "profile_role": "evidence_only"
+  },
+  "scope": {
+    "includes": [
+      "解析草稿提取目标组织",
+      "检索公开校友、内推入口或关键团队公开信息",
+      "结合用户偏好对联系人和渠道进行优先级排序",
+      "生成结构化且带来源链接的联系人目录"
+    ],
+    "excludes": [
+      "起草或修改联系消息",
+      "直接发送消息或修改外部系统状态",
+      "猜测或编造私人联系方式",
+      "修改用户画像或岗位清单"
+    ]
+  },
+  "input_schema": {
+    "draft_message": {
+      "type": "string",
+      "required": true,
+      "description": "基于用户画像、联系人关系和沟通目的生成的自然、克制的联系消息文本，包含真实来意和双方关系说明。",
+      "source": "prior_skill_output",
+      "source_ref": "draft_message",
+      "available": true,
+      "acquisition": {
+        "mode": "prior_skill",
+        "provider": "draft-networking-message",
+        "fallback": "缺少该信息时返回 insufficient_input"
+      }
+    },
+    "follow_up_preferences": {
+      "type": "object",
+      "required": true,
+      "description": "用户对于求职申请跟进策略的个性化约束与期望，包括可接受的跟进频率、偏好的沟通方式以及不同状态下的优先级判定规则。",
+      "source": "user_input",
+      "source_ref": null,
+      "available": false,
+      "acquisition": {
+        "mode": "request_user",
+        "provider": null,
+        "fallback": "缺少该信息时返回 insufficient_input"
+      }
+    }
+  },
+  "output_schema": {
+    "public_contact_directory": {
+      "type": "array",
+      "description": "目标组织的公开可验证职业联系人、校友和内部内推途径的结构化集合，包括来源链接和验证状态。"
+    }
+  },
+  "output_consumers": [
+    "user_decision"
+  ],
+  "tool_selection": [
+    {
+      "tool_name": "WebSearch",
+      "usage_mode": "conditional",
+      "reason": "需要搜索目标组织的公开校友网络、官方内推入口或招聘团队公开联系方式。",
+      "condition": "从草稿中提取出明确的目标组织名称，需要获取其外部公开人脉或渠道信息。",
+      "fallback": "返回 insufficient_input，提示无法找到该组织的公开渠道。"
+    },
+    {
+      "tool_name": "WebFetch",
+      "usage_mode": "conditional",
+      "reason": "需要读取特定公司招聘页面、校友网络页面或内推系统说明，以获取准确的链接和流程细节。",
+      "condition": "WebSearch 返回了潜在的目标页面链接，需要提取具体的内推表单 URL 或联系人公开主页信息。",
+      "fallback": "仅使用 WebSearch 的摘要信息，并在输出中标记链接未经验证。"
+    }
+  ],
+  "child_tools": [
+    "WebSearch",
+    "WebFetch"
+  ],
+  "harness_tools": [],
+  "fresh_data_policy": "required",
+  "action_tool": {
+    "search_hint": "extract target organization from draft and search public alumni or referral channels",
+    "preserve_existing": true,
+    "always_load": true,
+    "read_only": false
+  },
+  "operating_model": {
+    "role": "职业人脉情报分析师与目录构建者，负责从文本中提取目标并检索、验证、排序公开人脉资源。",
+    "hard_boundaries": [
+      "不得虚构联系人姓名、邮箱、社交账号或内推链接。",
+      "不得修改、重写或评估 draft_message 的内容质量。",
+      "不得代替用户发送任何消息或修改外部系统状态。",
+      "仅使用公开可验证的来源，不得尝试绕过平台权限获取非公开信息。"
+    ],
+    "workflow": [
+      {
+        "step": 1,
+        "name": "解析草稿提取目标组织",
+        "instructions": [
+          "读取 draft_message 文本。",
+          "识别并提取目标组织名称、目标部门或团队（如有提及）、以及沟通的核心目的（如内推、咨询）。",
+          "如果无法识别出明确的目标组织，停止执行。"
+        ],
+        "success_criteria": [
+          "成功提取出至少一个明确的目标组织名称。"
+        ]
+      },
+      {
+        "step": 2,
+        "name": "检索公开人脉与渠道",
+        "instructions": [
+          "使用 WebSearch 搜索目标组织的公开校友网络入口、官方内推系统说明、招聘团队公开联系方式或相关团队负责人的公开主页。",
+          "使用 WebFetch 访问搜索结果中的高相关性链接，提取具体的内推表单 URL、校友录链接或联系人公开职业档案链接。",
+          "记录每个提取项的来源 URL 和验证状态（已验证链接/仅摘要）。"
+        ],
+        "success_criteria": [
+          "获取到至少一个带有来源链接的公开联系人或内推渠道信息。"
+        ]
+      },
+      {
+        "step": 3,
+        "name": "应用偏好与优先级排序",
+        "instructions": [
+          "读取 follow_up_preferences 对象。",
+          "根据用户偏好的沟通方式（如偏好 LinkedIn 还是邮件）对联系人/渠道进行匹配。",
+          "根据优先级判定规则（如官方内推系统优先于普通公开邮箱，匹配偏好渠道优先）对条目进行打分和排序。",
+          "为每个条目分配 priority_rank（1 为最高）。"
+        ],
+        "success_criteria": [
+          "所有检索到的条目均已根据 follow_up_preferences 分配了明确的 priority_rank。"
+        ]
+      },
+      {
+        "step": 4,
+        "name": "构建结构化目录",
+        "instructions": [
+          "将排序后的条目组装为 public_contact_directory 数组。",
+          "每个条目必须包含：name_or_channel（名称或渠道名）、type（类型：alumni/referral_system/hiring_team/leader）、source_url（来源链接）、verification_status（验证状态）、priority_rank（优先级）和 rationale（排序理由）。"
+        ],
+        "success_criteria": [
+          "生成的数组结构完整，所有必填字段均已填充且类型正确。"
+        ]
+      },
+      {
+        "step": 5,
+        "name": "验证与返回",
+        "instructions": [
+          "检查 public_contact_directory 中每个条目的 source_url 是否为真实存在的公开链接。",
+          "确认没有包含任何私人或非公开的联系方式。",
+          "调用 ReturnSkillResult 返回最终结果。"
+        ],
+        "success_criteria": [
+          "所有断言通过，成功调用 ReturnSkillResult。"
+        ]
+      }
+    ],
+    "decision_rules": [
+      "优先级排序规则：完全匹配用户偏好渠道的联系人/渠道优先级最高；官方内推系统优先级高于普通公开邮箱；带有已验证来源链接的优先级高于仅摘要的。",
+      "冲突处理规则：如果搜索结果中出现多个同名组织，优先选择草稿中上下文暗示的（如行业、地域）组织；若无法区分，则列出所有并在 rationale 中标记不确定性。",
+      "验证状态规则：通过 WebFetch 成功读取并确认页面内容相关的标记为 verified；仅依赖 WebSearch 摘要的标记为 unverified_snippet。"
+    ],
+    "outcome_rules": {
+      "success": [
+        "成功提取目标组织。",
+        "找到至少一个公开联系人或内推渠道。",
+        "成功应用偏好排序并生成结构化目录。"
+      ],
+      "insufficient_input": [
+        "草稿中无法识别出明确的目标组织。",
+        "用户未提供 follow_up_preferences。",
+        "网络搜索未返回任何相关的公开渠道或联系人信息。"
+      ],
+      "error": [
+        "网络搜索或抓取工具发生系统性故障。",
+        "输入数据格式损坏无法解析。"
+      ]
+    },
+    "artifact_contract": {
+      "mode": "none",
+      "artifact_type": null,
+      "file_name_pattern": null,
+      "format": null,
+      "verification_steps": []
+    },
+    "final_checks": [
+      "确认 public_contact_directory 中每个条目都包含非空的 source_url。",
+      "确认没有包含任何私人邮箱、私人手机号或非公开社交账号。",
+      "确认 priority_rank 的分配逻辑与 follow_up_preferences 中的规则严格一致。",
+      "确认未修改或重写 draft_message 的任何内容。"
+    ]
+  },
+  "complexity": {
+    "level": "bounded",
+    "estimated_steps": 5,
+    "rationale": "需要跨步骤进行文本解析、外部证据检索、基于用户约束的排序和结构化输出，超越了简单的检索包装，但边界清晰，无需拆分为多个独立 Skill。"
+  },
+  "independence": {
+    "portable": true,
+    "assumptions": [
+      "仅依赖输入契约、外部模型 API 和 WebSearch/WebFetch 工具。",
+      "目标组织的公开信息可通过常规搜索引擎获取。"
+    ]
+  },
+  "evaluation_cases": [
+    {
+      "id": "success_complete_input",
+      "user_query": "我刚才写好了给腾讯微信事业群的联系草稿，结合我告诉你的跟进习惯，帮我找找他们家还有哪些公开的校友或内推渠道，整理个名单给我。",
+      "available_context": {
+        "draft_message": "您好，我是XX大学计算机系的硕士生，对微信事业群的后台开发岗位非常感兴趣...",
+        "follow_up_preferences": {
+          "preferred_channel": "LinkedIn",
+          "follow_up_frequency": "weekly",
+          "priority_rules": "official_referral_system > alumni_network > public_email"
+        }
+      },
+      "expected_outcome": "success",
+      "must_include": [
+        "public_contact_directory 数组",
+        "包含腾讯或微信相关的内推系统或校友网络链接",
+        "每个条目包含 priority_rank 和 source_url"
+      ],
+      "must_not_include": [
+        "虚构的私人邮箱",
+        "修改后的联系草稿"
+      ]
+    },
+    {
+      "id": "insufficient_missing_organization",
+      "user_query": "帮我找找公开联系人，这是我的草稿和我的偏好。",
+      "available_context": {
+        "draft_message": "您好，我对贵公司的技术岗位很感兴趣，希望能有机会交流。",
+        "follow_up_preferences": {
+          "preferred_channel": "email"
+        }
+      },
+      "expected_outcome": "insufficient_input",
+      "must_include": [
+        "指出草稿中未明确具体的目标组织名称"
+      ],
+      "must_not_include": [
+        "猜测一个公司并进行搜索"
+      ]
+    },
+    {
+      "id": "boundary_no_public_channels",
+      "user_query": "帮我找一下这家初创公司（名为X）的公开校友和内推途径。",
+      "available_context": {
+        "draft_message": "您好，我对X公司的AI算法岗位感兴趣...",
+        "follow_up_preferences": {
+          "preferred_channel": "LinkedIn"
+        }
+      },
+      "expected_outcome": "insufficient_input",
+      "must_include": [
+        "说明未找到X公司的公开校友网络或官方内推渠道",
+        "建议用户通过草稿中的直接联系人进行跟进"
+      ],
+      "must_not_include": [
+        "编造一个内推链接",
+        "返回空数组并标记为 success"
+      ]
+    }
+  ],
+  "relation_contract": {
+    "relation_id": "sample_relation_023",
+    "relation_signature": "obj_draft_message_9a42370d+obj_follow_up_preferences_cdaf6bfe->obj_public_contact_directory_27ae3ec7",
+    "input_object_ids": [
+      "obj_draft_message_9a42370d",
+      "obj_follow_up_preferences_cdaf6bfe"
+    ],
+    "output_object_id": "obj_public_contact_directory_27ae3ec7",
+    "k": 2,
+    "label": "t([obj_draft_message_9a42370d,obj_follow_up_preferences_cdaf6bfe],obj_public_contact_directory_27ae3ec7)",
+    "context_contract": {
+      "mode": "fused_scenario",
+      "profile_ids": [
+        "profile_ui_001"
+      ],
+      "scenario_ids": [
+        "scenario_fused"
+      ],
+      "binding_ids": [
+        "binding_001"
+      ],
+      "integration_reason": "all sampled objects share a compatible context scope"
+    }
+  }
+}

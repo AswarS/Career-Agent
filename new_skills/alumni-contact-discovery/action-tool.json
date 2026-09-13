@@ -1,0 +1,24 @@
+{
+  "tool_name": "AlumniContactDiscovery",
+  "user_facing_name": "校友与公开联系人挖掘",
+  "search_hint": "discover alumni and public professional contacts at target companies",
+  "preserve_existing": true,
+  "always_load": true,
+  "read_only": false,
+  "child_tools": [
+    "WebSearch",
+    "WebFetch"
+  ],
+  "input": {
+    "application_tracking_report": {
+      "type": "json",
+      "required": true,
+      "description": "基于申请记录与跟进偏好生成的结构化分析结果，包含按当前状态分类的申请清单、各节点停留时长分析以及针对需推进或超时未回复申请的具体下一步行动建议。"
+    },
+    "user_educational_institutions": {
+      "type": "string",
+      "required": true,
+      "description": "用户就读的学校或大学，用于筛选和识别相关的校友网络。"
+    }
+  }
+}

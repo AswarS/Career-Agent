@@ -1,0 +1,55 @@
+[
+  {
+    "id": "success_complete_input",
+    "user_query": "我想了解一下算法工程师（推荐系统方向）这个方向，我打算每个方向看 5 个真实岗位，每周大概能抽出 8 小时。帮我总结一下这个岗位所在行业的特点、主要业务线和公司背景。",
+    "available_context": {
+      "target_role_description": "算法工程师（推荐系统方向）",
+      "opportunity_count_per_direction": 5,
+      "weekly_time_availability": 8
+    },
+    "expected_outcome": "success",
+    "must_include": [
+      "推荐系统所在的典型行业（如电商、内容社区、本地生活等）",
+      "至少 3 个核心业务线或应用场景（如商品推荐、信息流、广告等）",
+      "基于公开证据的行业特点总结"
+    ],
+    "must_not_include": [
+      "评估用户是否适合推荐系统算法工程师",
+      "提供具体的求职时间表或学习计划"
+    ]
+  },
+  {
+    "id": "insufficient_vague_role",
+    "user_query": "我想了解一下开发岗位，每个方向看 3 个，每周 4 小时。",
+    "available_context": {
+      "target_role_description": "开发岗位",
+      "opportunity_count_per_direction": 3,
+      "weekly_time_availability": 4
+    },
+    "expected_outcome": "insufficient_input",
+    "must_include": [
+      "指出 target_role_description 过于宽泛，无法确定具体的行业和业务线"
+    ],
+    "must_not_include": [
+      "强行生成一个通用的软件开发行业背景"
+    ]
+  },
+  {
+    "id": "boundary_low_time",
+    "user_query": "帮我调研一下大模型应用开发工程师的行业背景，每个方向看 2 个，每周 3 小时。",
+    "available_context": {
+      "target_role_description": "大模型应用开发工程师",
+      "opportunity_count_per_direction": 2,
+      "weekly_time_availability": 3
+    },
+    "expected_outcome": "success",
+    "must_include": [
+      "大模型应用开发的典型行业",
+      "最多 2 个核心业务线（受限于每周 3 小时的约束）"
+    ],
+    "must_not_include": [
+      "列出 4 个以上的业务线",
+      "提供详细的底层模型训练技术细节（偏离应用开发上下文）"
+    ]
+  }
+]

@@ -10,6 +10,7 @@ import {
 import type { JsonValue } from "./skillLifecycleTypes.js";
 import { createRestrictedSkillActionCanUseTool } from "./skillActionIsolation.js";
 import type { Tool } from "../Tool.js";
+import { RETURN_SKILL_RESULT_TOOL_NAME } from "./skillLifecycle.js";
 
 function allowedToolName(rule: string): string | null {
   return rule.trim().match(/^([A-Za-z0-9_.:-]+)/)?.[1] ?? null;
@@ -43,6 +44,28 @@ export function preloadSkillActionTools(
   );
 }
 
+/**
+ * Build the smallest tool pool an Action Skill can use. Permission isolation
+ * alone is insufficient: unavailable tools can still contribute schemas to
+ * every child-model request. ReturnSkillResult is an implicit lifecycle tool;
+ * every other tool must be declared in allowed-tools.
+ */
+export function selectSkillActionTools(
+  tools: readonly Tool[],
+  allowedTools: readonly string[],
+): Tool[] {
+  const names = new Set(
+    allowedTools
+      .map(allowedToolName)
+      .filter((name): name is string => Boolean(name)),
+  );
+  names.add(RETURN_SKILL_RESULT_TOOL_NAME);
+  return preloadSkillActionTools(
+    tools.filter((tool) => names.has(tool.name)),
+    allowedTools,
+  );
+}
+
 export async function getSkillActionCommand(
   skillName: string,
 ): Promise<CommandBase & PromptCommand> {
@@ -73,7 +96,7 @@ export async function executeSkillAction(input: {
     ...input.context,
     options: {
       ...input.context.options,
-      tools: preloadSkillActionTools(
+      tools: selectSkillActionTools(
         input.context.options.tools,
         command.allowedTools ?? [],
       ),

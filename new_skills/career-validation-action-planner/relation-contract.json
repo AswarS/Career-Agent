@@ -1,0 +1,24 @@
+{
+  "relation_id": "sample_relation_008",
+  "relation_signature": "obj_application_records_9d31b377+obj_target_opportunity_e61ff70d->obj_career_validation_action_plan_62361312",
+  "input_object_ids": [
+    "obj_application_records_9d31b377",
+    "obj_target_opportunity_e61ff70d"
+  ],
+  "output_object_id": "obj_career_validation_action_plan_62361312",
+  "k": 2,
+  "label": "t([obj_application_records_9d31b377,obj_target_opportunity_e61ff70d],obj_career_validation_action_plan_62361312)",
+  "context_contract": {
+    "mode": "fused_scenario",
+    "profile_ids": [
+      "profile_ui_001"
+    ],
+    "scenario_ids": [
+      "scenario_fused"
+    ],
+    "binding_ids": [
+      "binding_001"
+    ],
+    "integration_reason": "all sampled objects share a compatible context scope"
+  }
+}

@@ -306,10 +306,10 @@ export function createProductProfileTools(runtime: ProfileToolRuntime): Tool[] {
       isReadOnly: () => true,
       searchHint: 'read the authenticated user product career and education profile',
       async description() {
-        return 'Read the current product career, education, and learning Profile. Use source=product before Profile management; use source=relevant when the current career task only needs relevant Profile context.';
+        return 'Read the current product career, education, and learning Profile. Call with {"source":"product"} for the full Profile. Call with {"source":"relevant","query":"the current career task"} for relevant context; query is required and must be non-empty.';
       },
       async prompt() {
-        return `${PROFILE_MEMORY_SCOPE_PROMPT}\n\nThe product view uses stable fieldKey values and never exposes internal Profile levels, indexes, source ids, or storage paths. Read before changing an existing field when its current value matters.`;
+        return `${PROFILE_MEMORY_SCOPE_PROMPT}\n\nValid calls are exactly {"source":"product"} or {"source":"relevant","query":"a non-empty description of the current career task"}. Never call source=relevant without query. The product view uses stable fieldKey values and never exposes internal Profile levels, indexes, source ids, or storage paths. Read before changing an existing field when its current value matters.`;
       },
       get inputSchema() { return readInput(); },
       get outputSchema() { return resultSchema(); },

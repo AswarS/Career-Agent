@@ -183,7 +183,7 @@ function compileTermPatterns(terms: string[]): Map<string, RegExp> {
  * - Action words when looking for functionality (e.g., "read", "list", "create")
  * - Tool-specific terms (e.g., "notebook", "shell", "kill")
  */
-async function searchToolsWithKeywords(
+export async function searchToolsWithKeywords(
   query: string,
   deferredTools: Tools,
   tools: Tools,
@@ -201,6 +201,20 @@ async function searchToolsWithKeywords(
     tools.find(t => t.name.toLowerCase() === queryLower)
   if (exactMatch) {
     return [exactMatch.name]
+  }
+
+  // Models often list several exact tool names separated by spaces instead of
+  // using select:A,B. Treat those unambiguous name mentions as direct matches;
+  // CamelCase names otherwise score zero after tokenization and cause retries.
+  const mentionedTools = deferredTools
+    .filter(tool => {
+      const escapedName = escapeRegExp(tool.name.toLowerCase())
+      return new RegExp(`(^|[^a-z0-9_])${escapedName}(?=$|[^a-z0-9_])`).test(queryLower)
+    })
+    .slice(0, maxResults)
+    .map(tool => tool.name)
+  if (mentionedTools.length > 0) {
+    return mentionedTools
   }
 
   // If query looks like an MCP tool prefix (mcp__server), find matching tools.

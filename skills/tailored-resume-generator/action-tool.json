@@ -1,0 +1,40 @@
+{
+  "tool_name": "TailoredResumeGenerator",
+  "user_facing_name": "生成或优化定制简历",
+  "search_hint": "根据 Profile 或真实经历生成基础简历，也可按目标岗位优化并输出可下载简历",
+  "preserve_existing": true,
+  "always_load": false,
+  "read_only": false,
+  "input": {
+    "application_materials": {
+      "type": "json",
+      "required": false,
+      "description": "可选结构化基础投递材料"
+    },
+    "resume_draft": {
+      "type": "string",
+      "required": false,
+      "description": "可选的现有简历文本"
+    },
+    "career_direction_exploration_results": {
+      "type": "json",
+      "required": false,
+      "description": "可选职业方向职责和能力要求"
+    },
+    "target_opportunity": {
+      "type": "json",
+      "required": false,
+      "description": "可选具体岗位描述；缺失时生成通用基础简历"
+    },
+    "user_profile": {
+      "type": "json",
+      "required": false,
+      "description": "可独立作为简历事实来源的用户 Profile"
+    },
+    "format_preferences": {
+      "type": "json",
+      "required": false,
+      "description": "可选语言、篇幅、标题和版式偏好"
+    }
+  }
+}

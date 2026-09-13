@@ -62,11 +62,13 @@ describe('OpenAI compatibility adapter', () => {
           name: 'mcp__github__get_me',
           description: 'Get the authenticated GitHub user',
           input_schema: { type: 'object', properties: {} },
+          defer_loading: true,
         },
         {
           name: 'mcp__github__search_repositories',
           description: 'Search GitHub repositories',
           input_schema: { type: 'object', properties: { query: { type: 'string' } } },
+          defer_loading: true,
         },
       ],
     })
@@ -81,10 +83,84 @@ describe('OpenAI compatibility adapter', () => {
 
     const toolNames = (translated.tools as any[])
       .map(tool => tool.function.name)
+    expect(toolNames).toContain('ToolSearch')
     expect(toolNames).toContain('mcp__github__get_me')
     expect(toolNames).toContain('mcp__github__search_repositories')
-    expect(toolNames).not.toContain('ToolSearch')
-    expect(translated.tool_choice).toBe('required')
+    expect(translated.tool_choice).toBe('auto')
+  })
+
+  test('keeps deferred schemas active across intervening tool calls in one user turn', () => {
+    const translated = translateAnthropicRequestToOpenAI({
+      model: 'GLM-5.2',
+      messages: [
+        { role: 'user', content: 'find referral contacts' },
+        {
+          role: 'assistant',
+          content: [{
+            type: 'tool_use', id: 'search-1', name: 'ToolSearch',
+            input: { query: 'select:FindReferralEntryPoints' },
+          }],
+        },
+        {
+          role: 'user',
+          content: [{
+            type: 'tool_result', tool_use_id: 'search-1',
+            content: [{ type: 'tool_reference', tool_name: 'FindReferralEntryPoints' }],
+          }],
+        },
+        {
+          role: 'assistant',
+          content: [{
+            type: 'tool_use', id: 'question-1', name: 'AskUserQuestion', input: { questions: [] },
+          }],
+        },
+        {
+          role: 'user',
+          content: [{ type: 'tool_result', tool_use_id: 'question-1', content: 'Zhejiang University' }],
+        },
+      ],
+      tools: [
+        { name: 'ToolSearch', input_schema: { type: 'object', properties: {} } },
+        { name: 'AskUserQuestion', input_schema: { type: 'object', properties: {} } },
+        {
+          name: 'FindReferralEntryPoints', defer_loading: true,
+          input_schema: { type: 'object', properties: { target_company: { type: 'string' } } },
+        },
+      ],
+    })
+
+    expect((translated.tools as any[]).map(tool => tool.function.name)).toEqual([
+      'ToolSearch',
+      'AskUserQuestion',
+      'FindReferralEntryPoints',
+    ])
+    expect(translated.tool_choice).toBe('auto')
+  })
+
+  test('omits deferred schemas until ToolSearch references them', () => {
+    const translated = translateAnthropicRequestToOpenAI({
+      model: 'GLM-5.2',
+      messages: [{ role: 'user', content: 'help me' }],
+      tools: [
+        { name: 'ToolSearch', input_schema: { type: 'object', properties: {} } },
+        {
+          name: 'LargeDeferredAction',
+          description: 'A deliberately large deferred schema',
+          input_schema: {
+            type: 'object',
+            properties: { payload: { type: 'string', description: 'x'.repeat(2_000) } },
+          },
+          defer_loading: true,
+        },
+        { name: 'Read', input_schema: { type: 'object', properties: {} } },
+      ],
+    })
+
+    expect((translated.tools as any[]).map(tool => tool.function.name)).toEqual([
+      'ToolSearch',
+      'Read',
+    ])
+    expect(JSON.stringify(translated)).not.toContain('LargeDeferredAction')
   })
 
   test('restores the normal OpenAI tool pool after a referenced tool returns', () => {
@@ -119,13 +195,52 @@ describe('OpenAI compatibility adapter', () => {
       ],
       tools: [
         { name: 'ToolSearch', input_schema: { type: 'object', properties: {} } },
-        { name: 'mcp__github__get_me', input_schema: { type: 'object', properties: {} } },
+        {
+          name: 'mcp__github__get_me',
+          input_schema: { type: 'object', properties: {} },
+          defer_loading: true,
+        },
       ],
     })
 
     const toolNames = (translated.tools as any[]).map(tool => tool.function.name)
-    expect(toolNames).toEqual(['ToolSearch', 'mcp__github__get_me'])
+    expect(toolNames).toEqual(['ToolSearch'])
     expect(translated.tool_choice).toBeUndefined()
+  })
+
+  test('keeps a referenced schema loaded after a validation error', () => {
+    const translated = translateAnthropicRequestToOpenAI({
+      model: 'GLM-5.2',
+      messages: [
+        {
+          role: 'user',
+          content: [{
+            type: 'tool_result', tool_use_id: 'search-1',
+            content: [{ type: 'tool_reference', tool_name: 'DeferredAction' }],
+          }],
+        },
+        {
+          role: 'assistant',
+          content: [{ type: 'tool_use', id: 'action-1', name: 'DeferredAction', input: { wrong: true } }],
+        },
+        {
+          role: 'user',
+          content: [{ type: 'tool_result', tool_use_id: 'action-1', is_error: true, content: 'invalid input' }],
+        },
+      ],
+      tools: [
+        { name: 'ToolSearch', input_schema: { type: 'object', properties: {} } },
+        {
+          name: 'DeferredAction', defer_loading: true,
+          input_schema: { type: 'object', properties: { required: { type: 'string' } } },
+        },
+      ],
+    })
+
+    expect((translated.tools as any[]).map(tool => tool.function.name)).toEqual([
+      'ToolSearch',
+      'DeferredAction',
+    ])
   })
 
   test('translates a non-streaming OpenAI response without losing its prefix', () => {

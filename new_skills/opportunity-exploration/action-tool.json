@@ -1,0 +1,24 @@
+{
+  "tool_name": "OpportunityExploration",
+  "user_facing_name": "真实岗位探索与筛选",
+  "search_hint": "search for real job postings based on industry, company, and validation preferences",
+  "preserve_existing": true,
+  "always_load": true,
+  "read_only": false,
+  "child_tools": [
+    "WebSearch",
+    "WebFetch"
+  ],
+  "input": {
+    "additional_context": {
+      "type": "string",
+      "required": true,
+      "description": "关于目标岗位所在企业、行业特点或特定业务线的补充说明，用于辅助理解岗位上下文。"
+    },
+    "validation_action_preferences": {
+      "type": "json",
+      "required": true,
+      "description": "用户对不同验证行动类型（如投递简历、建立人脉、参与项目）的倾向和约束。"
+    }
+  }
+}

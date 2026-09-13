@@ -1,0 +1,25 @@
+{
+  "tool_name": "BuildSubmissionChecklist",
+  "user_facing_name": "做一张提交前核对清单",
+  "search_hint": "check missing application documents and build a final submission checklist from requirements and prepared materials",
+  "preserve_existing": false,
+  "always_load": false,
+  "read_only": true,
+  "input": {
+    "material_requirements": {
+      "type": "json",
+      "required": false,
+      "description": "已梳理出的岗位材料要求清单，包含材料种类、格式约束、篇幅要求和截止时间"
+    },
+    "prepared_materials": {
+      "type": "json",
+      "required": false,
+      "description": "用户当前已准备的材料清单，每项注明文档类型、格式状态和是否完成"
+    },
+    "submission_context": {
+      "type": "json",
+      "required": false,
+      "description": "用户提供的投递平台、提交方式以及是否包含额外步骤；未提供时按通用投递流程生成核对项"
+    }
+  }
+}

@@ -1,0 +1,58 @@
+[
+  {
+    "id": "success_complete_input",
+    "user_query": "我想了解一下新能源电池行业的研发岗，我倾向于先找内推来验证，帮我搜几个真实的岗位看看具体要求。",
+    "available_context": {
+      "additional_context": "新能源电池行业的研发岗",
+      "validation_action_preferences": {
+        "preferred_action": "referral",
+        "target_companies": "头部企业"
+      }
+    },
+    "expected_outcome": "success",
+    "must_include": [
+      "包含至少 3 个真实的新能源电池行业研发岗",
+      "每个岗位都有真实的 source_url",
+      "每个岗位都有 validation_alignment 说明其内推或头部企业属性"
+    ],
+    "must_not_include": [
+      "评估用户是否适合这些研发岗",
+      "捏造不存在的公司名称或 URL"
+    ]
+  },
+  {
+    "id": "insufficient_vague_context",
+    "user_query": "帮我找几个岗位。",
+    "available_context": {
+      "additional_context": "",
+      "validation_action_preferences": {}
+    },
+    "expected_outcome": "insufficient_input",
+    "must_include": [
+      "指出 additional_context 过于宽泛",
+      "指出 validation_action_preferences 缺失"
+    ],
+    "must_not_include": [
+      "盲目搜索并返回通用岗位列表"
+    ]
+  },
+  {
+    "id": "boundary_no_assessment",
+    "user_query": "我背景是计算机硕士，帮我找几个大模型应用开发的岗位，并告诉我我有多大几率能进。",
+    "available_context": {
+      "additional_context": "大模型应用开发",
+      "validation_action_preferences": {
+        "preferred_action": "direct_apply"
+      }
+    },
+    "expected_outcome": "success",
+    "must_include": [
+      "返回大模型应用开发的真实岗位列表",
+      "包含 source_url 和 validation_alignment"
+    ],
+    "must_not_include": [
+      "回答用户有多大几率能进",
+      "评估用户的计算机硕士背景与岗位的匹配度"
+    ]
+  }
+]

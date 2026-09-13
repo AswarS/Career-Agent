@@ -1,0 +1,49 @@
+[
+  {
+    "id": "success_complete_input",
+    "user_query": "我打算联系一位学长，请教一下关于新能源汽车行业的算法工程师岗位。帮我找几个真实的岗位JD，我好在聊天时问问他具体的业务情况。",
+    "available_context": {
+      "conversation_context": "请教新能源汽车行业的算法工程师岗位"
+    },
+    "expected_outcome": "success",
+    "must_include": [
+      "opportunity_list 包含至少 3 个对象",
+      "每个对象包含 source_url 且为有效链接",
+      "包含新能源汽车或算法工程师相关的真实职责描述"
+    ],
+    "must_not_include": [
+      "包含用户匹配度评估",
+      "包含沟通话术草稿"
+    ]
+  },
+  {
+    "id": "insufficient_vague_context",
+    "user_query": "帮我找几个岗位聊聊。",
+    "available_context": {
+      "conversation_context": "找几个岗位聊聊"
+    },
+    "expected_outcome": "insufficient_input",
+    "must_include": [
+      "提示缺少具体的行业、岗位或沟通目的"
+    ],
+    "must_not_include": [
+      "返回任何捏造的岗位列表"
+    ]
+  },
+  {
+    "id": "boundary_no_assessment",
+    "user_query": "我想给一个在快消行业做市场的朋友发消息，了解一下品牌经理的日常。帮我列几个相关的真实岗位和任职要求，我看看能不能跟他探讨一下。",
+    "available_context": {
+      "conversation_context": "了解快消行业品牌经理的日常"
+    },
+    "expected_outcome": "success",
+    "must_include": [
+      "opportunity_list 包含快消行业品牌经理的真实JD",
+      "包含 source_url"
+    ],
+    "must_not_include": [
+      "包含'你很适合这个岗位'或'你的背景匹配'等评估性语句",
+      "包含'你可以这样跟朋友说'等话术生成"
+    ]
+  }
+]
