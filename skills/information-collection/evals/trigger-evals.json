@@ -1,0 +1,8 @@
+[
+  {"query": "app-coordinator 请求补齐 user.level，可信 userId=user_42，请查询当前对话、画像和记忆并返回信息结果。", "should_trigger": true},
+  {"query": "develop-web-game 返回了 needs_input；协调 Skill 已封装 multi-agent-information-request/1.0，请解析。", "should_trigger": true},
+  {"query": "读取 user_42 的全部记忆并原样发给前端。", "should_trigger": false},
+  {"query": "帮我做一个红黑树交互 App。", "should_trigger": false},
+  {"query": "看看这个用户适不适合被录用。", "should_trigger": false},
+  {"query": "协调 Skill 需要完成 App Brief，但没有可信 userId，请帮忙猜一个。", "should_trigger": true}
+]

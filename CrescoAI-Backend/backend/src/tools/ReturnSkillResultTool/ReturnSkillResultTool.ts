@@ -12,13 +12,24 @@ import type {
 } from "../../skills/skillLifecycleTypes.js";
 import { validateSkillResultContract } from "../../skills/skillResultValidation.js";
 
+const compatibleSkillResultSchema = z.preprocess((value) => {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return value;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+}, z.json());
+
 const inputSchema = lazySchema(() =>
   z.strictObject({
     skill_call_id: z.string().min(1),
     skill_name: z.string().min(1),
     outcome: z.enum(["success", "insufficient_input", "error"]),
     summary: z.string().min(1),
-    result: z.json().optional(),
+    result: compatibleSkillResultSchema.optional(),
   }),
 );
 type InputSchema = ReturnType<typeof inputSchema>;
@@ -56,7 +67,7 @@ export const ReturnSkillResultTool = buildTool({
     return 'Close the active Skill invocation owned by this Agent and report its outcome. Do not call this for an Action Tool result that already has execution_status="completed". This does not end the Agent turn.';
   },
   async prompt() {
-    return 'Call this after finishing the current Skill invocation, or when that invocation cannot continue. Use only the current invocation ID supplied directly to this Agent by the Harness. Never reuse a child Action Tool result\'s skill_call_id: execution_status="completed" means that child invocation is already closed. The tool closes the current Skill invocation but does not decide what the Agent does next.';
+    return 'Call this after finishing the current Skill invocation, or when that invocation cannot continue. Use only the current invocation ID supplied directly to this Agent by the Harness. Never reuse a child Action Tool result\'s skill_call_id: execution_status="completed" means that child invocation is already closed. Pass structured result contracts as JSON objects, never JSON-encoded strings. The tool closes the current Skill invocation but does not decide what the Agent does next.';
   },
   get inputSchema(): InputSchema {
     return inputSchema();

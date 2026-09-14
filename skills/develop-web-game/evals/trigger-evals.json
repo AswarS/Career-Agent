@@ -1,0 +1,32 @@
+[
+  {
+    "query": "解释一下红黑树为什么需要旋转，我还没想好要文字还是图。",
+    "should_trigger": false,
+    "reason": "Raw intent; the coordinating skill must decide the response medium and optionally call its peer collector."
+  },
+  {
+    "query": "我最近准备面试有点迷茫，帮我看看应该怎么练。",
+    "should_trigger": false,
+    "reason": "The coordinating skill must recognize intent and either collect the state itself or invoke the peer collector."
+  },
+  {
+    "query": "协调 Skill 已完成 App Brief：scene=visualize，目标是逐步演示红黑树插入修复，受众是初级开发者。调用 develop-web-game 生成 HTML App。",
+    "should_trigger": true,
+    "reason": "Explicit invocation from the single coordinating skill with a completed rendering brief."
+  },
+  {
+    "query": "Use develop-web-game to render this validated multi-agent-app-brief/1.0 into an offline HTML app: scene=workspace, outcome=produce and export a conflict-free two-week interview plan; telemetry and privacy fields are included below...",
+    "should_trigger": true,
+    "reason": "Explicit renderer invocation with the required contract."
+  },
+  {
+    "query": "app-coordinator 调用内部 DevelopWebGame Tool，但 App Brief 只写了‘面试模拟器’。",
+    "should_trigger": true,
+    "reason": "Internal coordinator invocation should return needs_input because the App Brief is incomplete."
+  },
+  {
+    "query": "把现有 React 招聘网站的登录页修一下，按钮现在点不了。",
+    "should_trigger": false,
+    "reason": "Existing application repair, not a request to render a validated interactive App Brief."
+  }
+]

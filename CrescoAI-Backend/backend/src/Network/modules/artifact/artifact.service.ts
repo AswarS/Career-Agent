@@ -83,6 +83,8 @@ export class ArtifactService {
       metadataJson: _metadataJson,
       ...publicArtifact
     } = artifact;
+    const metadata = this.parseMetadata(artifact.metadataJson);
+    const metadataVersion = metadata?.version;
     return {
       ...publicArtifact,
       title: publicArtifact.title
@@ -97,6 +99,12 @@ export class ArtifactService {
       url: publicArtifact.url && !looksLikeServerPhysicalPath(publicArtifact.url)
         ? publicArtifact.url
         : undefined,
+      revision:
+        typeof metadataVersion === 'number' &&
+        Number.isFinite(metadataVersion) &&
+        metadataVersion > 0
+          ? metadataVersion
+          : 1,
     };
   }
 

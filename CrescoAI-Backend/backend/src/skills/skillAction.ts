@@ -10,6 +10,8 @@ import {
 import type { JsonValue } from "./skillLifecycleTypes.js";
 import { createRestrictedSkillActionCanUseTool } from "./skillActionIsolation.js";
 import type { Tool } from "../Tool.js";
+import type { Message } from "../types/message.js";
+import { registerSessionSkillReadOnlyRoot } from "../server/SessionContext.js";
 
 function allowedToolName(rule: string): string | null {
   return rule.trim().match(/^([A-Za-z0-9_.:-]+)/)?.[1] ?? null;
@@ -64,8 +66,15 @@ export async function executeSkillAction(input: {
   actionInput?: JsonValue;
   context: ToolUseContext;
   canUseTool: CanUseToolFn;
+  onMessage?: (
+    message: Message,
+    details: { agentId: string; skillContent: string },
+  ) => void;
 }): Promise<CompletedSkillAction> {
   const command = await getSkillActionCommand(input.skillName);
+  if (command.skillRoot) {
+    await registerSessionSkillReadOnlyRoot(command.skillRoot);
+  }
   const restrictedCanUseTool = createRestrictedSkillActionCanUseTool(
     input.canUseTool,
   );
@@ -87,6 +96,7 @@ export async function executeSkillAction(input: {
     requireCompletion: true,
     context: actionContext,
     canUseTool: restrictedCanUseTool,
+    onMessage: input.onMessage,
   });
   if (!execution.completion) {
     throw new Error(`${input.skillName} did not produce a lifecycle result`);

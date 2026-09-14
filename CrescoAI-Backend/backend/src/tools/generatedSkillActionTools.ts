@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 export function getGeneratedSkillActionTools() {
   return [
+    (require("./WebAppDevTool/WebAppDevTool.js") as typeof import("./WebAppDevTool/WebAppDevTool.js")).WebAppDevTool,
     (require("./BaselineAssessmentTool/BaselineAssessmentTool.js") as typeof import("./BaselineAssessmentTool/BaselineAssessmentTool.js")).BaselineAssessmentTool,
     (require("./CareerCompetencyModelTool/CareerCompetencyModelTool.js") as typeof import("./CareerCompetencyModelTool/CareerCompetencyModelTool.js")).CareerCompetencyModelTool,
     (require("./LearningPlanTool/LearningPlanTool.js") as typeof import("./LearningPlanTool/LearningPlanTool.js")).LearningPlanTool,

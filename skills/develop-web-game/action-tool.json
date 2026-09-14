@@ -1,0 +1,16 @@
+{
+  "tool_name": "DevelopWebGame",
+  "user_facing_name": "Web App renderer",
+  "search_hint": "render a validated internal App Brief",
+  "preserve_existing": true,
+  "internal_only": true,
+  "always_load": false,
+  "read_only": false,
+  "input": {
+    "app_brief": {
+      "type": "json",
+      "required": true,
+      "description": "A validated multi-agent-app-brief/1.0 object supplied by app-coordinator."
+    }
+  }
+}

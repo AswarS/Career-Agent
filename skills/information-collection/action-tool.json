@@ -1,0 +1,16 @@
+{
+  "tool_name": "WebAppInformationCollection",
+  "user_facing_name": "Web App information collection",
+  "search_hint": "resolve internal Web App brief information gaps",
+  "preserve_existing": true,
+  "internal_only": true,
+  "always_load": false,
+  "read_only": true,
+  "input": {
+    "information_request": {
+      "type": "json",
+      "required": true,
+      "description": "A multi-agent-information-request/1.0 object. The Tool binds the authenticated userId from trusted runtime context."
+    }
+  }
+}

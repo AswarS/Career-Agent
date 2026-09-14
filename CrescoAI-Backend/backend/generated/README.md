@@ -9,12 +9,12 @@
 | 指标 | 值 |
 | --- | --- |
 | Manifest 版本 | `1.0` |
-| 生成时间 | `2026-08-27T17:57:08.187Z` |
-| 源码版本 | `feat/skill-e2e-runtime` / `def303721b73`（dirty） |
-| Tool 记录数 | 33 |
-| 不同 Tool 名称数 | 31 |
+| 生成时间 | `2026-09-14T01:46:56.886Z` |
+| 源码版本 | `feat/skill-e2e-runtime` / `df441c5d9dc6`（dirty） |
+| Tool 记录数 | 34 |
+| 不同 Tool 名称数 | 32 |
 | Harness Tool | 28 |
-| Skill Tool | 5 |
+| Skill Tool | 6 |
 | Resource 数 | 14 |
 | 带 Resource I/O 的 Tool | 20 |
 | 缺少 output_schema 的 Tool | 1 |
@@ -43,7 +43,7 @@
 
 | 分类 | 数量 |
 | --- | --- |
-| `network.conversation` | 31 |
+| `network.conversation` | 32 |
 | `network.profile_refresh` | 2 |
 
 ### 按 Tool 类型
@@ -51,13 +51,13 @@
 | 分类 | 数量 |
 | --- | --- |
 | `harness_tool` | 28 |
-| `skill_tool` | 5 |
+| `skill_tool` | 6 |
 
 ### 按 Availability
 
 | 分类 | 数量 |
 | --- | --- |
-| `available` | 32 |
+| `available` | 33 |
 | `conditional` | 1 |
 
 ### 按 Loading
@@ -65,14 +65,14 @@
 | 分类 | 数量 |
 | --- | --- |
 | `deferred` | 7 |
-| `eager` | 26 |
+| `eager` | 27 |
 
 ### 按源码类型
 
 | 分类 | 数量 |
 | --- | --- |
 | `builtin` | 24 |
-| `generated_skill_action` | 5 |
+| `generated_skill_action` | 6 |
 | `service` | 4 |
 
 ### Resource 类型
@@ -139,6 +139,7 @@ I/O 缩写：`C` = consumes，`P` = produces，`R` = reads，`W` = writes。
 | `network.conversation:harness_tool:UpdateLearningPlan` | `UpdateLearningPlan` | `harness_tool` | `network.conversation` | `available` | `eager` | `C1/P1/R1/W1` |
 | `network.conversation:harness_tool:UpdateLearningProgress` | `UpdateLearningProgress` | `harness_tool` | `network.conversation` | `available` | `eager` | `C2/P0/R0/W1` |
 | `network.conversation:harness_tool:VideoGenerate` | `VideoGenerate` | `harness_tool` | `network.conversation` | `available` | `eager` | `C0/P0/R0/W0` |
+| `network.conversation:skill_tool:WebAppDev` | `WebAppDev` | `skill_tool` | `network.conversation` | `available` | `eager` | `C0/P0/R0/W0` |
 | `network.conversation:harness_tool:WebFetch` | `WebFetch` | `harness_tool` | `network.conversation` | `available` | `deferred` | `C0/P0/R0/W0` |
 | `network.conversation:harness_tool:WebSearch` | `WebSearch` | `harness_tool` | `network.conversation` | `available` | `eager` | `C0/P0/R0/W0` |
 | `network.conversation:harness_tool:Write` | `Write` | `harness_tool` | `network.conversation` | `available` | `eager` | `C0/P0/R0/W0` |
@@ -156,6 +157,7 @@ I/O 缩写：`C` = consumes，`P` = produces，`R` = reads，`W` = writes。
 | `network.conversation:skill_tool:LearningPlan` | `LearningPlan` | `learning-plan` | `action-tool` |
 | `network.conversation:skill_tool:LearningProgressAssessment` | `LearningProgressAssessment` | `learning-progress-assessment` | `action-tool` |
 | `network.conversation:skill_tool:LearningStageDesign` | `LearningStageDesign` | `learning-stage-design` | `action-tool` |
+| `network.conversation:skill_tool:WebAppDev` | `WebAppDev` | `app-coordinator` | `action-tool` |
 
 ## Conditional Tool
 

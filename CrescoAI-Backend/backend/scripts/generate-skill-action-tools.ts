@@ -22,6 +22,7 @@ const actionToolConfigSchema = z.strictObject({
   user_facing_name: z.string().trim().min(1).optional(),
   search_hint: z.string().trim().min(1).optional(),
   preserve_existing: z.boolean().optional().default(false),
+  internal_only: z.boolean().optional().default(false),
   always_load: z.boolean().optional().default(false),
   read_only: z.boolean().optional().default(true),
   input: z.record(z.string(), inputFieldSchema).optional(),
@@ -38,6 +39,7 @@ export type SkillActionToolSpec = {
   userFacingName: string
   searchHint?: string
   preserveExisting: boolean
+  internalOnly: boolean
   alwaysLoad: boolean
   readOnly: boolean
   input: Record<string, ActionToolInputField>
@@ -168,6 +170,14 @@ export async function discoverSkillActionTools(
     }
 
     const config = await readOptionalConfig(skillDir)
+    const userInvocableValue: unknown = frontmatter['user-invocable']
+    const userInvocable =
+      userInvocableValue !== false && userInvocableValue !== 'false'
+    if (config.internal_only && userInvocable) {
+      throw new Error(
+        `Internal Action Skill ${skillName} must set user-invocable: false`,
+      )
+    }
     const toolName = config.tool_name ?? titleCaseWords(skillName)
     if (!toolNamePattern.test(toolName)) {
       throw new Error(`Invalid generated Tool name ${JSON.stringify(toolName)}`)
@@ -185,6 +195,7 @@ export async function discoverSkillActionTools(
         config.user_facing_name ?? humanizeSkillName(skillName),
       searchHint: config.search_hint,
       preserveExisting: config.preserve_existing,
+      internalOnly: config.internal_only,
       alwaysLoad: config.always_load,
       readOnly: config.read_only,
       input,
@@ -350,6 +361,7 @@ export function renderSkillActionToolRegistry(
   registryFile: string,
 ): string {
   const requires = specs
+    .filter(spec => !spec.internalOnly)
     .map(spec => {
       const modulePath = `./${relative(dirname(registryFile), spec.outputFile)
         .replaceAll('\\', '/')
@@ -492,6 +504,7 @@ async function main(): Promise<void> {
         tools: plan.entries.map(entry => ({
           skill_name: entry.skillName,
           tool_name: entry.toolName,
+          internal_only: entry.internalOnly,
           output_file: entry.outputFile,
           disposition: entry.disposition,
         })),

@@ -21,6 +21,7 @@ export type GlobalDiskSkillCatalogEntry = {
   allowedTools: string[]
   category: 'analysis' | 'generation' | 'utility' | 'search'
   modelEntry: 'action-tool' | 'skill-catalog'
+  userInvocable: boolean
   model?: string
   resourceRoot: string
 }
@@ -114,6 +115,9 @@ export function getGlobalDiskSkillCatalog(): GlobalDiskSkillCatalogEntry[] {
         typeof frontmatter.model === 'string' && frontmatter.model.trim()
           ? frontmatter.model.trim()
           : undefined
+      const userInvocableValue: unknown = frontmatter['user-invocable']
+      const userInvocable =
+        userInvocableValue !== false && userInvocableValue !== 'false'
 
       return [
         {
@@ -125,6 +129,7 @@ export function getGlobalDiskSkillCatalog(): GlobalDiskSkillCatalogEntry[] {
           allowedTools,
           category,
           modelEntry,
+          userInvocable,
           model,
           resourceRoot: skillDir,
         },
@@ -179,7 +184,7 @@ export function registerCareerAgentSkills(): void {
       whenToUse: skill.whenToUse,
       argumentHint: skill.argumentHint,
       allowedTools: skill.allowedTools,
-      userInvocable: true,
+      userInvocable: skill.userInvocable,
       resourceRoot: skill.resourceRoot,
       modelEntry: skill.modelEntry,
       model: skill.model,

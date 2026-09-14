@@ -1,0 +1,11 @@
+{
+  "schema": "multi-agent-app-brief/1.0",
+  "invocation": {"requestedBy": "app-coordinator", "reason": "Algorithm state changes require stepwise visual explanation"},
+  "user": {"audience": "Junior developer preparing for interviews", "level": "Understands BST insertion but not red-black repair", "constraints": ["Chinese UI", "No external network"]},
+  "goal": {"outcome": "Explain why and when recoloring and rotation restore invariants", "successCriteria": ["User completes one guided insertion", "User predicts the repair action correctly in two new cases"]},
+  "content": {"domain": "Red-black-tree insertion", "required": ["Five invariants", "LL/RR/LR/RL cases", "Step-by-step recolor and rotation"], "excluded": ["Deletion"], "sourceNotes": []},
+  "experience": {"scene": "visualize", "primaryLoop": "insert node -> predict next repair -> animate step -> explain invariant", "requiredInteractions": ["insert", "step", "play/pause", "predict", "reset"], "completionState": "Guided case and two transfer predictions completed"},
+  "adaptation": {"signals": ["prediction correctness", "replay", "hint use", "repeated error category"], "allowedResponses": ["slow animation", "highlight violated invariant", "offer one hint"], "forbiddenInferences": ["intelligence", "personality", "diagnosis"]},
+  "telemetry": {"events": ["object_selected", "attempt_submitted", "hint_requested", "retry_started", "session_completed"], "agentQuestions": ["Which rotation cases remain confused?", "Does the user connect repair actions to invariants?"], "retention": "local-session"},
+  "delivery": {"title": "红黑树修复实验室", "language": "zh-CN", "offline": true}
+}

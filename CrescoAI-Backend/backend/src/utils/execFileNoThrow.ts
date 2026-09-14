@@ -109,7 +109,7 @@ export function execFileNoThrowWithCwd(
     // Use execa for cross-platform .bat/.cmd compatibility on Windows
     execa(file, args, {
       maxBuffer,
-      signal: abortSignal,
+      cancelSignal: abortSignal, // execa v9 renamed the old `signal` option
       timeout: finalTimeout,
       cwd: finalCwd,
       env: finalEnv,

@@ -94,6 +94,7 @@
     "p-map": "*",
     "picomatch": "*",
     "proper-lockfile": "*",
+    "playwright": "*",
     "qrcode": "*",
     "react": "*",
     "react-reconciler": "*",

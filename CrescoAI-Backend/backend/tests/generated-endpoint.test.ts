@@ -23,21 +23,21 @@ describe('resolveGeneratedPath – valid inputs', () => {
     const result = resolveGeneratedPath(ROOT, USER_ID, 'image', 'photo.png');
     expect(result.ok).toBe(true);
     if (!result.ok) return; // type narrowing
-    expect(result.path).toBe(join(ROOT, USER_ID, 'image_generated', 'photo.png'));
+    expect(result.path).toBe(join(ROOT, USER_ID, 'workspace', 'image_generated', 'photo.png'));
   });
 
   test('returns correct path for kind=video', () => {
     const result = resolveGeneratedPath(ROOT, USER_ID, 'video', 'clip.mp4');
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.path).toBe(join(ROOT, USER_ID, 'video_generated', 'clip.mp4'));
+    expect(result.path).toBe(join(ROOT, USER_ID, 'workspace', 'video_generated', 'clip.mp4'));
   });
 
   test('returns correct path for kind=html', () => {
     const result = resolveGeneratedPath(ROOT, USER_ID, 'html', 'index.html');
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.path).toBe(join(ROOT, USER_ID, 'html_generated', 'index.html'));
+    expect(result.path).toBe(join(ROOT, USER_ID, 'workspace', 'html_generated', 'index.html'));
   });
 });
 
@@ -116,5 +116,62 @@ describe('resolveGeneratedPath – path resolves outside user dir', () => {
     expect(r1.path).not.toBe(r2.path);
     expect(r1.path.includes(`${sep}10${sep}`)).toBe(true);
     expect(r2.path.includes(`${sep}20${sep}`)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// resolveAppPath — app directory resolution
+// ---------------------------------------------------------------------------
+
+import { resolveAppPath } from '../src/Network/modules/generated/generated.utils.js';
+
+describe('resolveAppPath – app paths', () => {
+  test('resolves a default index.html for an empty rest', () => {
+    const result = resolveAppPath(ROOT, USER_ID, 'web-app-sample', '');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.path).toBe(
+      join(ROOT, USER_ID, 'workspace', 'app_generated', 'web-app-sample', 'index.html'),
+    );
+  });
+
+  test('resolves sub-files inside the app directory', () => {
+    const result = resolveAppPath(ROOT, USER_ID, 'web-app-sample', 'agent-telemetry.js');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.path).toBe(
+      join(ROOT, USER_ID, 'workspace', 'app_generated', 'web-app-sample', 'agent-telemetry.js'),
+    );
+  });
+
+  test('resolves nested bundled assets inside the app directory', () => {
+    const result = resolveAppPath(
+      ROOT,
+      USER_ID,
+      'web-app-sample',
+      'assets/index-a1b2c3.js',
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.path).toBe(
+      join(
+        ROOT,
+        USER_ID,
+        'workspace',
+        'app_generated',
+        'web-app-sample',
+        'assets',
+        'index-a1b2c3.js',
+      ),
+    );
+  });
+
+  test('rejects appId with traversal characters', () => {
+    expect(resolveAppPath(ROOT, USER_ID, '..', '').ok).toBe(false);
+    expect(resolveAppPath(ROOT, USER_ID, 'a/b', '').ok).toBe(false);
+  });
+
+  test('rejects rest escaping the app directory', () => {
+    expect(resolveAppPath(ROOT, USER_ID, 'web-app-sample', '../secret.txt').ok).toBe(false);
   });
 });

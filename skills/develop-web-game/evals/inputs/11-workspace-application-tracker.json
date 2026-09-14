@@ -1,0 +1,11 @@
+{
+  "schema": "multi-agent-app-brief/1.0",
+  "invocation": {"requestedBy": "direct-skill-eval", "reason": "Job applications require an editable pipeline with deadlines and follow-up actions"},
+  "user": {"audience": "New graduate applying to multiple software roles", "level": "Tracks applications inconsistently across notes", "constraints": ["Chinese UI", "Offline", "No company account integration", "Do not collect contact details"]},
+  "goal": {"outcome": "Maintain a clear application pipeline and next-action schedule", "successCriteria": ["Adds six sample applications", "Every active application has a stage and next action", "No overdue item lacks a decision", "Exports a pipeline snapshot"]},
+  "content": {"domain": "Job application tracking", "required": ["company alias", "role", "stage", "priority", "deadline", "next action", "notes category", "filters", "summary"], "excluded": ["personal recruiter details", "email integration", "automatic applications"], "sourceNotes": ["Use fictional seed entries; user-created data remains local"]},
+  "experience": {"scene": "workspace", "primaryLoop": "add or move application -> inspect deadline/status feedback -> revise next action -> export snapshot", "requiredInteractions": ["create", "edit", "move stage", "filter", "sort", "undo", "archive", "export"], "completionState": "All active applications have valid next actions and a snapshot is exported"},
+  "adaptation": {"signals": ["stage moves", "overdue resolution", "undo", "filter use", "abandoned item", "export"], "allowedResponses": ["surface overdue items", "suggest one next-action template", "show pipeline imbalance", "offer a filtered view"], "forbiddenInferences": ["employability", "motivation", "personality", "future outcome"]},
+  "telemetry": {"events": ["item_created", "item_reordered", "conflict_detected", "undo_used", "plan_committed", "artifact_exported"], "agentQuestions": ["Does every active application have a concrete next action?", "Where does the pipeline stall?", "Does the user resolve overdue items?"], "retention": "local-session"},
+  "delivery": {"title": "求职申请追踪板", "language": "zh-CN", "offline": true}
+}

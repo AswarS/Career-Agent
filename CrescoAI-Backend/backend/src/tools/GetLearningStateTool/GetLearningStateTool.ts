@@ -28,6 +28,7 @@ const outputSchema = lazySchema(() =>
     schema_version: z.literal("1.0"),
     state_version: z.number().int().nonnegative(),
     focus_plan_id: z.string().nullable(),
+    selection_warning: z.string().optional(),
     plans: z.array(planSchema),
   }),
 );
@@ -40,7 +41,7 @@ export const GetLearningStateTool = buildTool({
   strict: true,
   alwaysLoad: true,
   async description() {
-    return "Read the current user’s lightweight learning workflow state. Optionally select one plan_id. This does not read full artifacts or modify state. For an active plan execution request, pass the returned plan_id directly to LearningStageDesign; that Action resolves plan_ref internally.";
+    return "Read the current user’s lightweight learning workflow state. Omit plan_id to list plans and identify the focus plan. If an unknown plan_id is supplied, the Tool returns the available plans with a selection_warning instead of failing, so no filesystem search is needed. This does not read full artifacts or modify state. For an active plan execution request, pass the returned plan_id directly to LearningStageDesign; that Action resolves plan_ref internally.";
   },
   async prompt() {
     return "Use this to determine the current learning plan or stage. Artifact references are opaque and are consumed internally by the appropriate Action Tool. Do not use Bash, Glob, Read, or filesystem search to locate learning state or artifact files. After finding the focus plan, call LearningStageDesign directly with its plan_id when a stage package is needed.";
@@ -85,16 +86,21 @@ export const GetLearningStateTool = buildTool({
         "STATE_READ_FAILED: Learning state is unavailable outside an authenticated workspace",
       );
     const state = await learningStateService.getUserState(workspaceDir);
-    const plans = input.plan_id
+    const selectedPlans = input.plan_id
       ? state.plans.filter((plan) => plan.plan_id === input.plan_id)
       : state.plans;
-    if (input.plan_id && plans.length === 0)
-      throw new Error("PLAN_NOT_FOUND: Learning plan was not found");
+    const selectionMiss = Boolean(input.plan_id && selectedPlans.length === 0);
+    const plans = selectionMiss ? state.plans : selectedPlans;
     return {
       data: {
         schema_version: "1.0" as const,
         state_version: state.version,
         focus_plan_id: state.focus_plan_id,
+        ...(selectionMiss
+          ? {
+              selection_warning: `Unknown plan_id ${input.plan_id}; returned all available plans. Use focus_plan_id when present.`,
+            }
+          : {}),
         plans: plans.map((plan) => ({
           ...plan,
           focus: plan.plan_id === state.focus_plan_id,

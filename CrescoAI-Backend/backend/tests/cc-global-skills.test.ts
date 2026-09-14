@@ -9,6 +9,7 @@ import { SkillRegistry } from '../src/Network/modules/skill/skill.registry.js'
 import { registerBuiltinSkills } from '../src/Network/modules/skill/built-in-skills.js'
 import { getSkillToolCommands } from '../src/commands.js'
 import { SkillTool } from '../src/tools/SkillTool/SkillTool.js'
+import { getGlobalDiskSkillCatalog } from '../src/skills/bundled/careerAgent.js'
 
 const CAREER_AGENT_SKILL_NAMES = [
   'baseline-assessment',
@@ -71,6 +72,30 @@ describe('CareerAgent skills on the native CC skill chain', () => {
     expect(names).not.toContain('video-generation')
     expect(names).not.toContain('help')
     expect(skills.find(skill => skill.name === 'baseline-assessment')?.category).toBe('analysis')
+  })
+
+  test('keeps Web App leaf Skills internal while exposing the coordinator capability', async () => {
+    const diskCatalog = getGlobalDiskSkillCatalog()
+    expect(
+      diskCatalog.find(skill => skill.name === 'app-coordinator')?.userInvocable,
+    ).toBe(true)
+    expect(
+      diskCatalog.find(skill => skill.name === 'develop-web-game')?.userInvocable,
+    ).toBe(false)
+    expect(
+      diskCatalog.find(skill => skill.name === 'information-collection')
+        ?.userInvocable,
+    ).toBe(false)
+
+    const service = new SkillService(new SkillRegistry())
+    const names = (await service.listSkills(42)).map(skill => skill.name)
+    expect(names).toContain('app-coordinator')
+    expect(names).not.toContain('develop-web-game')
+    expect(names).not.toContain('information-collection')
+    expect(await service.isSkillCommand('/develop-web-game', 42)).toBe(false)
+    expect(await service.isSkillCommand('/information-collection', 42)).toBe(
+      false,
+    )
   })
 
   test('keeps code-defined built-in skills in the Network registry', () => {

@@ -1,0 +1,11 @@
+{
+  "schema": "multi-agent-app-brief/1.0",
+  "invocation": {"requestedBy": "direct-skill-eval", "reason": "Incident response is a timed branching team scenario with operational consequences"},
+  "user": {"audience": "Junior backend engineer preparing for on-call interviews", "level": "Understands logs and metrics but has little incident-command experience", "constraints": ["Chinese UI", "Offline", "Fictional system only", "No real credentials or infrastructure"]},
+  "goal": {"outcome": "Practice safe triage, communication, mitigation, and follow-up during a production incident", "successCriteria": ["Checks impact before changing the system", "Chooses a reversible mitigation", "Communicates status at two checkpoints", "Completes a short post-incident review"]},
+  "content": {"domain": "Fictional API latency incident", "required": ["alert", "metrics", "logs", "hypothesis", "rollback versus scale decision", "stakeholder update", "postmortem actions"], "excluded": ["real cloud access", "destructive commands", "security exploitation"], "sourceNotes": ["All actions operate on a deterministic fictional system model"]},
+  "experience": {"scene": "simulate", "primaryLoop": "inspect signal -> choose investigation or mitigation -> observe system and team consequence -> update hypothesis", "requiredInteractions": ["inspect dashboard", "choose action", "record hypothesis category", "send structured update", "pause", "restart"], "completionState": "Impact is stabilized and post-incident reflection completed"},
+  "adaptation": {"signals": ["action sequence", "reversibility", "hypothesis revisions", "communication timing", "repeated unsafe choice"], "allowedResponses": ["highlight blast radius", "offer one reversible option", "pause the clock for reflection", "surface missing stakeholder update"], "forbiddenInferences": ["job performance", "personality", "stress tolerance", "hireability"]},
+  "telemetry": {"events": ["round_started", "object_selected", "action_taken", "checkpoint_reached", "retry_started", "session_completed"], "agentQuestions": ["Does the learner assess impact before acting?", "Are mitigations reversible and evidence-based?", "Does communication happen at useful checkpoints?"], "retention": "local-session"},
+  "delivery": {"title": "线上故障协作演练", "language": "zh-CN", "offline": true}
+}

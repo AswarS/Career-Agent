@@ -16,6 +16,9 @@ import {
   type SessionContext,
   type ToolResponsePayload,
 } from '../../../server/SessionContext.js';
+import { AppInteractionSummaryService } from '../generated-app/app-interaction-summary.service.js';
+import { AppInteractionQueryService } from '../generated-app/app-interaction-query.service.js';
+import { createAppInteractionReadTool } from '../generated-app/app-interaction.tools.js';
 import { createIsolatedState } from '../../../bootstrap/state.js';
 import { createQueryEngineForSession } from '../../../server/queryEngineFactory.js';
 import {
@@ -578,7 +581,34 @@ export class AgentService {
     @Optional() private readonly profileProductMutationService?: ProfileProductMutationService,
     @Optional() private readonly profileEvidenceService?: ProfileEvidenceService,
     @Optional() private readonly githubMcpRuntimeService?: GithubMcpRuntimeService,
+    @Optional() private readonly appInteractionSummaryService?: AppInteractionSummaryService,
+    @Optional() private readonly appInteractionQueryService?: AppInteractionQueryService,
   ) {}
+
+  /**
+   * Per-turn app interaction replay for the closed loop. The cursor lives on
+   * the session state; after a restart a bounded 24h window is re-summarized
+   * once. Must never break a turn.
+   */
+  private async buildAppInteractionTurnPrompt(
+    ctx: SessionContext,
+    userId: string,
+    conversationId: string,
+  ): Promise<string | undefined> {
+    if (!this.appInteractionSummaryService) return undefined;
+    const since =
+      ctx.state.lastAppEventSummaryAt ?? Date.now() - 24 * 3_600_000;
+    ctx.state.lastAppEventSummaryAt = Date.now();
+    try {
+      return await this.appInteractionSummaryService.buildTurnPrompt(
+        Number(userId),
+        conversationId,
+        since,
+      );
+    } catch {
+      return undefined;
+    }
+  }
 
   /**
    * Run a service-owned Profile maintenance loop with no conversation,
@@ -1520,11 +1550,18 @@ export class AgentService {
                 userMessageId,
                 content,
               );
+            const appInteractionTurnPrompt =
+              await this.buildAppInteractionTurnPrompt(
+                ctx,
+                userId,
+                conversationId,
+              );
             const stream = queryEngine!.submitMessage(inputWithAttachments, {
               uuid: userMessageId,
               appendSystemPrompt: [
                 profileTurnPrompt,
                 conversationMemoryTurnPrompt,
+                appInteractionTurnPrompt,
               ].filter(Boolean).join('\n\n') || undefined,
             });
 
@@ -1930,11 +1967,18 @@ export class AgentService {
                 userMessageId,
                 content,
               );
+            const appInteractionTurnPrompt =
+              await this.buildAppInteractionTurnPrompt(
+                ctx,
+                userId,
+                conversationId,
+              );
             const stream = queryEngine!.submitMessage(inputWithAttachments, {
               uuid: userMessageId,
               appendSystemPrompt: [
                 profileTurnPrompt,
                 conversationMemoryTurnPrompt,
+                appInteractionTurnPrompt,
               ].filter(Boolean).join('\n\n') || undefined,
             });
 
@@ -2345,7 +2389,10 @@ export class AgentService {
         const queryEngine = createQueryEngineForSession(ctx, {
           commands,
           initialMessages,
-          extraTools: this.getProfileTools(userId, conversationId),
+          extraTools: [
+            ...this.getProfileTools(userId, conversationId),
+            ...this.getAppInteractionTools(userId),
+          ],
           mcpTools: mcpRuntime.tools,
         });
         ctx.queryEngine = queryEngine;
@@ -2434,6 +2481,16 @@ export class AgentService {
       productProjectionService: this.profileProductProjectionService,
       productMutationService: this.profileProductMutationService,
     });
+  }
+
+  private getAppInteractionTools(userId: string): Tool[] {
+    if (!this.appInteractionQueryService) return [];
+    return [
+      createAppInteractionReadTool({
+        userId: Number(userId),
+        service: this.appInteractionQueryService,
+      }),
+    ];
   }
 
   private async ensureGithubMcpRuntime(userId: string): Promise<GithubMcpRuntimeSnapshot> {

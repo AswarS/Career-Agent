@@ -335,7 +335,8 @@ export type ArtifactType =
   | 'mock-interview'
   | 'coding-assessment'
   | 'visual-learning'
-  | 'app-example';
+  | 'app-example'
+  | 'generated-app';
 
 interface ArtifactRecordBase {
   id: string;

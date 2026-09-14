@@ -69,7 +69,7 @@ describe("offline Network Tool manifest", () => {
       manifest.tools.filter(
         (tool) => tool.context === NETWORK_CONVERSATION_CONTEXT,
       ),
-    ).toHaveLength(31);
+    ).toHaveLength(32);
     expect(
       manifest.tools.filter(
         (tool) => tool.context === NETWORK_PROFILE_REFRESH_CONTEXT,
@@ -78,6 +78,9 @@ describe("offline Network Tool manifest", () => {
     expect(manifest.tools.some((tool) => tool.name.startsWith("mcp__"))).toBe(
       false,
     );
+    expect(
+      manifest.tools.some((tool) => tool.name === "WebAppPlaywright"),
+    ).toBe(false);
     expect(manifest.excluded_tools.map((tool) => tool.name).sort()).toEqual([
       "Agent",
       "EnterWorktree",
@@ -101,6 +104,7 @@ describe("offline Network Tool manifest", () => {
       ["LearningPlan", "learning-plan"],
       ["LearningProgressAssessment", "learning-progress-assessment"],
       ["LearningStageDesign", "learning-stage-design"],
+      ["WebAppDev", "app-coordinator"],
     ]);
     expect(manifest.tools.find((tool) => tool.name === "Skill")).toMatchObject({
       tool_type: "harness_tool",
@@ -239,9 +243,9 @@ describe("offline Network Tool manifest", () => {
 
   test("renders a README whose statistics and indexes come from the manifest", () => {
     const readme = renderNetworkToolManifestReadme(manifest);
-    expect(readme).toContain("| Tool 记录数 | 33 |");
+    expect(readme).toContain("| Tool 记录数 | 34 |");
     expect(readme).toContain("| Harness Tool | 28 |");
-    expect(readme).toContain("| Skill Tool | 5 |");
+    expect(readme).toContain("| Skill Tool | 6 |");
     expect(readme).toContain("| Resource 数 | 14 |");
     expect(readme).toContain(
       "`network.profile_refresh:harness_tool:profile_read:product-profile-refresh`",

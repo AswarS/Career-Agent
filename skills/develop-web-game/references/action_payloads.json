@@ -1,0 +1,9 @@
+{
+  "steps": [
+    { "selector": "#answer-a", "action": "click", "frames": 2 },
+    { "selector": "#submit", "action": "click", "frames": 2 },
+    { "selector": "#next", "action": "click", "frames": 2 },
+    { "selector": "#answer", "action": "fill", "value": "42" },
+    { "selector": "#finish", "action": "click", "frames": 2 }
+  ]
+}

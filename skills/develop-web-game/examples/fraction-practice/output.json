@@ -1,0 +1,29 @@
+{
+  "schema": "web-app-manifest/1.0",
+  "app_slug": "fraction-practice",
+  "title": "分数加减法练习",
+  "renderer_skill_version": "seed-sample",
+  "telemetry": {
+    "events": [
+      "session_started",
+      "session_resumed",
+      "session_completed",
+      "session_cleared",
+      "attempt_submitted",
+      "hint_requested"
+    ],
+    "agent_questions": [
+      "Which error categories appear most often?",
+      "Does the learner improve across attempts?"
+    ],
+    "retention": "local-session",
+    "upload": {
+      "endpoint": "./events"
+    }
+  },
+  "delivery": {
+    "title": "分数加减法练习",
+    "language": "zh-CN",
+    "offline": true
+  }
+}

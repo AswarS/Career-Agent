@@ -1,0 +1,11 @@
+{
+  "schema": "multi-agent-app-brief/1.0",
+  "invocation": {"requestedBy": "direct-skill-eval", "reason": "Portfolio preparation needs an editable evidence board that exposes gaps"},
+  "user": {"audience": "Frontend candidate preparing a portfolio", "level": "Has three projects but descriptions focus on features rather than evidence", "constraints": ["Chinese UI", "Offline", "No file upload", "No personal contact data"]},
+  "goal": {"outcome": "Organize project evidence into a coherent interview-ready portfolio outline", "successCriteria": ["Creates three project cards", "Each card includes problem, action, technical decision, and measurable result", "Identifies and resolves at least two evidence gaps", "Exports the outline"]},
+  "content": {"domain": "Software portfolio evidence organization", "required": ["project goal", "personal contribution", "technical decision", "tradeoff", "result evidence", "gap status", "role relevance"], "excluded": ["graphic portfolio site generation", "personal contact details", "fabricated metrics"], "sourceNotes": ["Seed with fictional placeholders; never invent user achievements"]},
+  "experience": {"scene": "workspace", "primaryLoop": "create project evidence card -> inspect completeness/gap feedback -> revise -> compare role relevance -> export", "requiredInteractions": ["create", "edit structured fields", "reorder", "mark evidence", "filter gaps", "undo", "export"], "completionState": "Three complete evidence cards with resolved critical gaps are exported"},
+  "adaptation": {"signals": ["gap categories", "revisions", "reorder", "undo", "evidence completion", "export"], "allowedResponses": ["surface missing evidence category", "suggest a question not an achievement", "show role-relevance comparison", "reduce visible fields"], "forbiddenInferences": ["hireability", "talent", "personality", "fabricated achievement"]},
+  "telemetry": {"events": ["item_created", "item_reordered", "feedback_viewed", "undo_used", "plan_committed", "artifact_exported"], "agentQuestions": ["Which evidence categories remain weak?", "Does the user distinguish personal contribution from team output?", "Can the user connect evidence to role requirements?"], "retention": "local-session"},
+  "delivery": {"title": "项目作品集证据板", "language": "zh-CN", "offline": true}
+}

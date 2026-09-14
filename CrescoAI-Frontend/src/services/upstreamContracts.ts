@@ -271,6 +271,7 @@ function normalizeArtifactType(value: string | null | undefined): ArtifactRecord
     || value === 'coding-assessment'
     || value === 'visual-learning'
     || value === 'app-example'
+    || value === 'generated-app'
   ) {
     return value;
   }
