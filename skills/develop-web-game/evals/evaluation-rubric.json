@@ -1,0 +1,55 @@
+{
+  "scale": {
+    "0": "Missing or fundamentally broken",
+    "1": "Major defects prevent reliable use",
+    "2": "Core idea works but important paths or quality requirements fail",
+    "3": "Complete and usable with minor defects",
+    "4": "Polished, correct, robust, and supported by test evidence"
+  },
+  "pass_score": 85,
+  "criteria": [
+    {
+      "id": "activation_boundary",
+      "weight": 10,
+      "checks": ["Does not self-select from raw intent", "Activates on explicit coordinator invocation", "Incomplete explicit invocation returns needs_input"]
+    },
+    {
+      "id": "brief_fidelity",
+      "weight": 10,
+      "checks": ["Implements every required field", "Does not invent critical product decisions", "Uses the requested primary scene"]
+    },
+    {
+      "id": "functional_correctness",
+      "weight": 25,
+      "checks": ["Primary loop works end to end", "Domain logic is correct", "Invalid and rapid actions preserve state", "Reset, undo, completion, and refresh behavior work"]
+    },
+    {
+      "id": "telemetry_and_feedback",
+      "weight": 20,
+      "checks": ["Semantic local events use the v1 envelope", "Visual state, text hook, and events agree", "Feedback separates observations and inferences", "Inferences cite evidence, confidence, next action, and limitation", "Export and clear work"]
+    },
+    {
+      "id": "privacy_and_safety",
+      "weight": 10,
+      "checks": ["No raw transcript or free-text answer retention", "No pointer trail or per-keystroke logging", "No unsupported sensitive labels", "Local-data notice is visible"]
+    },
+    {
+      "id": "visual_and_accessibility",
+      "weight": 15,
+      "checks": ["Clear and cohesive hierarchy", "No clipping at desktop or mobile", "Keyboard-operable with visible focus", "44px touch targets and adequate contrast", "Reduced motion works"]
+    },
+    {
+      "id": "delivery_and_evidence",
+      "weight": 10,
+      "checks": ["index.html, metadata.json, output.json, and progress.md exist", "Direct-open or documented server mode works", "Screenshots and executed checks support completion", "No critical console errors"]
+    }
+  ],
+  "critical_failures": [
+    "Primary interaction loop cannot complete",
+    "Critical uncaught runtime error",
+    "Sensitive or prohibited raw behavior data is stored",
+    "Agent feedback, export, or clear hook is missing or broken",
+    "Critical App Brief information is invented",
+    "Claims testing without executed evidence"
+  ]
+}

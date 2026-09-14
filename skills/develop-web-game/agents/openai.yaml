@@ -1,0 +1,6 @@
+interface:
+  display_name: "Web App Renderer"
+  short_description: "Render and verify a validated App Brief"
+  icon_small: "./assets/game-small.svg"
+  icon_large: "./assets/game.png"
+  default_prompt: "Render the validated App Brief in the Tool-provided output directory and return a structured lifecycle result."

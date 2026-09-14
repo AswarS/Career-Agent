@@ -219,6 +219,30 @@ describe('normalizeArtifactRecord', () => {
     expect(artifact.payload.url).toBe('/mock-node-canvas/index.html');
   });
 
+  it('preserves generated-app type and revision for app artifacts', () => {
+    const artifact = normalizeArtifactRecord({
+      id: 'artifact-app-42',
+      type: 'generated-app',
+      title: '分数加减法练习',
+      status: 'ready',
+      render_mode: 'url',
+      revision: 2,
+      updated_at: '2026-09-02T03:00:00Z',
+      summary: 'Generated interactive app.',
+      payload: {
+        url: 'http://localhost:4000/api/career-agent/generated/3/app/web-app-sample/',
+      },
+    });
+
+    expect(artifact.type).toBe('generated-app');
+    expect(artifact.revision).toBe(2);
+    expect(artifact.renderMode).toBe('url');
+    if (artifact.renderMode !== 'url') {
+      throw new Error('expected url artifact');
+    }
+    expect(artifact.payload.url).toContain('/app/web-app-sample/');
+  });
+
   it('provides safe empty html payloads when html mode arrives without markup', () => {
     const artifact = normalizeArtifactRecord({
       id: 'artifact-empty-html',

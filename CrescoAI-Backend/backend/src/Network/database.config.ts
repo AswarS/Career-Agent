@@ -5,6 +5,7 @@ import { ConversationEntity } from './modules/conversation/entities/conversation
 import { ConversationCleanupTaskEntity } from './modules/conversation/entities/conversation-cleanup-task.entity.js';
 import { MessageEntity } from './modules/conversation/entities/message.entity.js';
 import { GeneratedAppEntity } from './modules/generated-app/entities/generated-app.entity.js';
+import { GeneratedAppEventEntity } from './modules/generated-app/entities/generated-app-event.entity.js';
 import { MemoryEntity } from './modules/memory/entities/memory.entity.js';
 import { IntegrationOutboxEntity } from './modules/integration/entities/integration-outbox.entity.js';
 import { PraxisBehaviorEventEntity } from './modules/integration/entities/praxis-behavior-event.entity.js';
@@ -41,6 +42,7 @@ export const careerAgentEntities = [
   McpSettingEntity,
   ResourceEntity,
   GeneratedAppEntity,
+  GeneratedAppEventEntity,
   ProfileSuggestionEntity,
   BaseProfileEntity,
   ProfileStateEntity,

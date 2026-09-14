@@ -1,0 +1,11 @@
+{
+  "schema": "multi-agent-app-brief/1.0",
+  "invocation": {"requestedBy": "direct-skill-eval", "reason": "Negotiation practice needs branching responses and consequence-based reflection"},
+  "user": {"audience": "New graduate with a first software-engineer offer", "level": "Has not negotiated compensation before", "constraints": ["Chinese UI", "15-minute session", "No real employer or salary data", "No legal or financial advice"]},
+  "goal": {"outcome": "Practice a respectful evidence-based salary negotiation", "successCriteria": ["Clarifies total compensation before countering", "Uses role evidence in a counteroffer", "Handles one rejection or budget constraint", "Completes reflection"]},
+  "content": {"domain": "Entry-level software offer negotiation", "required": ["offer clarification", "evidence framing", "counteroffer", "budget objection", "non-salary alternatives", "reflection rubric"], "excluded": ["real company names", "guaranteed outcomes", "legal advice", "market salary claims"], "sourceNotes": ["All figures are fictional scenario values"]},
+  "experience": {"scene": "simulate", "primaryLoop": "receive recruiter message -> choose response strategy -> see consequence -> revise or continue", "requiredInteractions": ["choose strategy", "inspect evidence", "respond with structured options", "request reflection cue", "restart"], "completionState": "Negotiation reaches an agreement, pause, or respectful close and reflection is completed"},
+  "adaptation": {"signals": ["strategy choices", "evidence use", "revision", "objection handling", "hint use"], "allowedResponses": ["offer a softer prompt", "surface unused evidence", "introduce one alternative benefit", "slow scenario pressure"], "forbiddenInferences": ["confidence trait", "personality", "future salary", "hireability"]},
+  "telemetry": {"events": ["view_opened", "attempt_submitted", "feedback_viewed", "hint_requested", "retry_started", "session_completed"], "agentQuestions": ["Does the user clarify before countering?", "Does the user support requests with relevant evidence?", "Which objection type needs practice?"], "retention": "local-session"},
+  "delivery": {"title": "Offer 谈判模拟器", "language": "zh-CN", "offline": true}
+}

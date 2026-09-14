@@ -1,6 +1,6 @@
 {
   "manifest_version": "1.0",
-  "generated_at": "2026-09-01T11:03:13.082Z",
+  "generated_at": "2026-09-14T04:04:29.316Z",
   "source_revision": {
     "branch": "<unknown>",
     "commit": "<unknown>",
@@ -585,7 +585,7 @@
         "status": "available",
         "conditions": []
       },
-      "loading": "eager",
+      "loading": "deferred",
       "properties": {
         "read_only": true,
         "destructive": false,
@@ -821,7 +821,7 @@
         "status": "available",
         "conditions": []
       },
-      "loading": "eager",
+      "loading": "deferred",
       "properties": {
         "read_only": true,
         "destructive": false,
@@ -1092,7 +1092,7 @@
         "status": "available",
         "conditions": []
       },
-      "loading": "eager",
+      "loading": "deferred",
       "properties": {
         "read_only": true,
         "destructive": false,
@@ -1874,7 +1874,7 @@
         "status": "available",
         "conditions": []
       },
-      "loading": "eager",
+      "loading": "deferred",
       "properties": {
         "read_only": false,
         "destructive": false,
@@ -2110,7 +2110,7 @@
         "status": "available",
         "conditions": []
       },
-      "loading": "eager",
+      "loading": "deferred",
       "properties": {
         "read_only": true,
         "destructive": false,
@@ -2351,7 +2351,7 @@
         "status": "available",
         "conditions": []
       },
-      "loading": "eager",
+      "loading": "deferred",
       "properties": {
         "read_only": true,
         "destructive": false,
@@ -2813,7 +2813,7 @@
         "status": "available",
         "conditions": []
       },
-      "loading": "eager",
+      "loading": "deferred",
       "properties": {
         "read_only": true,
         "destructive": false,
@@ -3054,7 +3054,7 @@
         "status": "available",
         "conditions": []
       },
-      "loading": "eager",
+      "loading": "deferred",
       "properties": {
         "read_only": true,
         "destructive": false,
@@ -3290,7 +3290,7 @@
         "status": "available",
         "conditions": []
       },
-      "loading": "eager",
+      "loading": "deferred",
       "properties": {
         "read_only": false,
         "destructive": false,
@@ -3596,7 +3596,7 @@
         "status": "available",
         "conditions": []
       },
-      "loading": "eager",
+      "loading": "deferred",
       "properties": {
         "read_only": false,
         "destructive": false,
@@ -3867,7 +3867,7 @@
         "status": "available",
         "conditions": []
       },
-      "loading": "eager",
+      "loading": "deferred",
       "properties": {
         "read_only": false,
         "destructive": false,
@@ -4329,7 +4329,7 @@
         "status": "available",
         "conditions": []
       },
-      "loading": "eager",
+      "loading": "deferred",
       "properties": {
         "read_only": false,
         "destructive": false,
@@ -4691,7 +4691,7 @@
         "status": "available",
         "conditions": []
       },
-      "loading": "eager",
+      "loading": "deferred",
       "properties": {
         "read_only": true,
         "destructive": false,
@@ -4872,7 +4872,7 @@
         "status": "available",
         "conditions": []
       },
-      "loading": "eager",
+      "loading": "deferred",
       "properties": {
         "read_only": true,
         "destructive": false,
@@ -5112,7 +5112,7 @@
         "status": "available",
         "conditions": []
       },
-      "loading": "eager",
+      "loading": "deferred",
       "properties": {
         "read_only": true,
         "destructive": false,
@@ -5383,7 +5383,7 @@
         "status": "available",
         "conditions": []
       },
-      "loading": "eager",
+      "loading": "deferred",
       "properties": {
         "read_only": true,
         "destructive": false,
@@ -5654,7 +5654,7 @@
         "status": "available",
         "conditions": []
       },
-      "loading": "eager",
+      "loading": "deferred",
       "properties": {
         "read_only": true,
         "destructive": false,
@@ -5718,6 +5718,9 @@
                 "type": "null"
               }
             ]
+          },
+          "selection_warning": {
+            "type": "string"
           },
           "plans": {
             "type": "array",
@@ -5865,7 +5868,7 @@
         "file": "CrescoAI-Backend/backend/src/tools/GetLearningStateTool/GetLearningStateTool.ts",
         "export": "GetLearningStateTool"
       },
-      "schema_hash": "sha256:a81c1906cc9c4f61f21fc8ca7bd4d7ecc0539178015820270add7998cea7e619"
+      "schema_hash": "sha256:363f67398ea57a9a95cf049f6b96e933a599796c634ad33e65bc531d21acacfb"
     },
     {
       "id": "network.conversation:harness_tool:Glob",
@@ -7149,7 +7152,7 @@
         "status": "available",
         "conditions": []
       },
-      "loading": "eager",
+      "loading": "deferred",
       "properties": {
         "read_only": true,
         "destructive": false,
@@ -7420,7 +7423,7 @@
         "status": "available",
         "conditions": []
       },
-      "loading": "eager",
+      "loading": "deferred",
       "properties": {
         "read_only": false,
         "destructive": false,
@@ -7691,7 +7694,7 @@
         "status": "available",
         "conditions": []
       },
-      "loading": "eager",
+      "loading": "deferred",
       "properties": {
         "read_only": true,
         "destructive": false,
@@ -7962,7 +7965,7 @@
         "status": "available",
         "conditions": []
       },
-      "loading": "eager",
+      "loading": "deferred",
       "properties": {
         "read_only": true,
         "destructive": false,
@@ -8329,7 +8332,7 @@
         "status": "available",
         "conditions": []
       },
-      "loading": "eager",
+      "loading": "deferred",
       "properties": {
         "read_only": false,
         "destructive": false,
@@ -8565,7 +8568,7 @@
         "status": "available",
         "conditions": []
       },
-      "loading": "eager",
+      "loading": "deferred",
       "properties": {
         "read_only": false,
         "destructive": false,
@@ -8871,7 +8874,7 @@
         "status": "available",
         "conditions": []
       },
-      "loading": "eager",
+      "loading": "deferred",
       "properties": {
         "read_only": true,
         "destructive": false,
@@ -9172,7 +9175,7 @@
         "status": "available",
         "conditions": []
       },
-      "loading": "eager",
+      "loading": "deferred",
       "properties": {
         "read_only": true,
         "destructive": false,
@@ -9443,7 +9446,7 @@
         "status": "available",
         "conditions": []
       },
-      "loading": "eager",
+      "loading": "deferred",
       "properties": {
         "read_only": true,
         "destructive": false,
@@ -10036,7 +10039,7 @@
         "status": "available",
         "conditions": []
       },
-      "loading": "eager",
+      "loading": "deferred",
       "properties": {
         "read_only": true,
         "destructive": false,
@@ -10065,7 +10068,7 @@
       "skill_binding": null,
       "context": "network.conversation",
       "schema_cache_namespace": null,
-      "description": "Call this after finishing the current Skill invocation, or when that invocation cannot continue. Use only the current invocation ID supplied directly to this Agent by the Harness. Never reuse a child Action Tool result's skill_call_id: execution_status=\"completed\" means that child invocation is already closed. The tool closes the current Skill invocation but does not decide what the Agent does next.",
+      "description": "Call this after finishing the current Skill invocation, or when that invocation cannot continue. Use only the current invocation ID supplied directly to this Agent by the Harness. Never reuse a child Action Tool result's skill_call_id: execution_status=\"completed\" means that child invocation is already closed. Pass structured result contracts as JSON objects, never JSON-encoded strings. The tool closes the current Skill invocation but does not decide what the Agent does next.",
       "search_hint": "finish the current prompt skill invocation",
       "input_schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -10255,7 +10258,7 @@
         "file": "CrescoAI-Backend/backend/src/tools/ReturnSkillResultTool/ReturnSkillResultTool.ts",
         "export": "ReturnSkillResultTool"
       },
-      "schema_hash": "sha256:3850d46435d8257edc48b88ed3be9832814c44067fb90eea39aa6de97daf8069"
+      "schema_hash": "sha256:85435718c85586e9521ea64da74060ab6019dcd0d8c5c4ee34c419990e8a466a"
     },
     {
       "id": "network.conversation:skill_tool:ReviewOutreachDrafts",
@@ -10507,7 +10510,7 @@
         "status": "available",
         "conditions": []
       },
-      "loading": "eager",
+      "loading": "deferred",
       "properties": {
         "read_only": true,
         "destructive": false,
@@ -10743,7 +10746,7 @@
         "status": "available",
         "conditions": []
       },
-      "loading": "eager",
+      "loading": "deferred",
       "properties": {
         "read_only": false,
         "destructive": false,
@@ -11014,7 +11017,7 @@
         "status": "available",
         "conditions": []
       },
-      "loading": "eager",
+      "loading": "deferred",
       "properties": {
         "read_only": true,
         "destructive": false,
@@ -11171,6 +11174,357 @@
         "export": "SkillTool"
       },
       "schema_hash": "sha256:de57bc45cd6d88732a12d226c697dccfa7ecb6550d5294f1c8c6879b61d32b69"
+    },
+    {
+      "id": "network.conversation:skill_tool:TailoredResumeGenerator",
+      "name": "TailoredResumeGenerator",
+      "aliases": [],
+      "tool_type": "skill_tool",
+      "skill_binding": {
+        "skill_name": "tailored-resume-generator",
+        "entry_mode": "action-tool"
+      },
+      "context": "network.conversation",
+      "schema_cache_namespace": null,
+      "description": "当用户希望基于 Profile 或提供的真实经历生成基础简历，或针对目标岗位/方向优化现有简历时使用。输出可下载、可打印的简历，并保留事实溯源与待确认项；不编造经历，不代用户投递。",
+      "search_hint": "generate a base resume from Profile facts or optimize a downloadable resume for a target role",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "application_materials": {
+            "description": "Optional structured resume source material.",
+            "$ref": "#/$defs/__schema0"
+          },
+          "resume_draft": {
+            "description": "Optional existing resume text to optimize.",
+            "type": "string",
+            "minLength": 1
+          },
+          "career_direction_exploration_results": {
+            "description": "Optional target career direction requirements.",
+            "$ref": "#/$defs/__schema1"
+          },
+          "target_opportunity": {
+            "description": "Optional target job description. Omit it to generate a general base resume.",
+            "$ref": "#/$defs/__schema2"
+          },
+          "user_profile": {
+            "description": "Confirmed Profile facts; this may be the sole source for a base resume.",
+            "$ref": "#/$defs/__schema3"
+          },
+          "format_preferences": {
+            "description": "Optional language, length, heading, and layout preferences.",
+            "$ref": "#/$defs/__schema4"
+          }
+        },
+        "additionalProperties": false,
+        "$defs": {
+          "__schema0": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              },
+              {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            ]
+          },
+          "__schema1": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/__schema1"
+                }
+              },
+              {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema1"
+                }
+              }
+            ]
+          },
+          "__schema2": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/__schema2"
+                }
+              },
+              {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema2"
+                }
+              }
+            ]
+          },
+          "__schema3": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/__schema3"
+                }
+              },
+              {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema3"
+                }
+              }
+            ]
+          },
+          "__schema4": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/__schema4"
+                }
+              },
+              {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema4"
+                }
+              }
+            ]
+          }
+        }
+      },
+      "output_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "skill_call_id": {
+            "type": "string"
+          },
+          "skill_name": {
+            "type": "string",
+            "const": "tailored-resume-generator"
+          },
+          "agent_id": {
+            "type": "string"
+          },
+          "execution_status": {
+            "type": "string",
+            "const": "completed"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "success",
+              "insufficient_input",
+              "error"
+            ]
+          },
+          "summary": {
+            "type": "string"
+          },
+          "result": {
+            "$ref": "#/$defs/__schema0"
+          },
+          "completed_at": {
+            "type": "string"
+          },
+          "duration_ms": {
+            "type": "number"
+          },
+          "artifact": {
+            "type": "object",
+            "properties": {
+              "artifact_uid": {
+                "type": "string"
+              },
+              "artifact_ref": {
+                "type": "string"
+              },
+              "artifact_type": {
+                "type": "string"
+              },
+              "schema_version": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "ready",
+                  "canonical_only",
+                  "error"
+                ]
+              },
+              "render_mode": {
+                "type": "string",
+                "const": "html"
+              },
+              "error": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "artifact_uid",
+              "artifact_ref",
+              "artifact_type",
+              "schema_version",
+              "status"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "skill_call_id",
+          "skill_name",
+          "agent_id",
+          "execution_status",
+          "outcome",
+          "summary",
+          "completed_at",
+          "duration_ms"
+        ],
+        "additionalProperties": false,
+        "$defs": {
+          "__schema0": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              },
+              {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            ]
+          }
+        }
+      },
+      "availability": {
+        "status": "available",
+        "conditions": []
+      },
+      "loading": "deferred",
+      "properties": {
+        "read_only": false,
+        "destructive": false,
+        "concurrency_safe": false,
+        "requires_user_interaction": false,
+        "strict": true
+      },
+      "resource_io": {
+        "consumes": [],
+        "produces": [],
+        "reads": [],
+        "writes": []
+      },
+      "source": {
+        "kind": "generated_skill_action",
+        "file": "CrescoAI-Backend/backend/src/tools/TailoredResumeGeneratorTool/TailoredResumeGeneratorTool.ts",
+        "export": "TailoredResumeGeneratorTool"
+      },
+      "schema_hash": "sha256:15e7ed086668a996c20a480b5e65041733ed18638c30cac1bc055f6ecb7bf865"
     },
     {
       "id": "network.conversation:skill_tool:TailorResumeForOpportunity",
@@ -11427,7 +11781,7 @@
         "status": "available",
         "conditions": []
       },
-      "loading": "eager",
+      "loading": "deferred",
       "properties": {
         "read_only": false,
         "destructive": false,
@@ -12080,7 +12434,7 @@
         "status": "available",
         "conditions": []
       },
-      "loading": "eager",
+      "loading": "deferred",
       "properties": {
         "read_only": true,
         "destructive": false,
@@ -12998,6 +13352,278 @@
       "schema_hash": "sha256:95812464504e9a84470603fff4429375fc3a094f5c78671a51b4b1fb443bfda8"
     },
     {
+      "id": "network.conversation:skill_tool:WebAppDev",
+      "name": "WebAppDev",
+      "aliases": [],
+      "tool_type": "skill_tool",
+      "skill_binding": {
+        "skill_name": "app-coordinator",
+        "entry_mode": "action-tool"
+      },
+      "context": "network.conversation",
+      "schema_cache_namespace": null,
+      "description": "The coordinating workflow for the dedicated Web App Agent in the 多元Agent project. Use on raw requests when an interactive HTML App may materially improve a job-search, interview, learning, assessment, simulation, or productivity outcome. Resolve only blocking information, construct a valid multi-agent-app-brief/1.0, load develop-web-game into the same Agent, and deliver one browser-verified App. Do not use when a validated App Brief is already being rendered.\n\nIterating an existing App: pass base_app_ref with the app id from a previous WebAppDev result (the basename of output.directory, e.g. web-app-<uuid>, also visible after /app/ in the artifact URL). The new version keeps the same app slug, so saved progress carries over.",
+      "search_hint": "build interactive visual simulations practice workspaces",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "request": {
+            "type": "string",
+            "minLength": 1
+          },
+          "base_app_ref": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+          }
+        },
+        "required": [
+          "request"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "skill_call_id": {
+            "type": "string"
+          },
+          "skill_name": {
+            "type": "string",
+            "const": "app-coordinator"
+          },
+          "agent_id": {
+            "type": "string"
+          },
+          "execution_status": {
+            "type": "string",
+            "const": "completed"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "success",
+              "insufficient_input",
+              "error"
+            ]
+          },
+          "summary": {
+            "type": "string"
+          },
+          "result": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "schema": {
+                    "type": "string",
+                    "const": "web-app-dev-result/1.0"
+                  },
+                  "status": {
+                    "type": "string",
+                    "const": "delivered"
+                  },
+                  "output": {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "app"
+                      },
+                      "directory": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "entry_file": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "manifest_file": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "title": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "directory",
+                      "entry_file",
+                      "manifest_file"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "schema",
+                  "status",
+                  "output"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "schema": {
+                    "type": "string",
+                    "const": "web-app-dev-result/1.0"
+                  },
+                  "status": {
+                    "type": "string",
+                    "const": "no_app"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "schema",
+                  "status",
+                  "reason"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "schema": {
+                    "type": "string",
+                    "const": "web-app-dev-result/1.0"
+                  },
+                  "status": {
+                    "type": "string",
+                    "const": "needs_user_input"
+                  },
+                  "request_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "missing_set_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "questions": {
+                    "minItems": 1,
+                    "maxItems": 3,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "missing": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "path": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "reason": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "path",
+                        "reason"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "schema",
+                  "status",
+                  "request_id",
+                  "missing_set_id",
+                  "questions",
+                  "missing"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "schema": {
+                    "type": "string",
+                    "const": "web-app-dev-result/1.0"
+                  },
+                  "status": {
+                    "type": "string",
+                    "const": "error"
+                  },
+                  "code": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "message": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "schema",
+                  "status",
+                  "code",
+                  "message"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "completed_at": {
+            "type": "string"
+          },
+          "duration_ms": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "skill_call_id",
+          "skill_name",
+          "agent_id",
+          "execution_status",
+          "outcome",
+          "summary",
+          "result",
+          "completed_at",
+          "duration_ms"
+        ],
+        "additionalProperties": false
+      },
+      "availability": {
+        "status": "available",
+        "conditions": []
+      },
+      "loading": "eager",
+      "properties": {
+        "read_only": false,
+        "destructive": false,
+        "concurrency_safe": false,
+        "requires_user_interaction": false,
+        "strict": true
+      },
+      "resource_io": {
+        "consumes": [],
+        "produces": [],
+        "reads": [],
+        "writes": []
+      },
+      "source": {
+        "kind": "generated_skill_action",
+        "file": "CrescoAI-Backend/backend/src/tools/WebAppDevTool/WebAppDevTool.ts",
+        "export": "WebAppDevTool"
+      },
+      "schema_hash": "sha256:d926db5aca8a540eed0ec232fcbd70c26247a6dc764867806c7417dababf136f"
+    },
+    {
       "id": "network.conversation:harness_tool:WebFetch",
       "name": "WebFetch",
       "aliases": [],
@@ -13407,7 +14033,7 @@
       "skill_binding": null,
       "context": "network.conversation",
       "schema_cache_namespace": "product-profile-interactive",
-      "description": "## Profile ownership scope\n\nProfile is the specialized career-domain memory. Use it only for information that directly affects career planning, job recommendations, employment decisions, role positioning, or career learning plans.\n\nProfile includes stable career and education facts, target roles or companies, career-direction decisions, salary and location expectations, employment constraints, job-search stages, interview priorities, and skills or experience when they materially affect career recommendations.\n\nDo not use Profile for generic collaboration preferences, response style, non-career hobbies, project decisions, repository conventions, external reference locations, or other durable context owned by auto-memory. If a message mixes career and non-career facts, update only the career facts through Profile and continue evaluating the remaining facts for auto-memory. Never mirror the same fact into both systems.\n\nThe product view uses stable fieldKey values and never exposes internal Profile levels, indexes, source ids, or storage paths. Read before changing an existing field when its current value matters.",
+      "description": "## Profile ownership scope\n\nProfile is the specialized career-domain memory. Use it only for information that directly affects career planning, job recommendations, employment decisions, role positioning, or career learning plans.\n\nProfile includes stable career and education facts, target roles or companies, career-direction decisions, salary and location expectations, employment constraints, job-search stages, interview priorities, and skills or experience when they materially affect career recommendations.\n\nDo not use Profile for generic collaboration preferences, response style, non-career hobbies, project decisions, repository conventions, external reference locations, or other durable context owned by auto-memory. If a message mixes career and non-career facts, update only the career facts through Profile and continue evaluating the remaining facts for auto-memory. Never mirror the same fact into both systems.\n\nValid calls are exactly {\"source\":\"product\"} or {\"source\":\"relevant\",\"query\":\"a non-empty description of the current career task\"}. Never call source=relevant without query. The product view uses stable fieldKey values and never exposes internal Profile levels, indexes, source ids, or storage paths. Read before changing an existing field when its current value matters.",
       "search_hint": "read the authenticated user product career and education profile",
       "input_schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -13492,7 +14118,7 @@
         "file": "CrescoAI-Backend/backend/src/Network/modules/profile/profile.tools.ts",
         "export": "createProfileTools"
       },
-      "schema_hash": "sha256:8f267a35604f4d0d0479be907e7fcf9285095d9928d0ed1e04ac0307e60b7405"
+      "schema_hash": "sha256:e560153600ccc138a0eda433d622b1ef06dcc535b1537642518d289a6525208c"
     },
     {
       "id": "network.conversation:harness_tool:profile_update:product-profile-interactive",

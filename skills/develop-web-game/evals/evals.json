@@ -1,0 +1,53 @@
+{
+  "skill_name": "develop-web-game",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Upstream invocation: render a validated multi-agent-app-brief/1.0 for an algorithm-learning app. Audience: junior developer. Outcome: explain red-black-tree rotations by inserting nodes and stepping through every recolor/rotation. Scene: visualize. Track step choices, replay, errors, and hint use locally; never store raw typed explanations.",
+      "expected_output": "A visualize-primary HTML app with correct animated tree transitions, step controls, local semantic telemetry, and evidence-based Agent feedback.",
+      "files": [],
+      "expectations": [
+        "Uses the visualize template and makes data-structure changes perceivable step by step",
+        "Provides local telemetry export, clear controls, and window.get_agent_feedback (alias of window.AgentTelemetry.getFeedback)",
+        "Does not store raw free-text answers or high-frequency pointer data",
+        "Supports mobile, keyboard navigation, reset, and reduced motion"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Upstream invocation: render a validated App Brief for a frontend interview rehearsal. Audience: new graduate. Outcome: practice clarifying requirements, thinking aloud, and responding to follow-up questions in a 20-minute realistic interview. Scene: simulate. Record phase completion, response timing buckets, revisions, requested hints, and rubric outcomes locally; do not retain answer transcripts.",
+      "expected_output": "A simulate-primary interview environment with realistic phases, follow-ups, reflection, bounded local behavior events, and no transcript retention.",
+      "files": [],
+      "expectations": [
+        "Uses scenario phases and realistic consequences rather than presenting a static question list",
+        "Telemetry captures semantic interview behavior without retaining response transcripts",
+        "Agent feedback separates observations from calibrated inferences",
+        "Supports restart, completion, reflection, and feedback export"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Upstream invocation: render a validated App Brief for a binary-search practice lab. Audience: learner who understands loops but often misses boundary conditions. Outcome: solve progressively harder tasks and transfer the idea to a new problem. Scene: practice. Track first-attempt correctness, boundary-error categories, retries, hints, and transfer performance locally.",
+      "expected_output": "A practice-primary adaptive lab with attempts, targeted feedback, retries, mastery evidence, and privacy-conscious telemetry.",
+      "files": [],
+      "expectations": [
+        "Implements attempt, feedback, retry, hint, mastery, and transfer states",
+        "Changes one difficulty dimension at a time",
+        "Captures error categories without unsupported ability labels",
+        "Tests start, active, error, completion, reset, and feedback-export states"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Upstream invocation: render a validated App Brief for a two-week job-search time planner. Audience: candidate balancing interview prep, applications, and coursework. Outcome: build a feasible weekly board, detect overload and conflicts, revise priorities, and export a committed plan. Scene: workspace. Track reorder, conflict resolution, undo, abandoned tasks, and completion locally.",
+      "expected_output": "A workspace-primary planning board with accessible manipulation, feasibility feedback, persistence, undo, export, and locally summarized planning behavior.",
+      "files": [],
+      "expectations": [
+        "Supports create, edit, reorder, undo, persistence, conflict detection, and plan export",
+        "Produces an actionable committed plan rather than static advice",
+        "Provides accessible keyboard alternatives to drag-and-drop",
+        "Keeps Agent telemetry local and evidence based"
+      ]
+    }
+  ]
+}

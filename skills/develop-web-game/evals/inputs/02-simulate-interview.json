@@ -1,0 +1,11 @@
+{
+  "schema": "multi-agent-app-brief/1.0",
+  "invocation": {"requestedBy": "app-coordinator", "reason": "The learner needs realistic interview rehearsal and reflection"},
+  "user": {"audience": "New-graduate frontend candidate", "level": "Can solve basic coding tasks but rarely clarifies requirements", "constraints": ["20-minute session", "Do not retain response transcripts"]},
+  "goal": {"outcome": "Practice requirement clarification, structured thinking, and follow-up responses", "successCriteria": ["Asks at least two relevant clarifying questions", "Completes design, tradeoff, and reflection phases"]},
+  "content": {"domain": "Frontend technical interview", "required": ["Ambiguous initial task", "Interviewer follow-ups", "Rubric-based reflection"], "excluded": ["Voice recording", "Hiring recommendation"], "sourceNotes": []},
+  "experience": {"scene": "simulate", "primaryLoop": "receive interviewer prompt -> choose or compose response -> see consequence/follow-up -> reflect", "requiredInteractions": ["phase navigation", "response-category selection", "request hint", "revise", "finish reflection"], "completionState": "All interview phases and self-reflection completed"},
+  "adaptation": {"signals": ["clarification categories", "timing buckets", "revision count", "hint use", "rubric outcomes"], "allowedResponses": ["ask targeted follow-up", "reduce time pressure", "show reflection cue"], "forbiddenInferences": ["hireability", "personality", "emotion", "diagnosis"]},
+  "telemetry": {"events": ["view_opened", "attempt_submitted", "hint_requested", "retry_started", "session_completed"], "agentQuestions": ["Does the candidate clarify before solving?", "Which response phase needs practice?"], "retention": "local-session"},
+  "delivery": {"title": "前端面试模拟室", "language": "zh-CN", "offline": true}
+}

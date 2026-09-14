@@ -37,10 +37,27 @@ export class GeneratedAppEntity {
   @Column({ type: 'varchar', default: 'created' })
   status!: string;
 
+  /** App directory basename, e.g. web-app-<uuid>. Serves as the public appId. */
+  @Column({ type: 'varchar', nullable: true })
+  @Index('IDX_generated_apps_appId')
+  appId?: string;
+
+  /** Cross-link to the artifacts row that owns the display card. */
+  @Column({ type: 'integer', nullable: true })
+  artifactId?: number;
+
+  @Column({ type: 'integer', default: 1 })
+  version!: number;
+
+  @Column({ type: 'varchar', nullable: true })
+  logicalObjectId?: string;
+
+  @Column({ type: 'integer', nullable: true })
+  previousGeneratedAppId?: number;
+
   @CreateDateColumn()
   createdAt!: Date;
 
   @UpdateDateColumn()
   updatedAt!: Date;
 }
-

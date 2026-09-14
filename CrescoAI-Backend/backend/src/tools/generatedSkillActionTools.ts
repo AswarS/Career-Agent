@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 export function getGeneratedSkillActionTools() {
   return [
+    (require("./WebAppDevTool/WebAppDevTool.js") as typeof import("./WebAppDevTool/WebAppDevTool.js")).WebAppDevTool,
     (require("./ApplicationFocusBriefTool/ApplicationFocusBriefTool.js") as typeof import("./ApplicationFocusBriefTool/ApplicationFocusBriefTool.js")).ApplicationFocusBriefTool,
     (require("./ApplicationMaterialsFactCheckTool/ApplicationMaterialsFactCheckTool.js") as typeof import("./ApplicationMaterialsFactCheckTool/ApplicationMaterialsFactCheckTool.js")).ApplicationMaterialsFactCheckTool,
     (require("./ApplicationTrackingStatusRecorderTool/ApplicationTrackingStatusRecorderTool.js") as typeof import("./ApplicationTrackingStatusRecorderTool/ApplicationTrackingStatusRecorderTool.js")).ApplicationTrackingStatusRecorderTool,

@@ -1,0 +1,11 @@
+{
+  "schema": "multi-agent-app-brief/1.0",
+  "invocation": {"requestedBy": "app-coordinator", "reason": "The user needs an executable plan rather than prose advice"},
+  "user": {"audience": "Candidate balancing job search and coursework", "level": "Has task list but no feasible schedule", "constraints": ["Two-week horizon", "Maximum 6 focused hours per day", "Chinese UI"]},
+  "goal": {"outcome": "Create and export a feasible two-week job-search plan", "successCriteria": ["No time conflict or daily overload remains", "Every high-priority task has a scheduled block", "User commits and exports the plan"]},
+  "content": {"domain": "Job-search time planning", "required": ["Interview preparation", "Applications", "Coursework", "Rest buffer", "Priority and duration"], "excluded": ["Calendar account integration"], "sourceNotes": []},
+  "experience": {"scene": "workspace", "primaryLoop": "create/arrange task -> inspect conflicts and capacity -> revise -> commit/export", "requiredInteractions": ["create", "edit", "reorder", "schedule", "undo", "resolve conflict", "export"], "completionState": "Conflict-free plan committed and exported"},
+  "adaptation": {"signals": ["reorder", "conflict resolution", "undo", "abandoned task", "completion"], "allowedResponses": ["surface overload", "suggest smaller block", "show alternative arrangement"], "forbiddenInferences": ["motivation", "personality", "mental health"]},
+  "telemetry": {"events": ["item_created", "item_reordered", "conflict_detected", "undo_used", "plan_committed", "artifact_exported"], "agentQuestions": ["Can the user prioritize under constraints?", "Which conflicts recur?"], "retention": "local-session"},
+  "delivery": {"title": "两周求职行动板", "language": "zh-CN", "offline": true}
+}

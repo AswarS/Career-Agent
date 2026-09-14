@@ -36,6 +36,8 @@ function formatArtifactType(artifact: ArtifactRecord) {
       return '可视化学习';
     case 'app-example':
       return '应用画布';
+    case 'generated-app':
+      return 'Web 应用';
     default:
       return artifact.type;
   }
@@ -77,6 +79,7 @@ function formatArtifactStatus(artifact: ArtifactRecord) {
       <article v-for="artifact in groupedArtifacts" :key="artifact.id" class="card">
         <div class="card-meta">
           <span>{{ formatArtifactType(artifact) }}</span>
+          <span v-if="artifact.type === 'generated-app'">v{{ artifact.revision }}</span>
           <span>{{ formatArtifactStatus(artifact) }}</span>
         </div>
         <h2>{{ artifact.title }}</h2>

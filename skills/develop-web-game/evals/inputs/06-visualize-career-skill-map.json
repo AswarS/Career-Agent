@@ -1,0 +1,11 @@
+{
+  "schema": "multi-agent-app-brief/1.0",
+  "invocation": {"requestedBy": "direct-skill-eval", "reason": "Skill prerequisites and role paths require an explorable dependency map"},
+  "user": {"audience": "Computer-science student choosing between frontend and backend roles", "level": "Has basic programming experience but lacks a structured role-skill model", "constraints": ["Chinese UI", "Offline", "Avoid ranking the user's talent"]},
+  "goal": {"outcome": "Understand how current skills connect to frontend and backend job requirements", "successCriteria": ["Explores both role paths", "Selects three shared foundations and two role-specific gaps", "Creates a structured next-step comparison without a hiring verdict"]},
+  "content": {"domain": "Frontend/backend career skill dependencies", "required": ["shared foundations", "frontend path", "backend path", "skill prerequisites", "project evidence examples", "role comparison"], "excluded": ["salary predictions", "personality fit", "company-specific hiring claims"], "sourceNotes": ["Present illustrative role requirements, not universal hiring standards"]},
+  "experience": {"scene": "visualize", "primaryLoop": "select skill or role -> reveal prerequisites and evidence -> compare paths -> mark next step", "requiredInteractions": ["select", "filter", "expand dependency", "compare", "mark gap", "reset"], "completionState": "Both paths explored and a five-item evidence-based comparison completed"},
+  "adaptation": {"signals": ["nodes visited", "comparison use", "revisits", "marked gaps", "overlooked foundation"], "allowedResponses": ["surface an unvisited prerequisite", "reduce map complexity", "suggest a path comparison"], "forbiddenInferences": ["aptitude", "personality", "hireability", "intelligence"]},
+  "telemetry": {"events": ["object_selected", "view_opened", "comparison_started", "milestone_reached", "session_completed"], "agentQuestions": ["Which prerequisites does the learner overlook?", "Has the learner compared paths using evidence rather than labels?"], "retention": "local-session"},
+  "delivery": {"title": "前后端能力路径地图", "language": "zh-CN", "offline": true}
+}

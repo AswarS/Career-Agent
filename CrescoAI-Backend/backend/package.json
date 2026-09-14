@@ -102,6 +102,7 @@
     "pdfjs-dist": "^6.3.289",
     "picomatch": "*",
     "proper-lockfile": "*",
+    "playwright": "*",
     "qrcode": "*",
     "react": "*",
     "react-reconciler": "*",

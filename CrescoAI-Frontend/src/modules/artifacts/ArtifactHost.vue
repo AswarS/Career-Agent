@@ -11,11 +11,14 @@ import {
 } from 'lucide-vue-next';
 import { runtimeConfig } from '../../config/runtime';
 import { useWorkspaceStore } from '../../stores/workspace';
-import { resolveTrustedCanvasUrl } from './urlCanvasPolicy';
+import { resolveTrustedCanvasOrigins, resolveTrustedCanvasUrl } from './urlCanvasPolicy';
 
 const workspaceStore = useWorkspaceStore();
 const { activeArtifact, artifactFocusMode, artifactImmersiveMode, artifactPaneOpen } = storeToRefs(workspaceStore);
-const trustedUrlFrameSandbox = 'allow-scripts';
+// Same sandbox as the conversation-card app iframe: the trusted-origin
+// allowlist is the security boundary, and same-origin lets generated apps
+// keep their namespaced localStorage state (progress retention).
+const trustedUrlFrameSandbox = 'allow-scripts allow-same-origin allow-forms';
 
 const htmlFrameSandbox = computed(() => {
   if (activeArtifact.value?.renderMode === 'html' && activeArtifact.value.payload.allowScripts) {
@@ -44,7 +47,11 @@ const artifactUrl = computed(() => {
 
   return resolveTrustedCanvasUrl(activeArtifact.value.payload.url, {
     currentOrigin: window.location.origin,
-    trustedOrigins: runtimeConfig.trustedCanvasOrigins,
+    trustedOrigins: resolveTrustedCanvasOrigins({
+      configured: runtimeConfig.trustedCanvasOrigins,
+      apiBaseUrl: runtimeConfig.apiBaseUrl,
+      upstreamConfigured: runtimeConfig.upstreamConfigured,
+    }),
   });
 });
 

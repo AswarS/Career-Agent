@@ -1,0 +1,11 @@
+{
+  "schema": "multi-agent-app-brief/1.0",
+  "invocation": {"requestedBy": "direct-skill-eval", "reason": "STAR structure improves through repeated classification, feedback, and transfer practice"},
+  "user": {"audience": "New graduate preparing for behavioral interviews", "level": "Has project experience but answers are often unstructured", "constraints": ["Chinese UI", "Offline", "Do not store free-text answers or voice"]},
+  "goal": {"outcome": "Recognize and construct well-structured STAR interview responses", "successCriteria": ["Correctly classifies Situation, Task, Action, Result in three examples", "Repairs two weak structured responses", "Completes one transfer item without a hint"]},
+  "content": {"domain": "STAR behavioral interview method", "required": ["Situation", "Task", "Action", "Result", "specific evidence", "weak-answer patterns", "transfer exercise"], "excluded": ["memorized scripts", "personality scoring", "recording answer text"], "sourceNotes": ["Use fictional response fragments and structured selections only"]},
+  "experience": {"scene": "practice", "primaryLoop": "classify or repair response segment -> submit -> receive targeted feedback -> retry or transfer", "requiredInteractions": ["drag classification", "choose revision", "submit", "hint", "retry", "next item"], "completionState": "Classification streak, two repairs, and transfer item completed"},
+  "adaptation": {"signals": ["first-attempt correctness", "omission category", "evidence-selection error", "hint timing", "transfer result"], "allowedResponses": ["highlight one missing STAR component", "show a contrast pair", "reduce one difficulty dimension", "offer a similar new item"], "forbiddenInferences": ["personality", "communication talent", "hireability", "intelligence"]},
+  "telemetry": {"events": ["attempt_started", "attempt_submitted", "feedback_viewed", "hint_requested", "retry_started", "session_completed"], "agentQuestions": ["Which STAR component is most often omitted?", "Can the learner distinguish actions from team-level descriptions?", "Does structure transfer to a new example?"], "retention": "local-session"},
+  "delivery": {"title": "STAR 回答训练场", "language": "zh-CN", "offline": true}
+}

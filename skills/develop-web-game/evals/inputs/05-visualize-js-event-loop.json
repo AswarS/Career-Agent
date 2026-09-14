@@ -1,0 +1,11 @@
+{
+  "schema": "multi-agent-app-brief/1.0",
+  "invocation": {"requestedBy": "direct-skill-eval", "reason": "Microtask and macrotask ordering is best understood through stepwise queue animation"},
+  "user": {"audience": "Frontend learner preparing for interviews", "level": "Knows call stack and Promise syntax but predicts execution order inconsistently", "constraints": ["Chinese UI", "Offline", "Session under 15 minutes"]},
+  "goal": {"outcome": "Predict and explain JavaScript event-loop execution order", "successCriteria": ["Correctly steps through one guided example", "Correctly predicts two unseen examples", "Explains when microtasks are drained using structured choices"]},
+  "content": {"domain": "Browser JavaScript event loop", "required": ["call stack", "Web APIs", "microtask queue", "macrotask queue", "render checkpoint", "Promise.then", "setTimeout"], "excluded": ["Node.js libuv phases", "Workers"], "sourceNotes": ["Use browser event-loop semantics and deterministic examples"]},
+  "experience": {"scene": "visualize", "primaryLoop": "predict next operation -> step animation -> compare queues -> explain rule", "requiredInteractions": ["step", "play/pause", "predict", "speed", "reset", "switch example"], "completionState": "Guided example plus two transfer predictions completed"},
+  "adaptation": {"signals": ["prediction correctness", "queue-confusion category", "replay", "speed change", "hint use"], "allowedResponses": ["slow animation", "highlight active queue", "show one rule hint", "offer simpler transfer example"], "forbiddenInferences": ["intelligence", "personality", "diagnosis", "hireability"]},
+  "telemetry": {"events": ["attempt_submitted", "parameter_changed", "hint_requested", "retry_started", "session_completed"], "agentQuestions": ["Does the learner distinguish microtasks from macrotasks?", "Can the learner transfer the drain rule to unseen code?"], "retention": "local-session"},
+  "delivery": {"title": "JavaScript 事件循环实验室", "language": "zh-CN", "offline": true}
+}

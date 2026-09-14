@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>分数加减法练习</title>
+<style>
+  :root {
+    --bg: #f4f2ec;
+    --card: #ffffff;
+    --ink: #2c2a26;
+    --muted: #8a8577;
+    --teal: #0f766e;
+    --teal-dark: #115e59;
+    --amber: #d97706;
+    --ok: #15803d;
+    --err: #b91c1c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    background: var(--bg); color: var(--ink);
+    font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  }
+  main {
+    width: min(480px, 92vw); background: var(--card); border-radius: 14px;
+    padding: 28px 26px; box-shadow: 0 6px 24px rgba(44, 42, 38, 0.08);
+  }
+  h1 { margin: 0 0 4px; font-size: 22px; }
+  .sub { margin: 0 0 18px; color: var(--muted); font-size: 13px; }
+  .stats { display: flex; gap: 12px; margin-bottom: 18px; }
+  .stat { flex: 1; background: #f0eee8; border-radius: 10px; padding: 10px 12px; }
+  .stat b { display: block; font-size: 20px; color: var(--teal-dark); }
+  .stat span { font-size: 12px; color: var(--muted); }
+  .problem { text-align: center; font-size: 34px; margin: 10px 0 22px; letter-spacing: 2px; }
+  .answers { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .answers button {
+    font-size: 18px; padding: 14px 8px; border: 2px solid #e4e0d5; border-radius: 10px;
+    background: #fff; cursor: pointer; transition: transform 0.05s ease, border-color 0.15s ease;
+  }
+  .answers button:hover { border-color: var(--teal); }
+  .answers button:active { transform: scale(0.97); }
+  .answers button.correct { border-color: var(--ok); background: #e8f6ec; }
+  .answers button.wrong { border-color: var(--err); background: #fdecea; }
+  .feedback { min-height: 44px; margin: 16px 0 8px; font-size: 15px; line-height: 1.6; }
+  .feedback.ok { color: var(--ok); }
+  .feedback.err { color: var(--err); }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
+  .toolbar button {
+    border: 1px solid #d8d4c6; background: #faf9f5; border-radius: 8px;
+    padding: 8px 12px; cursor: pointer; font-size: 13px; color: var(--ink);
+  }
+  .toolbar button:hover { border-color: var(--teal); }
+  .toolbar button.primary { background: var(--teal); border-color: var(--teal); color: #fff; }
+  .privacy-note { margin-top: 16px; font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>分数加减法练习</h1>
+  <p class="sub">选择正确答案，连续答对获得连击加成</p>
+
+  <div class="stats">
+    <div class="stat"><b id="score">0</b><span>得分</span></div>
+    <div class="stat"><b id="streak">0</b><span>连击</span></div>
+    <div class="stat"><b id="round">1/10</b><span>第几题</span></div>
+  </div>
+
+  <div class="problem" id="problem">1/4 + 1/4 = ?</div>
+
+  <div class="answers" id="answers"></div>
+
+  <div class="feedback" id="feedback"></div>
+
+  <div class="toolbar">
+    <button id="hint-btn">提示</button>
+    <button id="reset-btn">重新开始</button>
+    <button id="export-btn">导出反馈</button>
+    <button id="clear-btn">清除记录</button>
+    <button id="finish-btn" class="primary">结束本轮</button>
+  </div>
+
+  <p class="privacy-note">
+    练习进度与行为记录仅保存在本浏览器本地；交互事件会以匿名摘要形式上传给辅导 Agent。
+  </p>
+</main>
+
+<script src="./agent-telemetry.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  var SLUG = 'fraction-practice';
+  var STATE_KEY = 'multi-agent:' + SLUG + ':state:1.0';
+  var ROUND_TOTAL = 10;
+
+  // ---------- 状态 ----------
+  function freshState() {
+    return {
+      index: 0,
+      score: 0,
+      streak: 0,
+      bestStreak: 0,
+      attempts: 0,
+      errorCategories: [],
+      completed: false,
+      hintUsed: false
+    };
+  }
+
+  var state;
+  try {
+    state = JSON.parse(localStorage.getItem(STATE_KEY)) || freshState();
+  } catch (_) {
+    state = freshState();
+  }
+
+  function persist() {
+    try { localStorage.setItem(STATE_KEY, JSON.stringify(state)); } catch (_) {}
+  }
+
+  // ---------- 题目生成 ----------
+  function gcd(a, b) { return b === 0 ? a : gcd(b, a % b); }
+
+  function makeProblem() {
+    var d = [2, 3, 4, 5, 6, 8, 10][Math.floor(Math.random() * 7)];
+    var a = 1 + Math.floor(Math.random() * (d - 1));
+    var b = 1 + Math.floor(Math.random() * (d - 1));
+    var op = Math.random() < 0.5 ? '+' : '-';
+    if (op === '-') { var sum = a + b; a = sum; }
+    var n = op === '+' ? a + b : a - b;
+    var g = gcd(n, d);
+    var correct = (n / g) + '/' + (d / g);
+    var options = [correct];
+    var offset = 1;
+    while (options.length < 4) {
+      // A bounded random range can contain fewer than four reduced fractions
+      // (especially for denominator 2), which previously locked the main
+      // thread forever. Increasing the numerator guarantees progress.
+      var fakeN = n + offset;
+      offset += 1;
+      var fakeG = gcd(fakeN, d);
+      var opt = (fakeN / fakeG) + '/' + (d / fakeG);
+      if (options.indexOf(opt) === -1) options.push(opt);
+    }
+    options.sort(function () { return Math.random() - 0.5; });
+    return { a: a, b: b, d: d, op: op, correct: correct, options: options };
+  }
+
+  var problem = makeProblem();
+
+  // ---------- 遥测 ----------
+  var telemetry = window.createAgentTelemetry({
+    appSlug: SLUG,
+    scene: 'practice',
+    metricReducer: function (events) {
+      var attempts = events.filter(function (e) { return e.type === 'attempt_submitted'; });
+      var firstAttempts = [];
+      var seen = {};
+      attempts.forEach(function (e) {
+        var round = e.target || 'all';
+        if (!seen[round]) { seen[round] = true; firstAttempts.push(e); }
+      });
+      var correct = firstAttempts.filter(function (e) { return e.data && e.data.correct === true; }).length;
+      return [{
+        metric: 'firstAttemptAccuracy',
+        value: firstAttempts.length ? Math.round((correct / firstAttempts.length) * 100) / 100 : 0,
+        evidence: firstAttempts.slice(-10).map(function (e) { return e.seq; })
+      }];
+    },
+    inferenceReducer: function (events, observations) {
+      var errors = events.filter(function (e) { return e.data && e.data.correct === false; });
+      var categories = {};
+      errors.forEach(function (e) {
+        var c = e.data.errorCategory || 'unknown';
+        categories[c] = (categories[c] || 0) + 1;
+      });
+      var top = Object.keys(categories).sort(function (x, y) { return categories[y] - categories[x]; })[0];
+      if (!top) return [];
+      return [{
+        statement: 'Most common error category is ' + top,
+        confidence: errors.length >= 3 ? 'medium' : 'low',
+        evidence: errors.slice(-5).map(function (e) { return e.seq; }),
+        nextAction: 'Show a worked example for the ' + top + ' category before the next item.'
+      }];
+    }
+  });
+  telemetry.attachUploader({
+    endpoint: new URL('events', window.location.href).href,
+    batchSize: 20,
+    flushIntervalMs: 5000
+  });
+
+  // ---------- 渲染 ----------
+  var scoreEl = document.getElementById('score');
+  var streakEl = document.getElementById('streak');
+  var roundEl = document.getElementById('round');
+  var problemEl = document.getElementById('problem');
+  var answersEl = document.getElementById('answers');
+  var feedbackEl = document.getElementById('feedback');
+
+  function renderProblem() {
+    problemEl.textContent = problem.a + '/' + problem.d + ' ' + (problem.op === '+' ? '+' : '-') + ' ' + problem.b + '/' + problem.d + ' = ?';
+    answersEl.innerHTML = '';
+    problem.options.forEach(function (opt) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = opt;
+      btn.addEventListener('click', function () { onAnswer(opt, btn); });
+      answersEl.appendChild(btn);
+    });
+  }
+
+  function renderStats() {
+    scoreEl.textContent = state.score;
+    streakEl.textContent = state.streak;
+    roundEl.textContent = Math.min(state.index + 1, ROUND_TOTAL) + '/' + ROUND_TOTAL;
+  }
+
+  function renderFeedback(text, ok) {
+    feedbackEl.textContent = text;
+    feedbackEl.className = 'feedback' + (ok === true ? ' ok' : ok === false ? ' err' : '');
+  }
+
+  function renderAll() { renderProblem(); renderStats(); }
+
+  // ---------- 交互 ----------
+  function onAnswer(opt, btn) {
+    if (state.completed) return;
+    var round = 'round-' + state.index;
+    var correct = opt === problem.correct;
+    state.attempts += 1;
+    if (correct) {
+      state.score += 10 + state.streak * 2;
+      state.streak += 1;
+      if (state.streak > state.bestStreak) state.bestStreak = state.streak;
+      state.hintUsed = false;
+    } else {
+      state.streak = 0;
+      var category = problem.op === '-' ? 'subtraction-error' : 'addition-error';
+      state.errorCategories.push(category);
+    }
+    telemetry.record('attempt_submitted', {
+      target: round,
+      data: { correct: correct, attempt: state.attempts, errorCategory: correct ? undefined : category }
+    });
+    Array.prototype.forEach.call(answersEl.querySelectorAll('button'), function (b) {
+      if (b.textContent === problem.correct) b.classList.add('correct');
+    });
+    if (!correct) {
+      btn.classList.add('wrong');
+      renderFeedback('再试一次：同分母加减，分子相加减，分母不变。', false);
+      return;
+    }
+    renderFeedback('回答正确！' + (state.streak >= 3 ? ' 连击 ' + state.streak + '！' : ''), true);
+    state.index += 1;
+    persist();
+    if (state.index >= ROUND_TOTAL) {
+      state.completed = true;
+      telemetry.record('session_completed', { data: { score: state.score, bestStreak: state.bestStreak, attempts: state.attempts } });
+      renderFeedback('本轮完成！得分 ' + state.score + '，最佳连击 ' + state.bestStreak + '。', true);
+      problemEl.textContent = '🎉 完成';
+      answersEl.innerHTML = '';
+    } else {
+      problem = makeProblem();
+    }
+    renderAll();
+  }
+
+  document.getElementById('hint-btn').addEventListener('click', function () {
+    if (!state.hintUsed) {
+      telemetry.record('hint_requested', { target: 'round-' + state.index, data: { hintLevel: 1 } });
+      state.hintUsed = true;
+      renderFeedback('提示：先把分母统一（同分母直接算），分子 ' + (problem.op === '+' ? '相加' : '相减') + '，再约分。', null);
+    }
+  });
+
+  document.getElementById('reset-btn').addEventListener('click', function () {
+    state = freshState();
+    problem = makeProblem();
+    persist();
+    renderFeedback('已重新开始。', null);
+    renderAll();
+  });
+
+  document.getElementById('export-btn').addEventListener('click', function () {
+    telemetry.export();
+  });
+
+  document.getElementById('clear-btn').addEventListener('click', function () {
+    telemetry.clear();
+    state = freshState();
+    problem = makeProblem();
+    persist();
+    renderFeedback('本地记录已清除，开始全新会话。', null);
+    renderAll();
+  });
+
+  document.getElementById('finish-btn').addEventListener('click', function () {
+    state.completed = true;
+    telemetry.record('session_completed', { data: { score: state.score, bestStreak: state.bestStreak, attempts: state.attempts } });
+    renderFeedback('本轮已结束，可以导出反馈给 Agent。', null);
+  });
+
+  // ---------- 测试挂钩（宿主契约） ----------
+  window.render_game_to_text = function () {
+    return JSON.stringify({
+      mode: 'practice',
+      current: { a: problem.a, b: problem.b, d: problem.d, op: problem.op },
+      index: state.index,
+      score: state.score,
+      streak: state.streak,
+      attempts: state.attempts,
+      completed: state.completed
+    });
+  };
+  window.advanceTime = function (ms) {
+    // 非时间驱动应用：仅保留确定性步进挂钩供自动化测试使用。
+    return window.render_game_to_text();
+  };
+
+  renderAll();
+})();
+</script>
+</body>
+</html>

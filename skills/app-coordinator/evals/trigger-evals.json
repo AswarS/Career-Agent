@@ -1,0 +1,10 @@
+[
+  {"query": "我想通过动画搞懂快速排序每次交换发生了什么，还想自己选择 pivot 试试。", "should_trigger": true},
+  {"query": "帮我模拟一次产品经理面试，根据我的选择继续追问。", "should_trigger": true},
+  {"query": "我有很多求职任务排不开，希望做成能调整和检查冲突的计划。", "should_trigger": true},
+  {"query": "解释一下快速排序的平均时间复杂度。", "should_trigger": false},
+  {"query": "把这份简历改得更简洁，并导出 Word。", "should_trigger": false},
+  {"query": "这是已经验证的 App Brief，请直接调用 develop-web-game。", "should_trigger": false},
+  {"query": "给我一份后端面试知识点清单。", "should_trigger": false},
+  {"query": "我经常写错二分边界，想做几道题并按错误类型逐步调整难度。", "should_trigger": true}
+]

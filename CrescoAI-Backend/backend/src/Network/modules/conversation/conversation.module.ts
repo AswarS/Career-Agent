@@ -9,6 +9,7 @@ import { AgentModule } from '../agent/agent.module';
 import { SkillModule } from '../skill/skill.module';
 import { AuthModule } from '../auth/auth.module';
 import { ArtifactModule } from '../artifact/artifact.module';
+import { GeneratedAppModule } from '../generated-app/generated-app.module';
 import { ProfileModule } from '../profile/profile.module';
 import { UserEntity } from '../user/entities/user.entity';
 import { ConversationTranscriptProjectionService } from './transcript-projection.service';
@@ -28,6 +29,7 @@ import { ConversationCleanupTaskEntity } from './entities/conversation-cleanup-t
     AuthModule,
     ArtifactModule,
     ProfileModule,
+    GeneratedAppModule,
   ],
   controllers: [ConversationController],
   providers: [ConversationService, ConversationTranscriptProjectionService],

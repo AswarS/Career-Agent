@@ -91,6 +91,7 @@ export class SkillService implements OnModuleInit {
     const registeredNames = new Set(result.map((entry) => entry.name));
     const globalDiskSkills = getGlobalDiskSkillCatalog()
       .filter((entry) => !category || entry.category === category)
+      .filter((entry) => entry.userInvocable)
       .filter((entry) => !registeredNames.has(entry.name))
       .map((entry) => this.globalDiskSkillListItem(entry));
 
@@ -582,9 +583,15 @@ export class SkillService implements OnModuleInit {
     const underscoreName = requestedName.replace(/[\s-]+/g, '_');
     const bundledSkills = getBundledSkills();
     const bundled =
-      bundledSkills.find((skill) => skill.name === requestedName) ??
-      bundledSkills.find((skill) => skill.name === legacyHyphenName) ??
-      bundledSkills.find((skill) => skill.name === underscoreName);
+      bundledSkills.find(
+        (skill) => !skill.isHidden && skill.name === requestedName,
+      ) ??
+      bundledSkills.find(
+        (skill) => !skill.isHidden && skill.name === legacyHyphenName,
+      ) ??
+      bundledSkills.find(
+        (skill) => !skill.isHidden && skill.name === underscoreName,
+      );
     if (bundled) return bundled.name;
 
     const registryUserId = USER_DEFINED_SKILLS_ENABLED ? userId : undefined;
@@ -601,7 +608,8 @@ export class SkillService implements OnModuleInit {
     const underscoreName = requestedName.replace(/-/g, '_');
     return getGlobalDiskSkillCatalog().find(
       (entry) =>
-        entry.name === requestedName || entry.name === underscoreName,
+        entry.userInvocable &&
+        (entry.name === requestedName || entry.name === underscoreName),
     );
   }
 

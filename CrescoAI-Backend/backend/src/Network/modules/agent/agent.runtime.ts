@@ -8,6 +8,7 @@ import type {
   SkillOutcome,
 } from '../../../skills/skillLifecycleTypes.js';
 import type { ActionArtifactManifest } from '../../../artifacts/actionArtifactPublisher.js';
+import type { WebAppManifest } from '../../../artifacts/webAppManifest.js';
 
 export interface AgentCreateConversationInput {
   userId: string;
@@ -75,6 +76,7 @@ export interface GeneratedFile {
   mimeType?: string;
   sizeBytes?: number;
   actionArtifact?: ActionArtifactManifest;
+  appManifest?: WebAppManifest;
 }
 
 export type AgentMessageBlockType = 'text' | 'status' | 'tool_call' | 'tool_result' | 'skill' | 'artifact' | 'ask_question';

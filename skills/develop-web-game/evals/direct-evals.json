@@ -1,0 +1,32 @@
+{
+  "skill_name": "develop-web-game",
+  "mode": "internal-action-tool-invocation",
+  "prompt_policy": "production-like-minimal",
+  "prompt_contains": ["DevelopWebGame", "complete App Brief path"],
+  "prompt_excludes": ["test actions", "expected artifacts", "viewport requirements", "quality checklist", "telemetry implementation hints", "output directory overrides"],
+  "command_file": "evals/direct-invocation-cases.md",
+  "rubric": "evals/evaluation-rubric.json",
+  "common_expectations": [
+    "The requested primary scene and complete App Brief are implemented without reinterpretation",
+    "The primary interaction loop completes end to end and handles invalid or rapid actions",
+    "Desktop 1440x900 and mobile 360x800 states are visually inspected",
+    "index.html, metadata.json, output.json, progress.md, screenshots, console errors, state trace, Agent feedback, and session export are saved",
+    "render_game_to_text, visible state, and telemetry remain consistent",
+    "Agent feedback uses evidence, confidence, next action, and limitations without forbidden labels",
+    "Local export and clear work and prohibited raw behavior data is not stored"
+  ],
+  "evals": [
+    {"id": "V1", "scene": "visualize", "name": "red-black-tree", "brief": "evals/inputs/01-visualize-rbtree.json", "focus": ["tree invariants", "animated rotations", "prediction transfer"]},
+    {"id": "V2", "scene": "visualize", "name": "javascript-event-loop", "brief": "evals/inputs/05-visualize-js-event-loop.json", "focus": ["queue semantics", "step animation", "transfer prediction"]},
+    {"id": "V3", "scene": "visualize", "name": "career-skill-map", "brief": "evals/inputs/06-visualize-career-skill-map.json", "focus": ["dependency exploration", "path comparison", "no aptitude labels"]},
+    {"id": "S1", "scene": "simulate", "name": "frontend-interview", "brief": "evals/inputs/02-simulate-interview.json", "focus": ["scenario phases", "follow-up consequences", "no transcript retention"]},
+    {"id": "S2", "scene": "simulate", "name": "salary-negotiation", "brief": "evals/inputs/07-simulate-salary-negotiation.json", "focus": ["branching negotiation", "fictional values", "reflection"]},
+    {"id": "S3", "scene": "simulate", "name": "production-incident", "brief": "evals/inputs/08-simulate-production-incident.json", "focus": ["safe triage", "reversible mitigation", "communication checkpoints"]},
+    {"id": "P1", "scene": "practice", "name": "binary-search", "brief": "evals/inputs/03-practice-binary-search.json", "focus": ["boundary categories", "adaptive retry", "transfer"]},
+    {"id": "P2", "scene": "practice", "name": "star-interview", "brief": "evals/inputs/09-practice-star-interview.json", "focus": ["STAR classification", "repair feedback", "no free-text retention"]},
+    {"id": "P3", "scene": "practice", "name": "sql-optimization", "brief": "evals/inputs/10-practice-sql-optimization.json", "focus": ["plan diagnosis", "fix consequence", "deterministic fictional data"]},
+    {"id": "W1", "scene": "workspace", "name": "two-week-job-plan", "brief": "evals/inputs/04-workspace-job-plan.json", "focus": ["capacity conflicts", "accessible reorder", "plan export"]},
+    {"id": "W2", "scene": "workspace", "name": "application-tracker", "brief": "evals/inputs/11-workspace-application-tracker.json", "focus": ["pipeline state", "overdue resolution", "snapshot export"]},
+    {"id": "W3", "scene": "workspace", "name": "portfolio-evidence", "brief": "evals/inputs/12-workspace-portfolio-evidence.json", "focus": ["evidence gaps", "no fabricated achievements", "outline export"]}
+  ]
+}

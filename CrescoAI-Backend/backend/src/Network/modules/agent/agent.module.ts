@@ -6,9 +6,15 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ProfileRefreshJobEntity } from '../profile/entities/profile-refresh-job.entity';
 import { ProfileRefreshController } from './profile-refresh.controller';
 import { ProfileRefreshService } from './profile-refresh.service';
+import { GeneratedAppModule } from '../generated-app/generated-app.module';
 
 @Module({
-  imports: [SettingsModule, ProfileModule, TypeOrmModule.forFeature([ProfileRefreshJobEntity])],
+  imports: [
+    SettingsModule,
+    ProfileModule,
+    GeneratedAppModule,
+    TypeOrmModule.forFeature([ProfileRefreshJobEntity]),
+  ],
   controllers: [ProfileRefreshController],
   providers: [AgentService, ProfileRefreshService],
   exports: [AgentService],

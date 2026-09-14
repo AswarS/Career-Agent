@@ -36,6 +36,7 @@ async function writeSkill(input: {
   skillsDir: string
   name: string
   modelEntry?: 'action-tool' | 'skill-catalog'
+  userInvocable?: boolean
   config?: Record<string, unknown>
 }): Promise<void> {
   const skillDir = join(input.skillsDir, input.name)
@@ -47,6 +48,9 @@ async function writeSkill(input: {
       `name: ${input.name}`,
       `description: Execute ${input.name} from the existing context.`,
       `model-entry: ${input.modelEntry ?? 'action-tool'}`,
+      ...(input.userInvocable === undefined
+        ? []
+        : [`user-invocable: ${String(input.userInvocable)}`]),
       '---',
       '',
       `# ${input.name}`,
@@ -96,6 +100,7 @@ describe('offline Skill Action Tool factory', () => {
       skillName: 'domain-map',
       toolName: 'DomainMap',
       exportName: 'DomainMapTool',
+      internalOnly: false,
       disposition: 'create',
     })
     const source = renderSkillActionTool(plan.entries[0]!)
@@ -186,6 +191,39 @@ describe('offline Skill Action Tool factory', () => {
     ])
     await expect(readFile(join(staleDir, 'StaleSkillTool.ts'), 'utf8')).rejects.toThrow()
     expect(await readFile(join(manualDir, 'ManualTool.ts'), 'utf8')).toContain('ManualTool')
+  })
+
+  test('generates internal Action Tools without adding them to the public registry', async () => {
+    const fixture = await createFixture()
+    await writeSkill({
+      skillsDir: fixture.skillsDir,
+      name: 'public-skill',
+      config: { tool_name: 'PublicSkill' },
+    })
+    await writeSkill({
+      skillsDir: fixture.skillsDir,
+      name: 'internal-leaf',
+      userInvocable: false,
+      config: {
+        tool_name: 'InternalLeaf',
+        internal_only: true,
+      },
+    })
+
+    const plan = await buildSkillActionToolPlan(fixture)
+    const internal = plan.entries.find(entry => entry.skillName === 'internal-leaf')
+    expect(internal).toMatchObject({ internalOnly: true })
+
+    await writeSkillActionToolPlan(plan)
+
+    expect(await readFile(internal!.outputFile, 'utf8')).toContain(
+      'export const InternalLeafTool',
+    )
+    expect(await readFile(plan.registryFile, 'utf8')).toContain('PublicSkillTool')
+    expect(await readFile(plan.registryFile, 'utf8')).not.toContain('InternalLeafTool')
+    expect(await readFile(plan.namesRegistryFile, 'utf8')).toContain(
+      '"internalleaf"',
+    )
   })
 
   test('rejects generated Tool name collisions', async () => {

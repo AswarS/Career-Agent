@@ -1,0 +1,20 @@
+{
+  "tool_name": "WebAppDev",
+  "user_facing_name": "Web App development",
+  "search_hint": "build interactive visual simulations practice workspaces",
+  "preserve_existing": true,
+  "always_load": true,
+  "read_only": false,
+  "input": {
+    "request": {
+      "type": "string",
+      "required": true,
+      "description": "The user's current request for an interactive Web App. Include only request-specific details; conversation context is inherited by the forked coordinator."
+    },
+    "base_app_ref": {
+      "type": "string",
+      "required": false,
+      "description": "App id of an existing app to iterate (create a new version). Use the basename of output.directory from a previous WebAppDev result, or the path segment after /app/ in the artifact URL."
+    }
+  }
+}

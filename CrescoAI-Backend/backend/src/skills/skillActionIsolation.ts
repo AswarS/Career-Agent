@@ -71,9 +71,12 @@ async function checkPathTool(
     cwd: workspaceRoot,
     workspaceRoot,
     toolName: tool.name,
-    // Service-only denies remain in force. Parent user/shared/memory/skill
-    // roots are intentionally not inherited by Action Skill children.
+    // Service-only denies remain in force. Parent user/shared/memory roots are
+    // intentionally not inherited by Action Skill children.
     serviceOnlyRoots,
+    // Only roots explicitly registered after a trusted Skill was selected are
+    // readable. They remain read-only and cannot widen workspace writes.
+    skillReadOnlyRoots: session?.skillReadOnlyRoots,
   })
   if (boundary.allowed || !('reason' in boundary)) return null
   return deny(
@@ -132,6 +135,8 @@ async function checkActionSkillBoundary(
  * Apply the same fail-closed filesystem boundary to every model-entry:
  * action-tool child. The parent permission callback still runs, but it cannot
  * widen the child boundary or rewrite an allowed input to an escaping path.
+ * Selected trusted Skill roots are inherited read-only so Action Skills can
+ * progressively load their own references and assets.
  */
 export function createRestrictedSkillActionCanUseTool(
   parentCanUseTool: CanUseToolFn,

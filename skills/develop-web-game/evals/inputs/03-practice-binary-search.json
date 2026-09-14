@@ -1,0 +1,11 @@
+{
+  "schema": "multi-agent-app-brief/1.0",
+  "invocation": {"requestedBy": "app-coordinator", "reason": "Repeated boundary errors require adaptive practice"},
+  "user": {"audience": "Algorithm learner", "level": "Understands loops but confuses closed and half-open intervals", "constraints": ["Chinese UI", "No raw code storage"]},
+  "goal": {"outcome": "Apply consistent binary-search interval invariants", "successCriteria": ["Three consecutive correct boundary decisions", "Correctly solves one transfer problem without a hint"]},
+  "content": {"domain": "Binary search", "required": ["Closed interval", "Half-open interval", "Boundary counterexamples", "Transfer task"], "excluded": ["Advanced parametric search"], "sourceNotes": []},
+  "experience": {"scene": "practice", "primaryLoop": "inspect state -> choose boundary update -> receive targeted feedback -> retry", "requiredInteractions": ["choose update", "submit", "hint", "retry", "next item"], "completionState": "Mastery streak and transfer task completed"},
+  "adaptation": {"signals": ["first-attempt correctness", "error category", "hint timing", "retry", "transfer result"], "allowedResponses": ["show counterexample", "reduce one difficulty dimension", "provide similar new item"], "forbiddenInferences": ["intelligence", "personality", "diagnosis"]},
+  "telemetry": {"events": ["attempt_started", "attempt_submitted", "feedback_viewed", "hint_requested", "retry_started", "session_completed"], "agentQuestions": ["Which interval invariant is unstable?", "Did learning transfer to a new problem?"], "retention": "local-session"},
+  "delivery": {"title": "二分边界训练场", "language": "zh-CN", "offline": true}
+}

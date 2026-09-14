@@ -4,6 +4,7 @@ import { basename, extname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { GeneratedFile } from './agent.runtime.js';
 import { readActionArtifactManifest } from '../../../artifacts/actionArtifactPublisher.js';
+import { readWebAppManifest } from '../../../artifacts/webAppManifest.js';
 
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp']);
 const AUDIO_EXTENSIONS = new Set(['.mp3', '.wav', '.ogg', '.flac', '.aac', '.m4a', '.wma', '.aiff', '.opus']);
@@ -48,12 +49,20 @@ export async function discoverGeneratedFiles(
         const actionArtifact = kind === 'html'
           ? await readActionArtifactManifest(filePath, workspaceDir)
           : undefined;
+        const appManifest =
+          kind === 'app' ? await readWebAppManifest(filePath) : undefined;
+        if (kind === 'app') {
+          if (!appManifest) continue;
+          const entryStats = await stat(join(filePath, 'index.html')).catch(() => null);
+          if (!entryStats?.isFile()) continue;
+        }
         results.push({
           path: filePath,
           kind,
-          title: actionArtifact?.title ?? name,
+          title: appManifest?.title ?? actionArtifact?.title ?? name,
           sizeBytes: fileStats.isFile() ? fileStats.size : undefined,
           ...(actionArtifact ? { actionArtifact } : {}),
+          ...(appManifest ? { appManifest } : {}),
         });
       } catch {
         continue;

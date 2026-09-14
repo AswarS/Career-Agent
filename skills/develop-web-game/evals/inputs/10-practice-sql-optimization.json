@@ -1,0 +1,11 @@
+{
+  "schema": "multi-agent-app-brief/1.0",
+  "invocation": {"requestedBy": "direct-skill-eval", "reason": "Query-plan reasoning requires repeated diagnosis with immediate feedback"},
+  "user": {"audience": "Backend interview candidate", "level": "Can write joins and indexes but struggles to interpret execution plans", "constraints": ["Chinese UI", "Offline", "Use a fictional dataset", "No database server"]},
+  "goal": {"outcome": "Diagnose common SQL performance problems from simplified execution plans", "successCriteria": ["Correctly identifies three bottleneck categories", "Chooses an appropriate index or rewrite in two cases", "Solves one unseen transfer case without a hint"]},
+  "content": {"domain": "SQL query optimization", "required": ["full scan", "index selectivity", "join order", "sort", "N+1 pattern", "simplified cost and row estimates"], "excluded": ["vendor-specific optimizer internals", "real production data", "running arbitrary SQL"], "sourceNotes": ["Use deterministic simplified plans suitable for interviews"]},
+  "experience": {"scene": "practice", "primaryLoop": "inspect plan -> select bottleneck and fix -> submit -> compare cost consequence -> retry", "requiredInteractions": ["inspect node", "choose diagnosis", "choose fix", "submit", "hint", "retry", "next case"], "completionState": "Three diagnoses, two fixes, and one transfer case completed"},
+  "adaptation": {"signals": ["diagnosis correctness", "fix mismatch category", "plan-node inspection", "hint timing", "transfer result"], "allowedResponses": ["highlight estimated rows", "hide one distractor", "show a before/after plan", "offer a similar case"], "forbiddenInferences": ["intelligence", "seniority", "hireability", "personality"]},
+  "telemetry": {"events": ["object_selected", "attempt_submitted", "feedback_viewed", "hint_requested", "retry_started", "session_completed"], "agentQuestions": ["Does the learner inspect cardinality before choosing an index?", "Which optimization category is repeatedly confused?", "Does learning transfer to an unseen plan?"], "retention": "local-session"},
+  "delivery": {"title": "SQL 执行计划训练场", "language": "zh-CN", "offline": true}
+}

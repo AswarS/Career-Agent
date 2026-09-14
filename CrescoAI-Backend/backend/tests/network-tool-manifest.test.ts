@@ -69,7 +69,7 @@ describe("offline Network Tool manifest", () => {
       manifest.tools.filter(
         (tool) => tool.context === NETWORK_CONVERSATION_CONTEXT,
       ),
-    ).toHaveLength(31);
+    ).toHaveLength(66);
     expect(
       manifest.tools.filter(
         (tool) => tool.context === NETWORK_PROFILE_REFRESH_CONTEXT,
@@ -78,6 +78,9 @@ describe("offline Network Tool manifest", () => {
     expect(manifest.tools.some((tool) => tool.name.startsWith("mcp__"))).toBe(
       false,
     );
+    expect(
+      manifest.tools.some((tool) => tool.name === "WebAppPlaywright"),
+    ).toBe(false);
     expect(manifest.excluded_tools.map((tool) => tool.name).sort()).toEqual([
       "Agent",
       "EnterWorktree",
@@ -91,17 +94,20 @@ describe("offline Network Tool manifest", () => {
   });
 
   test("classifies only concrete action-skill wrappers as Skill Tools", () => {
-    expect(
-      manifest.tools
-        .filter((tool) => tool.tool_type === "skill_tool")
-        .map((tool) => [tool.name, tool.skill_binding?.skill_name]),
-    ).toEqual([
-      ["BaselineAssessment", "baseline-assessment"],
-      ["CareerCompetencyModel", "career-competency-model"],
-      ["LearningPlan", "learning-plan"],
-      ["LearningProgressAssessment", "learning-progress-assessment"],
-      ["LearningStageDesign", "learning-stage-design"],
+    const skillTools = manifest.tools
+      .filter((tool) => tool.tool_type === "skill_tool")
+      .map((tool) => [tool.name, tool.skill_binding?.skill_name]);
+    expect(skillTools).toHaveLength(39);
+    expect(skillTools).toContainEqual([
+      "ApplicationFocusBrief",
+      "application-focus-brief",
     ]);
+    expect(skillTools).toContainEqual(["LearningPlan", "learning-plan"]);
+    expect(skillTools).toContainEqual(["WebAppDev", "app-coordinator"]);
+    expect(skillTools.some(([name]) => name === "DevelopWebGame")).toBe(false);
+    expect(
+      skillTools.some(([name]) => name === "WebAppInformationCollection"),
+    ).toBe(false);
     expect(manifest.tools.find((tool) => tool.name === "Skill")).toMatchObject({
       tool_type: "harness_tool",
       skill_binding: null,
@@ -239,9 +245,9 @@ describe("offline Network Tool manifest", () => {
 
   test("renders a README whose statistics and indexes come from the manifest", () => {
     const readme = renderNetworkToolManifestReadme(manifest);
-    expect(readme).toContain("| Tool 记录数 | 33 |");
-    expect(readme).toContain("| Harness Tool | 28 |");
-    expect(readme).toContain("| Skill Tool | 5 |");
+    expect(readme).toContain("| Tool 记录数 | 68 |");
+    expect(readme).toContain("| Harness Tool | 29 |");
+    expect(readme).toContain("| Skill Tool | 39 |");
     expect(readme).toContain("| Resource 数 | 14 |");
     expect(readme).toContain(
       "`network.profile_refresh:harness_tool:profile_read:product-profile-refresh`",

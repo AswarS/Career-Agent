@@ -48,6 +48,7 @@ import { extractPdfText } from '../../../utils/pdfTextExtraction.js';
 import {
   findNetworkTranscriptFile,
   getNetworkConversationMemoryDir,
+  getNetworkUserWorkspaceDir,
   networkRootDir,
   userDataRootDir,
 } from '../../utils/networkTranscriptStorage.js';
@@ -61,6 +62,14 @@ import type {
   SkillOutcome,
 } from '../../../skills/skillLifecycleTypes.js';
 import type { ActionArtifactManifest } from '../../../artifacts/actionArtifactPublisher.js';
+import { isPathInsideWorkspace } from '../../../artifacts/actionArtifactPublisher.js';
+import {
+  APP_ID_PATTERN,
+  buildAppArtifactMetadata,
+  type WebAppManifest,
+} from '../../../artifacts/webAppManifest.js';
+import { GeneratedAppService } from '../generated-app/generated-app.service.js';
+import { GeneratedAppEventsService } from '../generated-app/generated-app-events.service.js';
 
 declare global {
   namespace Express {
@@ -102,6 +111,7 @@ export interface MessageMedia {
   created_at?: string;
   createdAt?: string;
   actionArtifact?: ActionArtifactManifest;
+  appManifest?: WebAppManifest;
 }
 
 export type MessageBlockType = 'text' | 'status' | 'tool_call' | 'tool_result' | 'skill' | 'artifact' | 'ask_question';
@@ -488,6 +498,8 @@ export class ConversationService implements OnModuleInit {
     private readonly artifactService: ArtifactService,
     private readonly profileService: ProfileService,
     private readonly transcriptProjection: ConversationTranscriptProjectionService,
+    private readonly generatedAppService: GeneratedAppService,
+    private readonly generatedAppEventsService: GeneratedAppEventsService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -573,6 +585,7 @@ export class ConversationService implements OnModuleInit {
       throw error;
     }
 
+    const appRowsBeforeDelete: GeneratedAppEntity[] = [];
     try {
       await this.dataSource.transaction(async (manager) => {
         await manager.save(ConversationCleanupTaskEntity, cleanupTask);
@@ -596,6 +609,16 @@ export class ConversationService implements OnModuleInit {
           userId: conversation.userId,
           conversationId: conversation.id,
         });
+        // Capture app rows before deletion so the on-disk directories and
+        // their interaction events can be removed after commit.
+        appRowsBeforeDelete.push(
+          ...(await manager.find(GeneratedAppEntity, {
+            where: {
+              userId: conversation.userId,
+              conversationId: conversation.id,
+            },
+          })),
+        );
         await manager.delete(GeneratedAppEntity, {
           userId: conversation.userId,
           conversationId: conversation.id,
@@ -614,10 +637,44 @@ export class ConversationService implements OnModuleInit {
       throw error;
     }
 
+    const appIds = appRowsBeforeDelete
+      .map(row => row.appId)
+      .filter((id): id is string => Boolean(id));
+    const appPaths = appRowsBeforeDelete
+      .map(row => row.appPath)
+      .filter((path): path is string => Boolean(path));
     await Promise.all([
       this.cleanupConversationFiles(conversation),
       this.processConversationMemoryCleanupTask(cleanupTask),
+      this.removeGeneratedAppDirectories(conversation.userId, appPaths),
+      this.generatedAppEventsService.deleteByAppIds(conversation.userId, appIds),
     ]);
+  }
+
+  /**
+   * Remove app directories left on disk after conversation deletion. Every
+   * path must resolve inside the user's app_generated root — never delete
+   * anything outside it.
+   */
+  private async removeGeneratedAppDirectories(
+    userId: number,
+    appPaths: string[],
+  ): Promise<void> {
+    const generatedRoot = join(
+      getNetworkUserWorkspaceDir(userId),
+      'app_generated',
+    );
+    for (const appPath of appPaths) {
+      try {
+        if (!isPathInsideWorkspace(generatedRoot, appPath)) continue;
+        await rm(appPath, { recursive: true, force: true });
+      } catch (error) {
+        skillLogger.error(
+          'ConversationService',
+          `Failed to remove generated app directory: ${(error as Error)?.message ?? error}`,
+        );
+      }
+    }
   }
 
   async uploadConversationFile(
@@ -2762,6 +2819,7 @@ export class ConversationService implements OnModuleInit {
       mimeType?: string;
       sizeBytes?: number;
       actionArtifact?: ActionArtifactManifest;
+      appManifest?: WebAppManifest;
     }>,
     userId?: number,
   ): Promise<MessageMedia[]> {
@@ -2786,7 +2844,7 @@ export class ConversationService implements OnModuleInit {
         id: `asset-${randomUUID().replace(/-/g, '').slice(0, 16)}`,
         kind,
         url,
-        title: f.title ?? filename,
+        title: f.title ?? f.appManifest?.title ?? filename,
         mime_type: f.mimeType,
         mimeType: f.mimeType,
         storage_path: storagePath,
@@ -2796,6 +2854,7 @@ export class ConversationService implements OnModuleInit {
         created_at: new Date().toISOString(),
         createdAt: new Date().toISOString(),
         ...(f.actionArtifact ? { actionArtifact: f.actionArtifact } : {}),
+        ...(f.appManifest ? { appManifest: f.appManifest } : {}),
       });
     }
     return media;
@@ -2859,6 +2918,7 @@ export class ConversationService implements OnModuleInit {
       storage_path: _storagePath,
       storagePath: _storagePathAlias,
       actionArtifact: _actionArtifact,
+      appManifest: _appManifest,
       ...publicResource
     } = resource;
     return publicResource;
@@ -2948,6 +3008,19 @@ export class ConversationService implements OnModuleInit {
       const enriched = { ...resource };
       try {
         const actionArtifact = enriched.actionArtifact;
+        // For kind='app', build the version-chain metadata explicitly (the
+        // action-artifact publisher path is not used for apps) and pair the
+        // artifacts row with a generated_apps lifecycle row.
+        const appId = this.appIdFromStoragePath(
+          enriched.storage_path ?? enriched.storagePath,
+        );
+        const appMetadata =
+          !actionArtifact && enriched.kind === 'app' && appId
+            ? enriched.appManifest
+              ? buildAppArtifactMetadata(enriched.appManifest, appId)
+              : { artifact_type: 'generated-app', artifact_uid: appId, version: 1 }
+            : undefined;
+        const metadata = actionArtifact ?? appMetadata;
         const artifact = await this.artifactService.createArtifact({
           userId,
           conversationId,
@@ -2961,7 +3034,7 @@ export class ConversationService implements OnModuleInit {
           storagePath: enriched.storage_path ?? enriched.storagePath,
           mimeType: enriched.mime_type ?? enriched.mimeType,
           sizeBytes: enriched.size_bytes ?? enriched.sizeBytes,
-          metadata: actionArtifact,
+          metadata: metadata ?? undefined,
           summary: actionArtifact?.summary ?? `Generated ${enriched.kind} artifact`,
         });
         enriched.artifact_id = String(artifact.id);
@@ -2970,6 +3043,19 @@ export class ConversationService implements OnModuleInit {
         // the public generated-file route. The open_artifact action fetches the
         // authenticated artifact detail and renders its inline HTML payload.
         if (actionArtifact) enriched.url = undefined;
+
+        if (appId && appMetadata) {
+          await this.upsertGeneratedAppRecord({
+            userId,
+            conversationId,
+            messageId,
+            artifactId: artifact.id,
+            appId,
+            appPath: (enriched.storage_path ?? enriched.storagePath) ?? '',
+            title: enriched.title ?? appId,
+            metadata: appMetadata,
+          });
+        }
 
         const action = this.artifactActionForMedia(enriched, String(artifact.id));
         if (action) {
@@ -3001,6 +3087,54 @@ export class ConversationService implements OnModuleInit {
       file: 'generated-file',
     };
     return types[kind];
+  }
+
+  /** App directory basename from a workspace storage path; undefined when not an app. */
+  private appIdFromStoragePath(pathOrUrl?: string): string | undefined {
+    if (!pathOrUrl) return undefined;
+    const base = basename(this.pathWithoutQuery(pathOrUrl));
+    return APP_ID_PATTERN.test(base) ? base : undefined;
+  }
+
+  /** Register the generated_apps lifecycle row that pairs with an app artifact. */
+  private async upsertGeneratedAppRecord(input: {
+    userId: number;
+    conversationId: string;
+    messageId: string;
+    artifactId: number;
+    appId: string;
+    appPath: string;
+    title: string;
+    metadata: Record<string, unknown>;
+  }): Promise<void> {
+    const version =
+      typeof input.metadata.version === 'number' ? input.metadata.version : 1;
+    const logicalObjectId =
+      typeof input.metadata.logical_object_id === 'string'
+        ? input.metadata.logical_object_id
+        : undefined;
+    let previousGeneratedAppId: number | undefined;
+    if (logicalObjectId && version > 1) {
+      const latest = await this.generatedAppService.findLatestByLogicalObjectId(
+        input.userId,
+        logicalObjectId,
+      );
+      if (latest && latest.version < version) {
+        previousGeneratedAppId = latest.id;
+      }
+    }
+    await this.generatedAppService.upsertForArtifact({
+      userId: input.userId,
+      conversationId: input.conversationId,
+      messageId: input.messageId,
+      artifactId: input.artifactId,
+      appId: input.appId,
+      appPath: input.appPath,
+      appName: input.title,
+      version,
+      logicalObjectId,
+      previousGeneratedAppId,
+    });
   }
 
   private artifactActionForMedia(media: MessageMedia, artifactId: string): MessageAction | null {

@@ -14,6 +14,7 @@ import { ProfileEvidenceLinks1785128063000 } from './1785128063000-ProfileEviden
 import { ProfileRefreshJobs1785128064000 } from './1785128064000-ProfileRefreshJobs.js';
 import { GithubMcpSettings1785128065000 } from './1785128065000-GithubMcpSettings.js';
 import { PraxisBehaviorEvents1785128065000 } from './1785128065000-PraxisBehaviorEvents.js';
+import { GeneratedAppArtifacts1785128066000 } from './1785128066000-GeneratedAppArtifacts.js';
 
 /**
  * The exact ordered migration chain used by production and migration tests.
@@ -36,4 +37,5 @@ export const careerAgentMigrations = [
   ProfileRefreshJobs1785128064000,
   GithubMcpSettings1785128065000,
   PraxisBehaviorEvents1785128065000,
+  GeneratedAppArtifacts1785128066000,
 ];

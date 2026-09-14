@@ -6,6 +6,10 @@ import type { AssistantMessage } from '../src/types/message.js'
 import type { Tool, ToolUseContext } from '../src/Tool.js'
 import type { CanUseToolFn } from '../src/hooks/useCanUseTool.js'
 import { createRestrictedSkillActionCanUseTool } from '../src/skills/skillActionIsolation.js'
+import {
+  runWithSessionContext,
+  type SessionContext,
+} from '../src/server/SessionContext.js'
 
 const tempRoots: string[] = []
 
@@ -87,6 +91,43 @@ describe('Action Skill child filesystem isolation', () => {
 
     expect(decision.behavior).toBe('deny')
     expect(parentCalls).toBe(0)
+  })
+
+  test('allows selected trusted Skill resources read-only', async () => {
+    const workspace = await tempRoot()
+    const skillRoot = await tempRoot()
+    const session = {
+      config: { cwd: workspace, workspaceRoot: workspace },
+      skillReadOnlyRoots: new Set([skillRoot]),
+    } as SessionContext
+    const restricted = createRestrictedSkillActionCanUseTool(async (_tool, input) => ({
+      behavior: 'allow',
+      updatedInput: input,
+    }))
+
+    const [readDecision, writeDecision] = await runWithSessionContext(
+      session,
+      async () =>
+        Promise.all([
+          restricted(
+            pathTool('Read'),
+            { path: join(skillRoot, 'references', 'contract.md') },
+            context(workspace),
+            assistantMessage,
+            'skill-read',
+          ),
+          restricted(
+            pathTool('Write'),
+            { path: join(skillRoot, 'references', 'contract.md') },
+            context(workspace),
+            assistantMessage,
+            'skill-write',
+          ),
+        ]),
+    )
+
+    expect(readDecision.behavior).toBe('allow')
+    expect(writeDecision.behavior).toBe('deny')
   })
 
   test('denies a symlink escape from inside the workspace', async () => {
