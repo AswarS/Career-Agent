@@ -13,7 +13,7 @@ const USER_ID = 'b26f5098-7f4a-4f4f-91ef-965fb9c14e7f';
 function behaviorEvent(overrides: Record<string, unknown> = {}) {
   return {
     eventId: 'pbe_behavior_demo001',
-    schemaVersion: '1.10.0',
+    schemaVersion: '1.12.0',
     eventType: 'profile.complete',
     externalUserId: USER_ID,
     actorType: 'authenticated_user',
@@ -127,6 +127,34 @@ describe('Praxis behavior event receiver', () => {
     )).rejects.toMatchObject({ status: 400 });
     expect(await dataSource.getRepository(PraxisBehaviorEventEntity).count())
       .toBe(0);
+  });
+
+  it('accepts the 1.12 conversation event and resource additions', async () => {
+    const event = behaviorEvent({
+      eventId: 'pbe_behavior_conversation001',
+      eventType: 'conversation.message.ready',
+      resourceRefs: [
+        { resourceType: 'Conversation', resourceId: 'conversation_demo001' },
+        {
+          resourceType: 'ConversationMessage',
+          resourceId: 'conversation_message_demo001',
+        },
+      ],
+      facts: { status: 'ready' },
+    });
+
+    await expect(service.receive(event, event.eventId, event.traceId))
+      .resolves.toMatchObject({ status: 'accepted' });
+  });
+
+  it('rejects stale schema versions and removed event types', async () => {
+    const stale = behaviorEvent({ schemaVersion: '1.10.0' });
+    await expect(service.receive(stale, stale.eventId, stale.traceId))
+      .rejects.toMatchObject({ status: 400 });
+
+    const removed = behaviorEvent({ eventType: 'coaching.complete' });
+    await expect(service.receive(removed, removed.eventId, removed.traceId))
+      .rejects.toMatchObject({ status: 400 });
   });
 
   it('keeps failed and non-profile facts as audit-only records', async () => {

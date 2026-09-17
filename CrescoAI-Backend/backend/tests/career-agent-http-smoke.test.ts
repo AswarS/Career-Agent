@@ -195,7 +195,7 @@ describe('Career Agent HTTP smoke flow', () => {
       const behaviorTraceId = `trace_${suffix}`;
       const behaviorEvent = {
         eventId: behaviorEventId,
-        schemaVersion: '1.10.0',
+        schemaVersion: '1.12.0',
         eventType: 'profile.complete',
         externalUserId: userId,
         actorType: 'authenticated_user',

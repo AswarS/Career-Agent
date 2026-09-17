@@ -1,4 +1,4 @@
-export const PRAXIS_BEHAVIOR_SCHEMA_VERSION = '1.10.0' as const;
+export const PRAXIS_BEHAVIOR_SCHEMA_VERSION = '1.12.0' as const;
 
 export const PRAXIS_BEHAVIOR_EVENT_TYPES = [
   'auth.login', 'auth.logout',
@@ -7,10 +7,12 @@ export const PRAXIS_BEHAVIOR_EVENT_TYPES = [
   'run.create', 'run.complete', 'run.end_with_issue',
   'plan.generate', 'plan.review.approve', 'plan.node.regenerate',
   'profile.interview.start', 'profile.answer.submit', 'profile.complete',
+  'profile.insufficient',
   'profile.supplement.request', 'profile.material.attach',
   'file.upload.request', 'file.upload.confirm', 'file.scan', 'file.parse',
   'file.read', 'file.download',
-  'coaching.request', 'coaching.complete',
+  'conversation.create', 'conversation.message.send',
+  'conversation.message.ready', 'conversation.archive',
   'precheck.request', 'precheck.complete',
   'submission.accept', 'submission.revise',
   'evaluation.start', 'evaluation.complete',
@@ -30,6 +32,7 @@ export type PraxisBehaviorOutcome =
   'accepted' | 'succeeded' | 'failed' | 'rejected';
 
 export const PRAXIS_BEHAVIOR_RESOURCE_TYPES = [
+  'Conversation', 'ConversationMessage',
   'Project', 'ProjectVersion', 'Invitation', 'ProjectRun', 'ProfileSession',
   'FileAsset', 'NodeRun', 'PrecheckResult', 'Submission', 'EvaluationResult',
   'FinalAssessment', 'ReviewReport', 'Certificate', 'AsyncJob',

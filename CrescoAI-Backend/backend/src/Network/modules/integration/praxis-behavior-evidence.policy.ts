@@ -10,7 +10,6 @@ const REVIEW_SIGNAL_CATEGORIES: Partial<Record<
 >> = {
   'profile.complete': 'profile_completion',
   'run.complete': 'training_progress',
-  'coaching.complete': 'learning_progress',
   'node.pass': 'learning_progress',
   'evaluation.complete': 'assessment_result',
   'final_assessment.complete': 'assessment_result',

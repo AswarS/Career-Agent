@@ -78,6 +78,7 @@ import { ProfileRecallService } from '../profile/profile-recall.service';
 import { ProfileProductProjectionService } from '../profile/profile-product-projection.service';
 import { ProfileProductMutationService } from '../profile/profile-product-mutation.service';
 import { ProfileEvidenceService } from '../profile/profile-evidence.service';
+import { createPraxisTools } from '../integration/praxis.tools.js';
 import {
   decodeProfileProductMemoryValue,
   isListProfileProductCodec,
@@ -2392,6 +2393,7 @@ export class AgentService {
           extraTools: [
             ...this.getProfileTools(userId, conversationId),
             ...this.getAppInteractionTools(userId),
+            ...this.getPraxisTools(userId, conversationId),
           ],
           mcpTools: mcpRuntime.tools,
         });
@@ -2491,6 +2493,16 @@ export class AgentService {
         service: this.appInteractionQueryService,
       }),
     ];
+  }
+
+  private getPraxisTools(userId: string, conversationId: string): Tool[] {
+    return createPraxisTools({
+      userId,
+      conversationId,
+      // The read client will be supplied after Praxis publishes its endpoint.
+      // Until then praxis_read stays out of the model-visible tool pool.
+      readEnabled: false,
+    });
   }
 
   private async ensureGithubMcpRuntime(userId: string): Promise<GithubMcpRuntimeSnapshot> {
