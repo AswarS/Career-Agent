@@ -18,6 +18,8 @@ import {
   nextLineageFromBase,
   publishStagedWebApp,
   resolveBaseAppLineage,
+  seedCanonicalWebAppRuntime,
+  validateCanonicalWebAppRuntime,
   validateDeliveredWebAppOutput,
   WebAppDevTool,
   webAppDevResultSchema,
@@ -270,6 +272,32 @@ describe('WebAppDev Tool facade', () => {
     expect(output.startsWith(resolve(workspace, '.webapp-staging'))).toBe(true)
   })
 
+  test('seeds and validates one immutable shared telemetry runtime', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'web-app-runtime-'))
+    temporaryRoots.push(workspace)
+    const directory = createWebAppStagingDirectory(workspace)
+    await mkdir(directory, { recursive: true })
+    await seedCanonicalWebAppRuntime(directory)
+    await writeFile(
+      join(directory, 'index.html'),
+      '<!doctype html><script src="./agent-telemetry.js"></script>',
+      'utf8',
+    )
+
+    await expect(validateCanonicalWebAppRuntime(directory)).resolves.toBeUndefined()
+
+    await writeFile(join(directory, 'agent-telemetry.js'), 'changed', 'utf8')
+    await expect(validateCanonicalWebAppRuntime(directory)).rejects.toThrow(
+      'byte-for-byte identical',
+    )
+
+    await seedCanonicalWebAppRuntime(directory)
+    await writeFile(join(directory, 'index.html'), '<!doctype html>', 'utf8')
+    await expect(validateCanonicalWebAppRuntime(directory)).rejects.toThrow(
+      'index.html must load',
+    )
+  })
+
   test('cleans its private staging directory when a base app ref is invalid', async () => {
     const workspace = await mkdtemp(join(tmpdir(), 'web-app-cleanup-'))
     temporaryRoots.push(workspace)
@@ -341,6 +369,44 @@ describe('WebAppDev Tool facade', () => {
     await expect(
       validatePlaywrightAppDirectory(directory, workspace),
     ).resolves.toEqual({ appDir: directory, entryFile })
+  })
+
+  test('reports the full manifest path for a strict nested-field error', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'web-app-manifest-error-'))
+    temporaryRoots.push(workspace)
+    const directory = join(workspace, 'app_generated', 'web-app-invalid')
+    await mkdir(directory, { recursive: true })
+    const entryFile = join(directory, 'index.html')
+    const manifestFile = join(directory, 'output.json')
+    await writeFile(entryFile, '<!doctype html><title>App</title>', 'utf8')
+    await writeFile(
+      manifestFile,
+      JSON.stringify({
+        schema: 'web-app-manifest/1.0',
+        app_slug: 'web-app-invalid',
+        title: 'App',
+        delivery: {
+          title: 'App',
+          language: 'zh-CN',
+          offline: true,
+          slug: 'web-app-invalid',
+        },
+      }),
+      'utf8',
+    )
+
+    await expect(
+      validateDeliveredWebAppOutput(
+        {
+          kind: 'app',
+          directory,
+          entry_file: entryFile,
+          manifest_file: manifestFile,
+          title: 'App',
+        },
+        workspace,
+      ),
+    ).rejects.toThrow('delivery.slug Unrecognized key')
   })
 
   test('publishes a validated staged app atomically into app_generated', async () => {
@@ -528,7 +594,7 @@ describe('WebAppDev Tool facade', () => {
     ).rejects.toThrow('lineage must match the base app iteration')
     await expect(
       validateDeliveredWebAppOutput(output, workspace),
-    ).resolves.toBeUndefined()
+    ).rejects.toThrow('lineage must be absent when base_app_ref was not supplied')
   })
 
   test('rejects lexical and symlink escapes from app_generated', async () => {

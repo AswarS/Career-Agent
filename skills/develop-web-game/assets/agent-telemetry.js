@@ -73,6 +73,11 @@
         return prior ? prior.seq : null;
       }
       const input = payload || {};
+      // The documented convenience form is record(type, { milestone: ... });
+      // keep accepting the structured { target, data } envelope as well.
+      const eventData = input.data && typeof input.data === 'object' && !Array.isArray(input.data)
+        ? input.data
+        : input;
       state.seqCounter += 1;
       const event = {
         v: VERSION,
@@ -83,7 +88,7 @@
         type,
         scene: config.scene,
         target: typeof input.target === 'string' ? input.target.slice(0, 80) : undefined,
-        data: safeObject(input.data)
+        data: safeObject(eventData)
       };
       state.events.push(event);
       if (state.events.length > MAX_EVENTS) state.events.shift();
