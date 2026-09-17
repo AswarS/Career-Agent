@@ -20,6 +20,11 @@ Build visual/interactive programs in small steps and validate every change. Trea
 
 Accept only `<skill-action-input>` containing a complete `app_brief` and a Harness-supplied absolute `output_dir`. Validate the brief against [App Brief v1.0](references/app-brief.md). Write every generated file below `output_dir`; do not choose a different destination. If the brief is incomplete, return `needs_input` to the coordinator instead of questioning the end user.
 
+Copy `output_dir` directly from `<skill-action-input>` before the first file
+operation. Never search for, reconstruct, translate, or infer this path. In a
+Network session, use Read, Write, and Edit for file operations; do not use shell
+variables, command substitution, heredocs, or output redirection.
+
 ## Narrative Interaction Principle (Required for every app)
 
 An app must explain through visible change, not through decoration or distant prose. Whenever the subject contains a process, transformation, movement, sequence, dependency, or state transition, design it as focused narrative beats.
@@ -49,7 +54,7 @@ Before choosing a dependency:
 2. Read [`references/cdn-library-guide.md`](references/cdn-library-guide.md) and choose the smallest suitable option.
 3. Prefer at most one primary visual/animation library and one small behavior/icon library. Do not stack libraries that solve the same problem.
 4. Pin a tested version or major version in every CDN URL; never emit `@latest` in a finished artifact.
-5. Provide a usable loading/failure state. If the page must work offline or in a restricted network, vendor the tested files locally or use native browser APIs instead of a CDN.
+5. Provide a usable loading/failure state. If the page must work offline or in a restricted network, vendor the tested files locally or use native browser APIs instead of a CDN. Add `<link rel="icon" href="data:,">` in `<head>` so direct HTTP serving does not create a spurious root `/favicon.ico` 404 console error.
 6. Record the selected library, reason, version, and fallback in `progress.md`.
 
 For process diagrams and educational simulations, use this priority order:
@@ -78,6 +83,12 @@ Animation libraries do not replace narrative design. Animate the actual entity a
 11. **Check errors.** Review console errors and fix the first new issue before continuing.
 12. **Reset between scenarios.** Avoid cross-test state when validating distinct features.
 13. **Iterate with small deltas.** Change one variable at a time (frames, inputs, timing, positions), then repeat steps 6–12 until stable.
+
+For a small self-contained App, normally use no more than two successful
+Playwright calls: one visual/state check and one ordered multi-step interaction
+check. Put related controls in a single `actions.steps` sequence instead of
+calling the Tool once per control. Additional calls are justified only after a
+failed check or a code change made to fix that failure.
 
 Example Tool input:
 ```json
@@ -172,9 +183,46 @@ window.advanceTime = (ms) => {
 
 Write `output.json` in `output_dir` matching `web-app-manifest/1.0` (see [the manifest contract](references/app-brief.md#versioning-and-manifest)). Required fields: `schema: "web-app-manifest/1.0"`, `app_slug` (from `brief.delivery.slug` when present, otherwise a stable ASCII slug derived from the subject), and `title`. Copy `brief.versioning` verbatim into `lineage` when the brief carries it (absent on first versions). Convert `brief.telemetry.agentQuestions` to manifest `telemetry.agent_questions`; copy `events`, `retention`, and the optional `upload` block. The Harness validates this manifest before publication, so a missing or malformed `output.json` fails the delivery.
 
+Use this exact field layout for a first version:
+
+```json
+{
+  "schema": "web-app-manifest/1.0",
+  "app_slug": "stable-ascii-slug",
+  "title": "App title",
+  "renderer_skill_version": "develop-web-game/1.0",
+  "telemetry": {
+    "events": ["session_started"],
+    "agent_questions": ["Question answered by these events?"],
+    "retention": "local-session",
+    "upload": {"endpoint": "./events"}
+  },
+  "delivery": {
+    "title": "App title",
+    "language": "zh-CN",
+    "offline": true
+  }
+}
+```
+
+The manifest's nested `delivery` object accepts only `title`, `language`, and
+`offline`. In particular, never copy `brief.delivery.slug` into
+`manifest.delivery.slug`; its sole manifest representation is the top-level
+`app_slug`. Do not add brief-only fields to any strict nested manifest object.
+
 ## Telemetry and Upload
 
-Implement local telemetry per [the telemetry contract](references/telemetry-contract.md) using the packaged runtime at [assets/agent-telemetry.js](assets/agent-telemetry.js):
+Implement local telemetry per [the telemetry contract](references/telemetry-contract.md). The Harness has already copied the canonical runtime to
+`<output_dir>/agent-telemetry.js`. Load that exact file before all App code:
+
+```html
+<script src="./agent-telemetry.js"></script>
+```
+
+Do not inline, rewrite, minify, overwrite, or regenerate this runtime. The
+Harness compares it byte-for-byte with the canonical asset and requires the
+exact script tag above before publication. Configure the provided runtime from
+your App code:
 
 ```js
 const telemetry = createAgentTelemetry({
@@ -228,6 +276,11 @@ The delivered result must be:
 ```
 
 Do not rely on a natural-language `OUTPUT_ARTIFACT` marker. Do not emit another final answer after `ReturnSkillResult` is accepted.
+
+After the final passing `WebAppPlaywright` call, return the renderer result to
+`app-coordinator` immediately. Do not list directories, search for history, or
+reread output files after the pass unless the Harness reports a concrete
+validation error.
 
 ## References
 

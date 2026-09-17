@@ -178,5 +178,14 @@ describe('agent telemetry runtime', () => {
       bestStreak: 7,
       attempts: 12,
     })
+
+    telemetry.record('checkpoint_reached', {
+      milestone: 'stage_2',
+      outcome: 'advanced',
+    })
+    expect(telemetry.getEvents().at(-1)?.data).toEqual({
+      milestone: 'stage_2',
+      outcome: 'advanced',
+    })
   })
 })

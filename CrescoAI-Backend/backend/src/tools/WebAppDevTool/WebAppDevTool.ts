@@ -1,6 +1,6 @@
 import type { ToolResultBlockParam } from '@anthropic-ai/sdk/resources/index.mjs'
 import { randomUUID } from 'node:crypto'
-import { mkdir, readFile, realpath, rename, rm, stat } from 'node:fs/promises'
+import { copyFile, mkdir, readFile, realpath, rename, rm, stat } from 'node:fs/promises'
 import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 import { z } from 'zod/v4'
 import { buildTool, type ToolDef, type ToolUseContext } from '../../Tool.js'
@@ -21,8 +21,15 @@ import {
   type WebAppManifest,
 } from '../../artifacts/webAppManifest.js'
 import { registerSkillResultValidator } from '../../skills/skillResultValidation.js'
+import { getGlobalSkillRoot } from '../../skills/globalSkillPaths.js'
 
 const SKILL_NAME = 'app-coordinator' as const
+const TELEMETRY_RUNTIME_FILENAME = 'agent-telemetry.js'
+const TELEMETRY_RUNTIME_SOURCE = join(
+  getGlobalSkillRoot('develop-web-game'),
+  'assets',
+  TELEMETRY_RUNTIME_FILENAME,
+)
 
 const deliveredOutputSchema = z.strictObject({
   kind: z.literal('app'),
@@ -131,6 +138,47 @@ export function createWebAppStagingDirectory(workspaceDir: string): string {
     '.webapp-staging',
     `web-app-${randomUUID()}`,
   )
+}
+
+/**
+ * Put the application-owned telemetry runtime in every staging directory.
+ * Generated code references this file instead of copying or rewriting the
+ * protocol implementation, which keeps upload behavior identical across Apps.
+ */
+export async function seedCanonicalWebAppRuntime(outputDir: string): Promise<void> {
+  await copyFile(
+    TELEMETRY_RUNTIME_SOURCE,
+    join(outputDir, TELEMETRY_RUNTIME_FILENAME),
+  )
+}
+
+export async function validateCanonicalWebAppRuntime(
+  outputDir: string,
+): Promise<void> {
+  let canonical: Buffer
+  let staged: Buffer
+  let indexHtml: string
+  try {
+    ;[canonical, staged, indexHtml] = await Promise.all([
+      readFile(TELEMETRY_RUNTIME_SOURCE),
+      readFile(join(outputDir, TELEMETRY_RUNTIME_FILENAME)),
+      readFile(join(outputDir, 'index.html'), 'utf8'),
+    ])
+  } catch {
+    throw new Error(
+      'INVALID_WEB_APP_RUNTIME: index.html and the Harness-provided agent-telemetry.js are required',
+    )
+  }
+  if (!canonical.equals(staged)) {
+    throw new Error(
+      'INVALID_WEB_APP_RUNTIME: agent-telemetry.js must remain byte-for-byte identical to the Harness-provided runtime',
+    )
+  }
+  if (!indexHtml.includes('<script src="./agent-telemetry.js"></script>')) {
+    throw new Error(
+      'INVALID_WEB_APP_RUNTIME: index.html must load <script src="./agent-telemetry.js"></script> before App code',
+    )
+  }
 }
 
 export function buildWebAppDevChildContext(
@@ -324,8 +372,14 @@ async function validateWebAppOutputBelow(
   }
   const manifest = webAppManifestSchema.safeParse(rawManifest)
   if (!manifest.success) {
+    const issue = manifest.error.issues[0]
+    const issuePath = issue?.path.map(segment => String(segment)) ?? []
+    if (issue?.code === 'unrecognized_keys' && issue.keys[0]) {
+      issuePath.push(issue.keys[0])
+    }
+    const field = issuePath.length ? `${issuePath.join('.')} ` : ''
     throw new Error(
-      `INVALID_WEB_APP_OUTPUT: output.json must match web-app-manifest/1.0: ${manifest.error.issues[0]?.message ?? 'invalid manifest'}`,
+      `INVALID_WEB_APP_OUTPUT: output.json must match web-app-manifest/1.0: ${field}${issue?.message ?? 'invalid manifest'}`,
     )
   }
   if (expectedLineage) {
@@ -341,6 +395,10 @@ async function validateWebAppOutputBelow(
         'INVALID_WEB_APP_OUTPUT: output.json lineage must match the base app iteration',
       )
     }
+  } else if (manifest.data.lineage) {
+    throw new Error(
+      'INVALID_WEB_APP_OUTPUT: output.json lineage must be absent when base_app_ref was not supplied',
+    )
   }
 }
 
@@ -498,6 +556,7 @@ export const WebAppDevTool = buildTool({
       | { app_id: string; app_slug: string; versioning: ExpectedLineage }
       | undefined
     try {
+      await seedCanonicalWebAppRuntime(stagingDirectory)
       if (input.base_app_ref) {
         const base = await resolveBaseAppLineage(
           runtime.workspaceDir,
@@ -560,6 +619,7 @@ export const WebAppDevTool = buildTool({
           stagingDirectory,
           expectedLineage,
         )
+        await validateCanonicalWebAppRuntime(stagingDirectory)
         const verification = await runWebAppPlaywrightVerification({
           outputDir: stagingDirectory,
           workspaceDir: runtime.workspaceDir,

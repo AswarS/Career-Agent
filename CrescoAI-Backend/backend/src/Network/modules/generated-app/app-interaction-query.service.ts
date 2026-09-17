@@ -372,6 +372,7 @@ export class AppInteractionQueryService {
           'App-authored inference prose and unsafe string values are not returned.',
           'reported_duration_ms is supplied by the app and is not necessarily active task time.',
           'Describe only the returned counts and evidence; do not infer unseen task structure.',
+          'Event names alone do not prove user causality. Treat session/app lifecycle and automatic start events as system behavior unless a separate action event or structured data proves a user control was used.',
         ],
       },
     }
