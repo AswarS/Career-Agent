@@ -6,6 +6,7 @@
  * during dead code elimination
  */
 import { getMainLoopModelOverride } from '../../bootstrap/state.js'
+import { getSessionContext } from '../../server/SessionContext.js'
 import {
   getSubscriptionType,
   isClaudeAISubscriber,
@@ -34,6 +35,8 @@ export type ModelName = string
 export type ModelSetting = ModelName | ModelAlias | null
 
 export function getSmallFastModel(): ModelName {
+  const session = getSessionContext()
+  if (session?.config.trainingHarness && session.config.model) return session.config.model
   return process.env.ANTHROPIC_SMALL_FAST_MODEL || getDefaultHaikuModel()
 }
 

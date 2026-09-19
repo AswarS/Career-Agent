@@ -1,0 +1,26 @@
+{
+  "date": "2026-09-19",
+  "scope": "local_preflight_and_mock_tests",
+  "doctorExitCode": 2,
+  "doctor": {
+    "node": "v24.19.0",
+    "nodeSupported": true,
+    "bunAvailable": false,
+    "backendDependenciesInstalled": false,
+    "localTypeScriptInstalled": false,
+    "configValid": true,
+    "harnessConfigured": false,
+    "modelProxyConfigured": false,
+    "userModelConfigured": false,
+    "readyForServiceRun": false,
+    "modelApiProbed": false
+  },
+  "tests": {
+    "command": "node --test Gateway/tests/*.test.ts",
+    "passed": 60,
+    "failed": 0
+  },
+  "syntaxChecks": "passed",
+  "staticTypeCheck": "not_run_missing_dependencies",
+  "realEndToEnd": "not_run_missing_runtime_dependencies_and_service_config"
+}

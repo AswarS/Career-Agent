@@ -1,0 +1,99 @@
+{
+  "base_profile": {
+    "birthDate": "1999-03-15",
+    "contactLanguage": "中文",
+    "currentCity": "上海",
+    "currentIndustry": "互联网",
+    "currentRole": "系统运维工程师",
+    "currentStatus": "在职寻求转型",
+    "educationBackground": [
+      {
+        "degree": "工学学士",
+        "description": "主修操作系统、计算机网络、分布式系统等课程，毕业设计为基于Kubernetes的微服务部署平台",
+        "graduationDate": "2021-06-30",
+        "major": "计算机科学与技术",
+        "school": "南京信息工程大学"
+      }
+    ],
+    "educationLevel": "本科",
+    "gender": "男",
+    "name": "陈思远",
+    "yearsOfExperience": 4
+  },
+  "career_agent_profile_product_schema_version": "career_profile_product_v2",
+  "career_agent_reference_revision": "73c7f984e164856975bc0f816641f2fa13614a2b",
+  "product_fields": {
+    "base.currentCity": "上海",
+    "base.currentIndustry": "互联网",
+    "base.currentRole": "系统运维工程师",
+    "base.currentStatus": "在职寻求转型",
+    "base.educationLevel": "本科",
+    "base.name": "陈思远",
+    "base.yearsOfExperience": 4,
+    "career.direction": "向云原生运维方向转型，掌握容器编排与可观测性体系",
+    "career.projectExperience": [
+      "电商平台监控告警系统优化——使用Prometheus重构指标采集，告警响应时间缩短40%",
+      "日志平台容器化迁移——将ELK Stack从虚拟机迁移至Docker部署，资源利用率提升30%"
+    ],
+    "career.skills": [
+      "Linux系统管理",
+      "Shell脚本",
+      "Docker",
+      "Kubernetes基础",
+      "Prometheus",
+      "Grafana"
+    ],
+    "career.workExperience": [
+      "2021-07至2023-05 南京云擎科技有限公司 运维助理工程师 负责服务器日常巡检与故障处理",
+      "2023-06至今 上海数澜网络科技有限公司 系统运维工程师 负责监控体系维护与容器化推进"
+    ],
+    "education.degree": "工学学士",
+    "education.description": "主修操作系统、计算机网络、分布式系统等课程，毕业设计为基于Kubernetes的微服务部署平台",
+    "education.graduationDate": "2021-06-30",
+    "education.major": "计算机科学与技术",
+    "education.school": "南京信息工程大学",
+    "job.exclusions": [
+      "纯开发岗位",
+      "频繁出差岗位"
+    ],
+    "job.locations": [
+      "上海"
+    ],
+    "job.salaryExpectation": "15-20K",
+    "job.searchStatus": "积极求职中",
+    "job.targetIndustries": [
+      "互联网",
+      "云计算"
+    ],
+    "job.targetRoles": [
+      "云原生运维工程师",
+      "DevOps工程师"
+    ],
+    "job.workModes": [
+      "全职",
+      "远程"
+    ],
+    "learning.activeSkills": [
+      "Kubernetes进阶",
+      "Helm包管理",
+      "Istio服务网格"
+    ],
+    "learning.blockers": [
+      "Istio流量管理概念较多，理解Pilot与Envoy关系存在困难",
+      "工作日可用于学习的时间有限"
+    ],
+    "learning.goals": [
+      "系统掌握云原生运维核心技能，具备独立管理生产级Kubernetes集群的能力",
+      "完成CKA认证考试",
+      "构建完整的可观测性体系，覆盖指标、日志与链路追踪"
+    ],
+    "learning.milestones": [
+      "第一阶段：Kubernetes核心概念与操作（2026-09-01至2026-09-30）",
+      "第二阶段：Helm与GitOps工作流（2026-10-01至2026-10-31）",
+      "第三阶段：Istio服务网格与可观测性（2026-11-01至2026-11-30）"
+    ],
+    "learning.nextFocus": "深入Istio流量管理策略与故障排查实践",
+    "profile.summary": "4年运维经验，熟悉Linux与容器技术，正系统学习云原生运维以实现职业转型，目标城市上海。"
+  },
+  "schema_version": "eduagentworld.career_agent_persona.v1"
+}

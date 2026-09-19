@@ -1,0 +1,15 @@
+{
+  "algorithm": "sha256",
+  "files": {
+    "environment.json": "591b4ed2af0b9c931282a030a8c14fdd2b2b33141fe083a8cb52534c6f4ba028",
+    "invocation_bindings.json": "59ef30b369a95144df39e94aedeb43a1398e559e727f379e1d6c615642a046db",
+    "material_requirements.json": "0d664f884e07130e77ea83445effd400e21dbfdb65533fe5c97a3d5bcc006610",
+    "materials/resume_draft.md": "3070c3837c5d5d184cc3f3c2b11cb81b054c56e5e6e2fc2f15f016aa141f9e42",
+    "materials_manifest.json": "18c447012d3bd36e05907ece2444981744a57338dba2b61ee73f6876df56e64d",
+    "metadata/material_payloads.json": "987acb913a28216dd7fdbb58a38e56ca8595db23a5e8b2cd138807b8326812f5",
+    "metadata/scenario_facts.json": "d533b574ae6c8188e2645b817971542914e77259475b878a74d45e129c0278ff",
+    "metadata/validation_report.json": "5a75bb89ac7228e013707eaf2926cf8e4d2eabadd5a002b4ef24d09481399a85",
+    "persona.json": "801ff430070f77ed8f508ab87ac43fc6d1ed654329c51954640b7484d4072325",
+    "task.json": "9b1a4956659fdb8d00a70e845fd523a84e73d8518bd8fe9c39cacb5a698daac8"
+  }
+}

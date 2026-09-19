@@ -1,0 +1,42 @@
+{
+  "checks": [
+    {
+      "check": "persona_contract",
+      "status": "passed"
+    },
+    {
+      "check": "material_payload_schemas",
+      "count": 2,
+      "status": "passed"
+    },
+    {
+      "check": "persona_material_consistency",
+      "count": 2,
+      "status": "passed"
+    },
+    {
+      "check": "tool_input_json_schemas",
+      "count": 10,
+      "status": "passed"
+    },
+    {
+      "check": "virtual_filesystem_semantics",
+      "status": "passed"
+    },
+    {
+      "check": "resource_temporal_closure",
+      "status": "passed"
+    },
+    {
+      "check": "material_consumer_closure",
+      "status": "passed"
+    },
+    {
+      "check": "query_environment_consistency",
+      "status": "passed"
+    }
+  ],
+  "schema_version": "eduagentworld.environment_validation.v1",
+  "status": "passed",
+  "task_id": "task_5e02dd6a1f9c4f4b9258"
+}

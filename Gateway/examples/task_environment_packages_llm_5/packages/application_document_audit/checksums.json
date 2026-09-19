@@ -1,0 +1,17 @@
+{
+  "algorithm": "sha256",
+  "files": {
+    "environment.json": "84e0d1ca7a8953804771d428ecb9417413d9de1bc1d6a2e30777ca75bd266ddd",
+    "invocation_bindings.json": "047048fc25baa56ad41896fa2fcedcd9823675d351eaf1adca17a7ba7cfc6e48",
+    "material_requirements.json": "260eaf2d2d8c2abeebaba63a3caebf964f8e94271dbcd4f40d826e17d42ab337",
+    "materials/application_resume.md": "cdc2d9994061870663e3493e8fbaf913647ca061d3bcfaaa1d06b95577654b64",
+    "materials/cover_letter.md": "0bbf1a2c24f2a6758688266b729a2a9eb96de4f8321690831a2c10d684d2589b",
+    "materials/project_evidence.md": "85b31244ceed21e12f9d96fb9f5d1afac913ad5969b6a4d95e0872e6dcaf6494",
+    "materials_manifest.json": "366a3ac995ef22e0c24ac444cd66c5280b3aa072832ba37980d8b7ab944cd877",
+    "metadata/material_payloads.json": "e697271bd8bebdecb05dbdf5e2c6c15b404963649ce546e084ca1e8debc28067",
+    "metadata/scenario_facts.json": "d194f254f9c28a32e98357e567651928af6a809ccc7628f19f0694828527ab08",
+    "metadata/validation_report.json": "6209d99780c7892b13b7c1f8f22ee121771b9e8fae233739ff56ee0dd33bbfb9",
+    "persona.json": "55e3080b500111cb604f45ff9bd109235ea3915f6efa8fcb7a60ab68a5a94136",
+    "task.json": "cf0c9544023648a98fc93d6c13b0e6bd635c819e7bbf673d369c3eac4271e41c"
+  }
+}

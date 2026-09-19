@@ -33,5 +33,6 @@ import { ConversationCleanupTaskEntity } from './entities/conversation-cleanup-t
   ],
   controllers: [ConversationController],
   providers: [ConversationService, ConversationTranscriptProjectionService],
+  exports: [ConversationService],
 })
 export class ConversationModule {}

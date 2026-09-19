@@ -1,0 +1,363 @@
+{
+  "material_types": {
+    "editable_text": {
+      "media_types": [
+        "text/markdown",
+        "text/plain"
+      ],
+      "payload_schema": "markdown_document_v1",
+      "renderer": "markdown_document_v1",
+      "validators": [
+        "json_schema",
+        "edit_anchor_constraints"
+      ]
+    },
+    "learning_evidence": {
+      "media_types": [
+        "text/markdown",
+        "text/plain"
+      ],
+      "payload_schema": "learning_evidence_v1",
+      "renderer": "learning_evidence_markdown_v1",
+      "validators": [
+        "json_schema",
+        "learning_evidence_semantics"
+      ]
+    },
+    "project_evidence": {
+      "media_types": [
+        "text/markdown",
+        "text/plain"
+      ],
+      "payload_schema": "project_evidence_v1",
+      "renderer": "project_evidence_markdown_v1",
+      "validators": [
+        "json_schema",
+        "persona_project_consistency"
+      ]
+    },
+    "resume": {
+      "media_types": [
+        "text/markdown",
+        "text/plain"
+      ],
+      "payload_schema": "resume_v1",
+      "renderer": "resume_markdown_v1",
+      "validators": [
+        "json_schema",
+        "persona_resume_consistency"
+      ]
+    },
+    "supporting_document": {
+      "media_types": [
+        "text/markdown",
+        "text/plain"
+      ],
+      "payload_schema": "markdown_document_v1",
+      "renderer": "markdown_document_v1",
+      "validators": [
+        "json_schema"
+      ]
+    }
+  },
+  "payload_schemas": {
+    "learning_evidence_v1": {
+      "additionalProperties": false,
+      "properties": {
+        "activities": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "activity": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "duration_hours": {
+                "exclusiveMinimum": 0,
+                "type": "number"
+              },
+              "evidence": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "result": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "activity",
+              "duration_hours",
+              "result",
+              "evidence"
+            ],
+            "type": "object"
+          },
+          "minItems": 2,
+          "type": "array"
+        },
+        "difficulties": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "outcomes": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "period": {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}\\s*(至|—|~|-)\\s*\\d{4}-\\d{2}-\\d{2}",
+          "type": "string"
+        },
+        "reflection": {
+          "minLength": 30,
+          "type": "string"
+        }
+      },
+      "required": [
+        "period",
+        "activities",
+        "outcomes",
+        "difficulties",
+        "reflection"
+      ],
+      "type": "object"
+    },
+    "markdown_document_v1": {
+      "additionalProperties": false,
+      "properties": {
+        "sections": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "body": {
+                "type": "string"
+              },
+              "bullets": {
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "heading": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "heading",
+              "body",
+              "bullets"
+            ],
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "title": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "sections"
+      ],
+      "type": "object"
+    },
+    "project_evidence_v1": {
+      "additionalProperties": false,
+      "properties": {
+        "projects": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "actions": {
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "minItems": 1,
+                "type": "array"
+              },
+              "project_name": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "results": {
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "minItems": 1,
+                "type": "array"
+              },
+              "role": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "skills": {
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "minItems": 1,
+                "type": "array"
+              }
+            },
+            "required": [
+              "project_name",
+              "role",
+              "actions",
+              "results",
+              "skills"
+            ],
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "projects"
+      ],
+      "type": "object"
+    },
+    "resume_v1": {
+      "additionalProperties": false,
+      "properties": {
+        "education": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "degree": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "graduation_date": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "major": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "school": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "school",
+              "major",
+              "degree"
+            ],
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "experience": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "bullets": {
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "minItems": 2,
+                "type": "array"
+              },
+              "organization": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "period": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "role": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "role",
+              "organization",
+              "period",
+              "bullets"
+            ],
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "profile_summary": {
+          "minLength": 20,
+          "type": "string"
+        },
+        "projects": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "bullets": {
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "minItems": 1,
+                "type": "array"
+              },
+              "name": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "role": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "role",
+              "bullets"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "skills": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 2,
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "profile_summary",
+        "skills",
+        "experience",
+        "education"
+      ],
+      "type": "object"
+    }
+  }
+}

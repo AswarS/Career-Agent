@@ -1,0 +1,101 @@
+{
+  "base_profile": {
+    "birthDate": "1996-03-15",
+    "contactLanguage": "中文",
+    "currentCity": "上海",
+    "currentIndustry": "企业服务SaaS",
+    "currentRole": "产品运营专员",
+    "currentStatus": "在职看机会",
+    "educationBackground": [
+      {
+        "degree": "工学学士",
+        "description": "主修信息系统分析与设计、数据库原理、市场营销学、用户研究方法等课程，毕业论文题为《B2B企业客户数据平台选型与实施路径分析》",
+        "graduationDate": "2018-06-30",
+        "major": "信息管理与信息系统",
+        "school": "华东理工大学"
+      }
+    ],
+    "educationLevel": "本科",
+    "gender": "男",
+    "name": "陈思远",
+    "yearsOfExperience": 6
+  },
+  "career_agent_profile_product_schema_version": "career_profile_product_v2",
+  "career_agent_reference_revision": "73c7f984e164856975bc0f816641f2fa13614a2b",
+  "product_fields": {
+    "base.currentCity": "上海",
+    "base.currentIndustry": "企业服务SaaS",
+    "base.currentRole": "产品运营专员",
+    "base.currentStatus": "在职看机会",
+    "base.educationLevel": "本科",
+    "base.name": "陈思远",
+    "base.yearsOfExperience": 6,
+    "career.direction": "向B2B SaaS产品运营方向发展，聚焦客户生命周期运营与数据驱动增长",
+    "career.projectExperience": [
+      "客户健康度评分模型搭建与预警运营项目",
+      "新客户Onboarding流程数字化改造项目"
+    ],
+    "career.skills": [
+      "SQL",
+      "Python",
+      "客户成功运营",
+      "用户旅程分析",
+      "数据看板搭建",
+      "A/B测试",
+      "需求文档撰写"
+    ],
+    "career.workExperience": [
+      "2021-04至今 云启智联科技 产品运营专员",
+      "2018-07至2021-03 数策软件科技 运营助理"
+    ],
+    "education.degree": "工学学士",
+    "education.description": "主修信息系统分析与设计、数据库原理、市场营销学、用户研究方法等课程",
+    "education.graduationDate": "2018-06-30",
+    "education.major": "信息管理与信息系统",
+    "education.school": "华东理工大学",
+    "job.exclusions": [
+      "纯C端社交产品",
+      "硬件制造行业"
+    ],
+    "job.locations": [
+      "上海"
+    ],
+    "job.salaryExpectation": "18-22K·13薪",
+    "job.searchStatus": "积极投递中",
+    "job.targetIndustries": [
+      "B2B SaaS",
+      "企业服务"
+    ],
+    "job.targetRoles": [
+      "产品运营"
+    ],
+    "job.workModes": [
+      "全职",
+      "混合办公"
+    ],
+    "learning.activeSkills": [
+      "SQL",
+      "Python",
+      "客户成功运营",
+      "用户旅程分析",
+      "数据看板搭建",
+      "A/B测试",
+      "需求文档撰写"
+    ],
+    "learning.blockers": [
+      "缺乏大型团队项目管理经验",
+      "对GTM策略理解不够系统"
+    ],
+    "learning.goals": [
+      "系统掌握B2B SaaS客户生命周期运营方法论",
+      "提升数据建模与客户健康度量化能力"
+    ],
+    "learning.milestones": [
+      "2024-09完成客户健康度评分模型搭建并上线",
+      "2024-12完成新客户Onboarding流程数字化改造"
+    ],
+    "learning.nextFocus": "深入研究B2B SaaS领域的GTM策略与客户分层运营",
+    "profile.summary": "6年企业服务SaaS行业产品运营经验，擅长客户生命周期管理与数据驱动增长，熟悉SQL与Python数据分析，期望在上海寻找B2B SaaS产品运营方向的机会。"
+  },
+  "schema_version": "eduagentworld.career_agent_persona.v1"
+}

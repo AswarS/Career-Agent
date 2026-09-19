@@ -1,6 +1,6 @@
 import { constants } from 'node:fs';
-import { appendFile, copyFile, mkdir, readdir, rename, stat, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { appendFile, copyFile, lstat, mkdir, readdir, rename, stat, writeFile } from 'node:fs/promises';
+import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const networkRootDir = fileURLToPath(new URL('../', import.meta.url));
@@ -12,6 +12,14 @@ export function getNetworkUserDir(userId: string | number): string {
 
 export function getNetworkUserWorkspaceDir(userId: string | number): string {
   return join(getNetworkUserDir(userId), 'workspace');
+}
+
+/** Check the prepared directory and the runtime against the existing user workspace contract. */
+export function assertNetworkUserWorkspaceBinding(userId: string | number, preparedRoot: string, actualRoot: string): void {
+  const expected = resolve(getNetworkUserWorkspaceDir(userId));
+  if (relative(expected, resolve(preparedRoot)) !== '' || relative(expected, resolve(actualRoot)) !== '') {
+    throw new Error('Training Agent workspace differs from prepared user workspace');
+  }
 }
 
 export function getNetworkTranscriptDir(userId: string | number): string {
@@ -67,10 +75,26 @@ const workspaceMigrationLocks = new Map<string, Promise<string>>();
  * workspace entries out of the old mixed user root. Server-owned directories,
  * legacy transcript JSONL files, and symlinks/junctions are never moved.
  */
-export function ensureNetworkUserWorkspaceDir(
+export async function ensureNetworkUserWorkspaceDir(
   userId: string | number,
+  options: { requireNewUserDirectory?: boolean } = {},
 ): Promise<string> {
   const key = String(userId);
+  if (options.requireNewUserDirectory) {
+    // Training allocation must precede Profile and session initialization. Never migrate
+    // a previous database's user directory into a newly allocated training user.
+    for (const target of [userDataRootDir, getNetworkUserFilesDir(userId)]) {
+      for (let current = resolve(target);; current = dirname(current)) {
+        const info = await lstat(current).catch((e: NodeJS.ErrnoException) => { if (e.code !== 'ENOENT') throw e; return null; });
+        if (info?.isSymbolicLink()) throw new Error('Training workspace ancestor is a link');
+        if (current === resolve(getNetworkUserFilesDir(userId)) && info) throw new Error('Training user upload directory already exists');
+        if (dirname(current) === current) break;
+      }
+    }
+    await mkdir(userDataRootDir, { recursive: true });
+    await mkdir(getNetworkUserDir(userId)); // Atomic, non-recursive claim; existing roots fail.
+    workspaceMigrationLocks.delete(key); // A deleted training user ID may be allocated again.
+  }
   const pending = workspaceMigrationLocks.get(key);
   if (pending) return pending;
 

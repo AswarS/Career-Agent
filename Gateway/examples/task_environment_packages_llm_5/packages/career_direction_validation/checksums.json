@@ -1,0 +1,14 @@
+{
+  "algorithm": "sha256",
+  "files": {
+    "environment.json": "6332f3e432ae53800fdfbb421f4c24e0cac3af34862c1750b02ec56f749ad876",
+    "invocation_bindings.json": "afa18106342f00899c2026f59ecc5081089c31e0ceddd5b66bffca11eac5f85d",
+    "material_requirements.json": "f7ec5a0a64f76451b934142f0f134a4739bad51e7dbdc93ad51f92e13ccd99e8",
+    "materials_manifest.json": "47cb75b4945322233fde7de325878fb06247e15608bc658c9ea3d2661cd740b1",
+    "metadata/material_payloads.json": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+    "metadata/scenario_facts.json": "84437352d9d4e2ffacfecf0560b3a255301f9f960cc815e503f9ac2f4c4f6b06",
+    "metadata/validation_report.json": "373e6a1daed5815474179dbcc95e6f8c530bf44bcb0361fcfcdab081083c07b6",
+    "persona.json": "b5b93dcdbcb7fe8c272c856c7b59ed6399163ba7aefa07feb82ab731a7790db3",
+    "task.json": "5a5fe9585fec5bb3627ca47e001203d2a20a6c6c2e51b3e66b18a5b367f5f584"
+  }
+}

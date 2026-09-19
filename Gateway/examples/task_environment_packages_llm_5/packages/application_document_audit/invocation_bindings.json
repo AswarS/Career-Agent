@@ -1,0 +1,293 @@
+{
+  "invocations": [
+    {
+      "input_bindings": [
+        {
+          "input_field": "pattern",
+          "source": "literal",
+          "value": "*.md"
+        },
+        {
+          "input_field": "path",
+          "source": "literal",
+          "value": "/workspace/materials"
+        }
+      ],
+      "input_schema_sha256": "959396f9008ff9960fe843d9a516c0a5be31c0d6dfb25552c23c5fc203b1b9b6",
+      "invocation_id": "glob",
+      "tool_id": "network.conversation:harness_tool:Glob",
+      "tool_name": "Glob",
+      "validation_witness_arguments": {
+        "path": "/workspace/materials",
+        "pattern": "*.md"
+      }
+    },
+    {
+      "input_bindings": [
+        {
+          "input_field": "pattern",
+          "source": "literal",
+          "value": "React|TypeScript"
+        },
+        {
+          "input_field": "path",
+          "source": "literal",
+          "value": "/workspace/materials"
+        },
+        {
+          "input_field": "glob",
+          "source": "literal",
+          "value": "*.md"
+        },
+        {
+          "input_field": "output_mode",
+          "source": "literal",
+          "value": "files_with_matches"
+        }
+      ],
+      "input_schema_sha256": "bda3f7833f5e09fd9f14c0ebb6b466396ecb0a95839343619bbc7daf05416022",
+      "invocation_id": "grep",
+      "tool_id": "network.conversation:harness_tool:Grep",
+      "tool_name": "Grep",
+      "validation_witness_arguments": {
+        "glob": "*.md",
+        "output_mode": "files_with_matches",
+        "path": "/workspace/materials",
+        "pattern": "React|TypeScript"
+      }
+    },
+    {
+      "input_bindings": [
+        {
+          "input_field": "file_path",
+          "material_id": "resume",
+          "source": "material_path"
+        }
+      ],
+      "input_schema_sha256": "384be111a755f235f20b1c632d0ed1a665e9f16d191f02108e80232c7fc4b488",
+      "invocation_id": "read_resume",
+      "tool_id": "network.conversation:harness_tool:Read",
+      "tool_name": "Read",
+      "validation_witness_arguments": {
+        "file_path": "/workspace/materials/application_resume.md"
+      }
+    },
+    {
+      "input_bindings": [
+        {
+          "input_field": "draft_materials",
+          "material_ids": [
+            "resume",
+            "letter"
+          ],
+          "source": "material_collection_content"
+        },
+        {
+          "input_field": "user_profile",
+          "source": "persona_snapshot"
+        },
+        {
+          "input_field": "evidence_gap_analysis",
+          "material_id": "projects",
+          "source": "material_payload"
+        }
+      ],
+      "input_schema_sha256": "1ec86df86d66e9f6541721948d07087055be5965c6927d8da083ae2da33ce9d6",
+      "invocation_id": "fact_check",
+      "tool_id": "network.conversation:skill_tool:ApplicationMaterialsFactCheck",
+      "tool_name": "ApplicationMaterialsFactCheck",
+      "validation_witness_arguments": {
+        "draft_materials": {
+          "letter": "# 求职信——高级后端开发工程师\n\n## 自我介绍\n您好，我是陈思远，目前担任深圳星河数据技术有限公司的高级后端开发工程师，拥有6年互联网后端开发经验。我在工作中主导过电商订单微服务系统与实时日志分析平台两个核心项目的后端架构设计，对高并发系统与微服务治理有较深入的实践理解。此外我也具备React和TypeScript的前端协作能力，能够参与全栈功能联调。\n- 6年Java后端开发经验，熟悉Spring Boot微服务技术栈\n- 具备电商交易与日志数据处理领域的实际项目经验\n\n## 求职动机\n我希望在深圳寻找高级后端开发工程师或后端架构师方向的全职机会，期望薪资为25-35K·14薪。我目前处于在职看机会状态，可以在一个月内完成交接到岗。贵公司在互联网技术领域的积累令我向往，我期待能在高并发系统架构方向持续深耕。\n- 目标城市为深圳，期望全职到岗\n- 关注后端架构与高并发方向的成长空间\n",
+          "resume": "# 基础简历\n\n姓名：陈思远\n\n## 个人概述\n6年Java后端开发经验，专注高并发系统设计与微服务架构，熟悉电商与数据平台领域。熟练使用Spring Boot、MySQL、Redis、Kafka等技术栈，同时具备React和TypeScript前端协作能力，能够独立完成全栈功能开发与联调。\n\n## 技能\n- Java\n- Spring Boot\n- MySQL\n- Redis\n- Kafka\n- Docker\n- Python\n- Elasticsearch\n- React\n- TypeScript\n\n## 工作经历\n### 深圳云启科技有限公司｜后端开发工程师\n2018-07 至 2021-08\n- 负责公司核心交易系统的后端接口开发与维护，使用Spring Boot构建RESTful API，并使用React和TypeScript开发内部运营管理页面\n- 参与数据库表结构设计与优化，通过索引调整将慢查询数量降低约40%\n### 深圳星河数据技术有限公司｜高级后端开发工程师\n2021-09 至今\n- 主导实时日志分析平台后端架构设计，引入Kafka与Elasticsearch实现日志实时采集与检索\n- 负责电商订单微服务系统的服务拆分与治理，使用Docker容器化部署提升交付效率\n\n## 项目经历\n### 电商订单微服务系统｜后端负责人\n- 使用Spring Boot与Kafka实现订单服务拆分，将订单处理吞吐量提升约2倍\n- 使用React和TypeScript开发订单运营后台，支持实时订单监控与异常处理\n### 实时日志分析平台｜核心开发\n- 基于Elasticsearch与Python构建日志检索管道，支持日均亿级日志的实时查询\n\n## 教育经历\n- 华东理工大学｜计算机科学与技术｜工学学士｜2018-06-30\n"
+        },
+        "evidence_gap_analysis": {
+          "projects": [
+            {
+              "actions": [
+                "使用Spring Boot将原有单体订单模块拆分为独立微服务，通过Kafka实现订单事件异步流转",
+                "使用React和TypeScript开发订单运营后台，支持实时订单监控与异常处理",
+                "设计MySQL分库分表方案并引入Redis缓存热点数据，降低数据库读压力"
+              ],
+              "project_name": "电商订单微服务系统",
+              "results": [
+                "订单接口平均响应时间从800ms降至约300ms",
+                "系统日均订单处理量从50万提升至约150万"
+              ],
+              "role": "后端负责人",
+              "skills": [
+                "Java",
+                "Spring Boot",
+                "MySQL",
+                "Redis",
+                "Kafka",
+                "Docker",
+                "React",
+                "TypeScript"
+              ]
+            },
+            {
+              "actions": [
+                "基于Kafka构建日志采集管道，使用Elasticsearch实现日志全文检索与聚合分析",
+                "编写Python脚本完成日志格式清洗与异常告警规则配置"
+              ],
+              "project_name": "实时日志分析平台",
+              "results": [
+                "平台支持日均约1亿条日志的实时写入与检索",
+                "异常日志告警平均响应时间控制在5分钟以内"
+              ],
+              "role": "核心开发",
+              "skills": [
+                "Kafka",
+                "Elasticsearch",
+                "Python",
+                "Docker"
+              ]
+            }
+          ]
+        },
+        "user_profile": {
+          "base.currentCity": "深圳",
+          "base.currentIndustry": "互联网",
+          "base.currentRole": "后端开发工程师",
+          "base.currentStatus": "在职看机会",
+          "base.educationLevel": "本科",
+          "base.name": "陈思远",
+          "base.yearsOfExperience": 6,
+          "career.direction": "向技术专家路线发展，深耕后端架构与高并发系统设计",
+          "career.projectExperience": [
+            "电商订单微服务系统",
+            "实时日志分析平台"
+          ],
+          "career.skills": [
+            "Java",
+            "Spring Boot",
+            "MySQL",
+            "Redis",
+            "Kafka",
+            "Docker",
+            "Python",
+            "Elasticsearch",
+            "React",
+            "TypeScript"
+          ],
+          "career.workExperience": [
+            "2018-07 至 2021-08 深圳云启科技有限公司 后端开发工程师",
+            "2021-09 至今 深圳星河数据技术有限公司 高级后端开发工程师"
+          ],
+          "education.degree": "工学学士",
+          "education.description": "主修软件工程、数据库系统与计算机网络，毕业设计为基于Spring Boot的校园活动管理平台",
+          "education.graduationDate": "2018-06-30",
+          "education.major": "计算机科学与技术",
+          "education.school": "华东理工大学",
+          "job.exclusions": [
+            "外包",
+            "频繁出差"
+          ],
+          "job.locations": [
+            "深圳"
+          ],
+          "job.salaryExpectation": "25-35K·14薪",
+          "job.searchStatus": "在职看机会",
+          "job.targetIndustries": [
+            "互联网",
+            "电商",
+            "云计算"
+          ],
+          "job.targetRoles": [
+            "高级后端开发工程师",
+            "后端架构师"
+          ],
+          "job.workModes": [
+            "全职"
+          ],
+          "learning.activeSkills": [
+            "Kubernetes",
+            "Go语言"
+          ],
+          "learning.blockers": [
+            "工作日加班较多，学习时间有限"
+          ],
+          "learning.goals": [
+            "掌握Kubernetes生产级集群运维",
+            "学习Go语言以扩展技术栈"
+          ],
+          "learning.milestones": [
+            "2024-03 完成CKA认证考试备考",
+            "2024-06 用Go重写个人博客后端"
+          ],
+          "learning.nextFocus": "Kubernetes Operator 开发实战",
+          "profile.summary": "6年Java后端开发经验，专注高并发系统设计与微服务架构，熟悉电商与数据平台领域，具备React和TypeScript前端协作能力"
+        }
+      }
+    },
+    {
+      "input_bindings": [
+        {
+          "input_field": "prepared_materials",
+          "material_ids": [
+            "resume",
+            "letter",
+            "projects"
+          ],
+          "source": "material_collection_manifest"
+        },
+        {
+          "input_field": "material_requirements",
+          "source": "literal",
+          "value": {
+            "file_format": "Markdown",
+            "language": "zh-CN",
+            "resume_pages": 1
+          }
+        },
+        {
+          "input_field": "submission_context",
+          "source": "literal",
+          "value": {
+            "channel": "company_career_site"
+          }
+        }
+      ],
+      "input_schema_sha256": "4612f50c99d9c9dc6769eb70a0ab2f374baad9e6cf79c74feb107382d715ade3",
+      "invocation_id": "format_check",
+      "tool_id": "network.conversation:skill_tool:CheckMaterialFormatCompliance",
+      "tool_name": "CheckMaterialFormatCompliance",
+      "validation_witness_arguments": {
+        "material_requirements": {
+          "file_format": "Markdown",
+          "language": "zh-CN",
+          "resume_pages": 1
+        },
+        "prepared_materials": [
+          {
+            "logical_path": "/workspace/materials/application_resume.md",
+            "material_id": "resume",
+            "media_type": "text/markdown",
+            "semantic_type": "resume",
+            "sha256": "cdc2d9994061870663e3493e8fbaf913647ca061d3bcfaaa1d06b95577654b64"
+          },
+          {
+            "logical_path": "/workspace/materials/cover_letter.md",
+            "material_id": "letter",
+            "media_type": "text/markdown",
+            "semantic_type": "supporting_document",
+            "sha256": "0bbf1a2c24f2a6758688266b729a2a9eb96de4f8321690831a2c10d684d2589b"
+          },
+          {
+            "logical_path": "/workspace/materials/project_evidence.md",
+            "material_id": "projects",
+            "media_type": "text/markdown",
+            "semantic_type": "project_evidence",
+            "sha256": "85b31244ceed21e12f9d96fb9f5d1afac913ad5969b6a4d95e0872e6dcaf6494"
+          }
+        ],
+        "submission_context": {
+          "channel": "company_career_site"
+        }
+      }
+    }
+  ],
+  "schema_version": "eduagentworld.invocation_bindings.v1",
+  "task_id": "task_1b944bc9ea585b0117ae"
+}

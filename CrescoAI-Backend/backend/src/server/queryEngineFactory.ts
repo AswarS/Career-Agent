@@ -377,19 +377,24 @@ function waitForToolResponse(
   toolUseId: string,
 ): Promise<import('./SessionContext.js').ToolResponsePayload | undefined> {
   return new Promise((resolve) => {
-    const timeout = setTimeout(() => {
+    const signal = context.config.trainingHarness ? context.abortController.signal : undefined
+    const onAbort = () => finish({ approved: false })
+    const finish = (payload: import('./SessionContext.js').ToolResponsePayload | undefined) => {
+      clearTimeout(timeout)
+      signal?.removeEventListener('abort', onAbort)
       context.pendingToolResponses.delete(toolUseId)
-      resolve(undefined)
+      resolve(payload)
+    }
+    const timeout = setTimeout(() => {
+      finish(undefined)
     }, INTERACTIVE_TOOL_RESPONSE_TIMEOUT_MS)
 
     context.pendingToolResponses.set(toolUseId, {
-      resolve: (payload) => {
-        clearTimeout(timeout)
-        context.pendingToolResponses.delete(toolUseId)
-        resolve(payload)
-      },
+      resolve: finish,
       timeout,
     })
+    signal?.addEventListener('abort', onAbort, { once: true })
+    if (signal?.aborted) onAbort()
   })
 }
 

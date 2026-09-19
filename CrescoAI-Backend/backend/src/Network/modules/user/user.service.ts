@@ -21,6 +21,11 @@ import { ProfileRevisionEntity } from '../profile/entities/profile-revision.enti
 import { ProfileProjectionJobEntity } from '../profile/entities/profile-projection-job.entity';
 import { ProfileSuggestionEntity } from '../profile/entities/profile-suggestion.entity';
 import { networkRootDir } from '../../utils/networkTranscriptStorage';
+import { ProfileEvidenceLinkEntity } from '../profile/entities/profile-evidence-link.entity';
+import { ProfileRefreshJobEntity } from '../profile/entities/profile-refresh-job.entity';
+import { McpSettingEntity } from '../settings/entities/mcp-setting.entity';
+import { GeneratedAppEventEntity } from '../generated-app/entities/generated-app-event.entity';
+import { ConversationCleanupTaskEntity } from '../conversation/entities/conversation-cleanup-task.entity';
 
 @Injectable()
 export class UserService {
@@ -32,7 +37,7 @@ export class UserService {
     private readonly userRepo: Repository<UserEntity>,
   ) {}
 
-  async deleteUserCascade(targetUserIdentity: string, requesterUserId?: number) {
+  async deleteUserCascade(targetUserIdentity: string, requesterUserId?: number, options?: { trainingRunId: string; preserveFiles?: boolean }) {
     if (!requesterUserId) {
       throw new ForbiddenException('Missing user identity');
     }
@@ -42,6 +47,9 @@ export class UserService {
       throw new NotFoundException('User not found');
     }
     const targetUserId = targetUser.id;
+    if (options && targetUser.username !== `training-${options.trainingRunId}`) {
+      throw new ForbiddenException('Training cleanup ownership mismatch');
+    }
     if (requesterUserId !== targetUserId) {
       throw new ForbiddenException('You can only delete your own account data');
     }
@@ -54,8 +62,16 @@ export class UserService {
     const occurredAt = new Date();
     const accountVersion = (targetUser.accountVersion ?? 0) + 1;
 
+    // Keep the database owner until strict filesystem cleanup succeeds, so a failure can be retried.
+    if (options && !options.preserveFiles) await this.cleanupUserFiles(targetUserId, true);
+
     await this.dataSource.transaction(async (manager) => {
-      await enqueueAccountStatusChanged(
+      if (options) {
+        for (const entity of [ProfileEvidenceLinkEntity, ProfileRefreshJobEntity, McpSettingEntity, GeneratedAppEventEntity, ConversationCleanupTaskEntity]) {
+          await manager.delete(entity, { userId: targetUserId });
+        }
+      }
+      if (!options) await enqueueAccountStatusChanged(
         manager,
         targetUser,
         'disabled',
@@ -83,7 +99,7 @@ export class UserService {
       await manager.delete(UserEntity, { id: targetUserId });
     });
 
-    await this.cleanupUserFiles(targetUserId);
+    if (!options) await this.cleanupUserFiles(targetUserId);
 
     return {
       success: true,
@@ -108,7 +124,7 @@ export class UserService {
     return this.userRepo.findOne({ where: { id: legacyId } });
   }
 
-  private async cleanupUserFiles(userId: number) {
+  private async cleanupUserFiles(userId: number, strict = false) {
     const targets = [
       join(networkRootDir, 'user', String(userId)),
       join(networkRootDir, 'files', String(userId)),
@@ -117,7 +133,8 @@ export class UserService {
     for (const target of targets) {
       try {
         await rm(target, { recursive: true, force: true });
-      } catch {
+      } catch (error) {
+        if (strict) throw error;
         // best-effort cleanup
       }
     }

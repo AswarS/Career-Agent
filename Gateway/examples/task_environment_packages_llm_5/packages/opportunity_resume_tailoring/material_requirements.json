@@ -1,0 +1,34 @@
+{
+  "requirements": [
+    {
+      "accepted_media_types": [
+        "text/markdown",
+        "text/plain"
+      ],
+      "content_constraints": {},
+      "material_id": "resume",
+      "payload_field_contains": {},
+      "payload_schema": "resume_v1",
+      "purpose": "提供可核验的教育、工作和技能事实",
+      "required": true,
+      "semantic_type": "resume",
+      "title": "基础简历"
+    },
+    {
+      "accepted_media_types": [
+        "text/markdown",
+        "text/plain"
+      ],
+      "content_constraints": {},
+      "material_id": "projects",
+      "payload_field_contains": {},
+      "payload_schema": "project_evidence_v1",
+      "purpose": "提供可用于岗位匹配的项目动作与结果",
+      "required": true,
+      "semantic_type": "project_evidence",
+      "title": "项目证据记录"
+    }
+  ],
+  "schema_version": "eduagentworld.material_requirements.v1",
+  "task_id": "task_5e02dd6a1f9c4f4b9258"
+}

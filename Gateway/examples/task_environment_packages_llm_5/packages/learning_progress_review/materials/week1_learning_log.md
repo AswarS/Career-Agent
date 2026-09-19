@@ -1,0 +1,23 @@
+# 学习证据记录
+
+周期：2026-09-01至2026-09-07
+
+## 活动
+### 学习Kubernetes Pod调度策略与亲和性规则
+- 时长：6.5 小时
+- 结果：完成nodeSelector、nodeAffinity与podAntiAffinity三种调度策略的实验，成功在本地双节点集群上验证软策略与硬策略的区别
+- 证据：实验记录：在本地kind集群中创建带nodeSelector的Nginx Pod，确认Pod被正确调度至标签匹配节点；随后测试requiredDuringScheduling与preferredDuringScheduling两种nodeAffinity，观察到软策略在无匹配节点时仍可调度但记录Warning事件；最后配置podAntiAffinity实现同一Deployment的副本分散到不同节点，通过kubectl get pods -o wide确认分布情况
+### 使用Helm编写并部署自定义应用Chart
+- 时长：5.0 小时
+- 结果：完成一个包含Deployment、Service和ConfigMap的Helm Chart，通过模板变量实现多环境配置切换
+- 证据：实验记录：创建my-app Chart目录结构，编写values.yaml定义replicaCount、image.repository与service.type等变量；在templates目录中编写deployment.yaml使用{{ .Values.replicaCount }}控制副本数；通过helm install --set replicaCount=3 my-app ./my-app部署并验证3个副本正常运行；再使用helm upgrade --set image.tag=v2更新镜像版本，通过kubectl rollout status确认滚动更新完成
+
+## 产出
+- 掌握Kubernetes高级调度策略，能够根据业务需求设计Pod分布方案
+- 具备使用Helm进行应用打包与多环境部署的实操能力
+
+## 困难
+- podAntiAffinity的topologyKey参数含义不够直观，初次实验时误用kubernetes.io/hostname导致副本未能按预期分散，查阅官方文档后理解拓扑域概念才解决
+
+## 反思
+本周学习聚焦Kubernetes调度与Helm包管理，整体进度符合预期。调度策略部分通过动手实验加深了对亲和性规则的理解，特别是软硬策略在实际场景中的取舍。Helm Chart的编写过程让我体会到模板化部署的优势，但在变量设计上还需更多练习以避免过度复杂。下周计划进入Istio服务网格学习，预计概念密度较大，需要提前预习官方文档中的架构概述部分。

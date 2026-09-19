@@ -1,0 +1,30 @@
+{
+  "acceptance_criteria": [
+    "清单中必须覆盖简历、求职信和项目证据三份材料的交叉核对",
+    "每个一致性或事实边界问题需指明涉及的材料名称与具体字段",
+    "格式问题需标注所在材料与大致位置",
+    "审计结果中不得出现材料未提及的虚构事实"
+  ],
+  "available_inputs": [
+    "已装载的 Career-Agent 用户画像",
+    "投递简历（/workspace/materials/application_resume.md）",
+    "求职信（/workspace/materials/cover_letter.md）",
+    "项目事实依据（/workspace/materials/project_evidence.md）"
+  ],
+  "constraints": [
+    "不得生成新的虚构经历、证书或项目效果",
+    "仅审计已有材料内容，不得添加材料中未出现的事实",
+    "三份材料之间的事实一致性必须逐项核对",
+    "Markdown格式问题需给出具体位置与修改建议"
+  ],
+  "deliverables": [
+    "三份材料的一致性核对结果清单",
+    "事实边界与潜在夸大陈述的问题清单",
+    "Markdown格式问题及修改建议"
+  ],
+  "id": "task_1b944bc9ea585b0117ae",
+  "scenario_id": "application_document_audit",
+  "schema_version": "eduagentworld.task.v1",
+  "task": "请帮我审计三份求职材料的一致性、事实边界与Markdown格式。三份材料分别是 application_resume.md（简历正文）、cover_letter.md（求职信）和 project_evidence.md（项目事实依据）。我的基本信息是：姓名陈思远，当前在深圳担任高级后端开发工程师，拥有6年互联网后端开发经验，本科毕业于华东理工大学计算机科学与技术专业。简历中列出的技能包括Java、Spring Boot、MySQL、Redis、Kafka、Docker、Python、Elasticsearch、React和TypeScript，两个核心项目分别是电商订单微服务系统和实时日志分析平台。请检查以下方面：第一，三份材料之间的人名、岗位、教育背景、技能和项目名称是否一致；第二，项目证据中陈述的项目效果是否超出简历中的事实边界，是否存在虚构成绩或夸大任职时长的情况；第三，求职信中提到的求职意向、城市和薪资期望是否与简历信息吻合；第四，三份材料的Markdown格式是否规范。请不要为我生成新的虚构经历或添加未在材料中出现的事实，仅基于已有内容进行审计并给出问题清单和修改建议。",
+  "title": "求职材料一致性与格式审计"
+}

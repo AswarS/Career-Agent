@@ -1,0 +1,48 @@
+{
+  "materials": [
+    {
+      "logical_path": "/workspace/materials/application_resume.md",
+      "material_id": "resume",
+      "media_type": "text/markdown",
+      "package_path": "materials/application_resume.md",
+      "payload_schema": "resume_v1",
+      "provenance": "synthetic_fixture",
+      "purpose": "待审计的简历正文",
+      "renderer": "resume_markdown_v1",
+      "semantic_type": "resume",
+      "sha256": "cdc2d9994061870663e3493e8fbaf913647ca061d3bcfaaa1d06b95577654b64",
+      "size_bytes": 1581,
+      "title": "投递简历"
+    },
+    {
+      "logical_path": "/workspace/materials/cover_letter.md",
+      "material_id": "letter",
+      "media_type": "text/markdown",
+      "package_path": "materials/cover_letter.md",
+      "payload_schema": "markdown_document_v1",
+      "provenance": "synthetic_fixture",
+      "purpose": "待审计的求职信",
+      "renderer": "markdown_document_v1",
+      "semantic_type": "supporting_document",
+      "sha256": "0bbf1a2c24f2a6758688266b729a2a9eb96de4f8321690831a2c10d684d2589b",
+      "size_bytes": 1062,
+      "title": "求职信"
+    },
+    {
+      "logical_path": "/workspace/materials/project_evidence.md",
+      "material_id": "projects",
+      "media_type": "text/markdown",
+      "package_path": "materials/project_evidence.md",
+      "payload_schema": "project_evidence_v1",
+      "provenance": "synthetic_fixture",
+      "purpose": "核查材料陈述的事实来源",
+      "renderer": "project_evidence_markdown_v1",
+      "semantic_type": "project_evidence",
+      "sha256": "85b31244ceed21e12f9d96fb9f5d1afac913ad5969b6a4d95e0872e6dcaf6494",
+      "size_bytes": 1037,
+      "title": "项目事实依据"
+    }
+  ],
+  "schema_version": "eduagentworld.material_manifest.v1",
+  "task_id": "task_1b944bc9ea585b0117ae"
+}

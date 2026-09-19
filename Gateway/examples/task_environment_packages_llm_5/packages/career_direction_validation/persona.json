@@ -1,0 +1,112 @@
+{
+  "base_profile": {
+    "birthDate": "1994-03-15",
+    "contactLanguage": "中文",
+    "currentCity": "上海",
+    "currentIndustry": "制造业",
+    "currentRole": "业务系统分析师",
+    "currentStatus": "在职考虑新机会",
+    "educationBackground": [
+      {
+        "degree": "硕士",
+        "description": "研究方向为企业信息系统与数据驱动决策，毕业论文聚焦制造业数字化转型路径",
+        "graduationDate": "2019-06-30",
+        "major": "信息管理与信息系统",
+        "school": "华东理工大学"
+      },
+      {
+        "degree": "学士",
+        "description": "主修供应链管理、采购与仓储、运筹学等课程，曾获校级奖学金",
+        "graduationDate": "2017-06-30",
+        "major": "物流管理",
+        "school": "上海理工大学"
+      }
+    ],
+    "educationLevel": "硕士",
+    "gender": "男",
+    "name": "陈思远",
+    "yearsOfExperience": 5
+  },
+  "career_agent_profile_product_schema_version": "career_profile_product_v2",
+  "career_agent_reference_revision": "73c7f984e164856975bc0f816641f2fa13614a2b",
+  "product_fields": {
+    "base.currentCity": "上海",
+    "base.currentIndustry": "制造业",
+    "base.currentRole": "业务系统分析师",
+    "base.currentStatus": "在职考虑新机会",
+    "base.educationLevel": "硕士",
+    "base.name": "陈思远",
+    "base.yearsOfExperience": 5,
+    "career.direction": "企业数字化与供应链",
+    "career.projectExperience": [
+      "鼎新MES系统升级项目：主导车间数据采集模块重构，技能：MES系统配置、数据分析、需求文档编写",
+      "供应链数据看板项目：搭建采购到付款全链路可视化看板，技能：SQL、供应链流程优化、数据分析"
+    ],
+    "career.skills": [
+      "业务流程梳理",
+      "ERP系统实施",
+      "MES系统配置",
+      "数据分析",
+      "SQL",
+      "供应链流程优化",
+      "需求文档编写",
+      "跨部门沟通"
+    ],
+    "career.workExperience": [
+      "2019.07-2022.03 上海明远制造科技有限公司 业务系统分析师 负责ERP模块需求分析与实施",
+      "2022.04-至今 上海鼎新工业集团 高级业务系统分析师 负责MES系统升级与供应链数据看板搭建"
+    ],
+    "education.degree": "硕士",
+    "education.description": "研究方向为企业信息系统与数据驱动决策，毕业论文聚焦制造业数字化转型路径",
+    "education.graduationDate": "2019-06-30",
+    "education.major": "信息管理与信息系统",
+    "education.school": "华东理工大学",
+    "job.exclusions": [
+      "纯外包项目",
+      "长期出差超过50%"
+    ],
+    "job.locations": [
+      "上海",
+      "苏州",
+      "杭州"
+    ],
+    "job.salaryExpectation": "20-28K",
+    "job.searchStatus": "主动探索中，希望在一个月内确定验证方向",
+    "job.targetIndustries": [
+      "智能制造",
+      "供应链科技",
+      "企业服务"
+    ],
+    "job.targetRoles": [
+      "数字化转型顾问",
+      "供应链系统产品经理",
+      "供应链数据分析师"
+    ],
+    "job.workModes": [
+      " onsite",
+      " hybrid"
+    ],
+    "learning.activeSkills": [
+      "Power BI",
+      "Python基础"
+    ],
+    "learning.blockers": [
+      "不确定企业数字化方向是否需要更多技术深度",
+      "对供应链科技岗位的实际日常工作了解不足"
+    ],
+    "learning.goals": [
+      "系统比较企业数字化与供应链科技两个方向的岗位需求与能力差距",
+      "制定可执行的四周验证计划，通过实际调研和小范围实践确认方向",
+      "在验证期内完成至少2个方向的信息访谈或岗位JD深度分析"
+    ],
+    "learning.milestones": [
+      "第一周完成两个方向的岗位需求对比",
+      "第二周完成至少1次行业信息访谈",
+      "第三周完成一个小型实践或案例分析",
+      "第四周汇总验证结论并形成方向选择建议"
+    ],
+    "learning.nextFocus": "对比企业数字化与供应链科技方向的岗位JD，梳理能力差距",
+    "profile.summary": "5年制造业业务系统分析经验，熟悉ERP与MES系统，具备供应链流程优化实践，希望在企业数字化与供应链科技方向上找到更清晰的职业突破口。"
+  },
+  "schema_version": "eduagentworld.career_agent_persona.v1"
+}

@@ -208,7 +208,9 @@ export function getConversationMemoryToolPathError(
   filePath: string,
   content?: string,
 ): string | null {
-  const turn = getSessionContext()?.conversationMemoryTurn
+  const context = getSessionContext()
+  if (context?.config.conversationMemoryEnabled === false) return null
+  const turn = context?.conversationMemoryTurn
   if (!turn?.enabled || !isWithin(filePath, turn.rootDir)) return null
   if (isConversationMemorySessionDeleting(turn.rootDir, turn.conversationId)) {
     return 'Conversation memory for this deleted session is no longer writable'
@@ -267,6 +269,7 @@ export async function commitConversationMemorySessionUpdate(
   const context = getSessionContext()
   const turn = context?.conversationMemoryTurn
   if (
+    context?.config.conversationMemoryEnabled === false ||
     !turn?.enabled ||
     resolve(filePath) !== resolve(turn.sessionSummaryPath)
   ) {

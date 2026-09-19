@@ -1,0 +1,28 @@
+{
+  "acceptance_criteria": [
+    "简历中姓名、教育背景、工作经历与提供的两份材料一致",
+    "简历突出B2B SaaS产品运营相关技能与项目经验，与目标岗位需求对应",
+    "所有量化数据和项目结果均来自原始材料，无虚构内容",
+    "简历格式完整，包含个人简介、技能、工作经历、项目经验和教育背景"
+  ],
+  "available_inputs": [
+    "已装载的 Career-Agent 用户画像",
+    "基础简历（/workspace/materials/base_resume.md）",
+    "项目证据记录（/workspace/materials/project_evidence.md）"
+  ],
+  "constraints": [
+    "目标城市限定为上海，不得改为其他城市",
+    "目标岗位限定为B2B SaaS产品运营，不得改为其他岗位方向",
+    "简历内容必须基于base_resume.md和project_evidence.md中已有的事实，不得虚构经历、技能或项目成果",
+    "不得添加未在材料中出现的证书、成绩或量化指标"
+  ],
+  "deliverables": [
+    "一份针对上海B2B SaaS产品运营岗位定制的简历",
+    "岗位需求与简历匹配要点说明"
+  ],
+  "id": "task_5e02dd6a1f9c4f4b9258",
+  "scenario_id": "opportunity_resume_tailoring",
+  "schema_version": "eduagentworld.task.v1",
+  "task": "我目前在上海，从事企业服务SaaS行业已有6年，现任产品运营专员，想寻找B2B SaaS产品运营方向的岗位机会。请基于我提供的base_resume.md和project_evidence.md两份材料，帮我研究上海地区B2B SaaS产品运营岗位的真实招聘需求，并据此定制一份贴合目标岗位的简历。材料中包含我的教育背景、工作经历、技能清单和项目证据，请严格依据这些已有事实进行改写和重组，不要编造未提供的经历或成果。交付目标是一份可直接投递的定制版简历，突出与B2B SaaS产品运营岗位匹配的核心能力与项目经验。",
+  "title": "B2B SaaS产品运营岗位简历定制"
+}

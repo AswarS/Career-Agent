@@ -1,0 +1,24 @@
+{
+  "requirements": [
+    {
+      "accepted_media_types": [
+        "text/markdown",
+        "text/plain"
+      ],
+      "content_constraints": {},
+      "material_id": "learning_log",
+      "payload_field_contains": {
+        "period": [
+          "2026-09"
+        ]
+      },
+      "payload_schema": "learning_evidence_v1",
+      "purpose": "为阶段学习评估提供可追溯证据",
+      "required": true,
+      "semantic_type": "learning_evidence",
+      "title": "第一周学习证据"
+    }
+  ],
+  "schema_version": "eduagentworld.material_requirements.v1",
+  "task_id": "task_bc9c303668a5096740e8"
+}

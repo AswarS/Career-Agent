@@ -1,0 +1,84 @@
+{
+  "invocations": [
+    {
+      "input_bindings": [
+        {
+          "input_field": "file_path",
+          "material_id": "draft",
+          "source": "material_path"
+        }
+      ],
+      "input_schema_sha256": "384be111a755f235f20b1c632d0ed1a665e9f16d191f02108e80232c7fc4b488",
+      "invocation_id": "read",
+      "tool_id": "network.conversation:harness_tool:Read",
+      "tool_name": "Read",
+      "validation_witness_arguments": {
+        "file_path": "/workspace/materials/resume_draft.md"
+      }
+    },
+    {
+      "input_bindings": [
+        {
+          "input_field": "file_path",
+          "material_id": "draft",
+          "source": "material_path"
+        },
+        {
+          "input_field": "old_string",
+          "source": "literal",
+          "value": "负责前端页面开发和维护"
+        },
+        {
+          "input_field": "new_string",
+          "source": "literal",
+          "value": "负责前端页面开发、维护及性能优化"
+        },
+        {
+          "input_field": "replace_all",
+          "source": "literal",
+          "value": false
+        }
+      ],
+      "input_schema_sha256": "73c20da9a0cd63a1eb6f21ac29e3c9124ecd39c8a10076d94b4eb29c3a5018f0",
+      "invocation_id": "edit",
+      "tool_id": "network.conversation:harness_tool:Edit",
+      "tool_name": "Edit",
+      "validation_witness_arguments": {
+        "file_path": "/workspace/materials/resume_draft.md",
+        "new_string": "负责前端页面开发、维护及性能优化",
+        "old_string": "负责前端页面开发和维护",
+        "replace_all": false
+      }
+    },
+    {
+      "input_bindings": [
+        {
+          "input_field": "pattern",
+          "source": "literal",
+          "value": "负责前端页面开发、维护及性能优化"
+        },
+        {
+          "input_field": "path",
+          "material_id": "draft",
+          "source": "material_path"
+        },
+        {
+          "input_field": "output_mode",
+          "source": "literal",
+          "value": "content"
+        }
+      ],
+      "input_schema_sha256": "bda3f7833f5e09fd9f14c0ebb6b466396ecb0a95839343619bbc7daf05416022",
+      "invocation_id": "verify",
+      "tool_id": "network.conversation:harness_tool:Grep",
+      "tool_name": "Grep",
+      "validation_witness_arguments": {
+        "output_mode": "content",
+        "path": "/workspace/materials/resume_draft.md",
+        "pattern": "负责前端页面开发、维护及性能优化"
+      }
+    }
+  ],
+  "schema_version": "eduagentworld.invocation_bindings.v1",
+  "task_id": "task_e115e2d9c8519f6c4c01"
+}
