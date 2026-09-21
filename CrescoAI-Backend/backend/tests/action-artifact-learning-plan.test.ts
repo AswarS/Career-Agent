@@ -149,6 +149,40 @@ async function writeSkillPlan(
 }
 
 describe('LearningPlan Action artifact publication', () => {
+  test('normalizes null optional planning constraints instead of rejecting publication', async () => {
+    const workspaceDir = await createWorkspace()
+    await writeSkillPlan(workspaceDir, {
+      ...skillPlan,
+      planning_constraints: {
+        ...skillPlan.planning_constraints,
+        resource_constraints: null,
+        explicit_goals: null,
+        notes: null,
+      },
+    })
+
+    const publication = await publishActionArtifact({
+      completion: successCompletion({
+        artifact: {
+          type: 'LearningPlan',
+          path: PLAN_FILE_NAME,
+          format: 'json',
+          schema_version: '1.0',
+        },
+      }),
+      adapter: createLearningPlanArtifactAdapter(workspaceDir),
+      workspaceDir,
+      sessionId: 'session-1',
+      userId: 'user-1',
+    })
+
+    expect(publication?.status).toBe('ready')
+    const canonical = JSON.parse(
+      await readFile(publication!.canonical_path!, 'utf8'),
+    )
+    expect(canonical.plan.planning_constraints.resource_constraints).toBeUndefined()
+  })
+
   test('reads the skill-written plan, publishes a rendered HTML view, and a discoverable manifest', async () => {
     const workspaceDir = await createWorkspace()
     await writeSkillPlan(workspaceDir, skillPlan)

@@ -39,7 +39,10 @@ let initializePromise: Promise<void> | null = null;
 let threadLoadRequestToken = 0;
 let artifactRefreshRequestToken = 0;
 const INTERACTIVE_TOOL_HISTORY_POLL_INTERVAL_MS = 750;
-const INTERACTIVE_TOOL_HISTORY_POLL_ATTEMPTS = 120;
+// History recovery is the only continuation channel when the SSE connection
+// drops while a question is pending, and the resumed turn can involve several
+// tool calls, so allow several minutes instead of ~90s.
+const INTERACTIVE_TOOL_HISTORY_POLL_ATTEMPTS = 400;
 const INTERACTIVE_TOOL_STREAM_SETTLE_INTERVAL_MS = 100;
 
 function createMessageId(prefix: string) {

@@ -6,6 +6,19 @@ import { CAREER_AGENT_API_ROUTE_PATTERNS } from './careerAgentApiRoutes';
 export type GatewayMonitorRange = '1h' | '24h' | '7d' | '30d' | 'all';
 export interface TokenComponent { key: string; label: string; tokens: number; percentage: number; }
 export interface RequestComponent { key: string; label: string; estimatedTokens: number; calibratedTokens: number; percentage: number; }
+export interface MonitorTrajectoryEntry {
+  index: number;
+  role: string;
+  kind: string;
+  toolName?: string;
+  estimatedTokens: number;
+  contentPreview?: string;
+  toolCalls?: Array<{
+    id?: string;
+    name: string;
+    argumentsPreview: string;
+  }>;
+}
 export interface MonitorRequest {
   requestId: string;
   sessionId: string | null;
@@ -13,6 +26,8 @@ export interface MonitorRequest {
   model: string | null;
   outcome: string;
   status: number | null;
+  errorName: string | null;
+  errorMessage: string | null;
   durationMs: number;
   promptTokens: number;
   completionTokens: number;
@@ -25,6 +40,7 @@ export interface MonitorRequest {
   messageCount: number;
   toolDefinitionCount: number;
   components: RequestComponent[];
+  trajectory: MonitorTrajectoryEntry[];
   largestToolDefinitions: Array<{ name: string; estimatedTokens: number }>;
 }
 export interface MonitorSession {
@@ -72,6 +88,21 @@ export interface GatewayMonitorSummary {
   requests: MonitorRequest[];
 }
 
+const gatewayMonitorHttpClient = axios.create({
+  baseURL: runtimeConfig.apiBaseUrl ?? undefined,
+  withCredentials: runtimeConfig.upstreamWithCredentials,
+  headers: { Accept: 'application/json' },
+});
+
+gatewayMonitorHttpClient.interceptors.request.use((config) => {
+  const session = readStoredAuthSession();
+  if (session?.accessToken) {
+    config.headers = AxiosHeaders.from(config.headers);
+    config.headers.set('Authorization', `${session.tokenType || 'Bearer'} ${session.accessToken}`);
+  }
+  return config;
+});
+
 export async function getGatewayMonitorSummary(input: {
   range: GatewayMonitorRange;
   sessionId?: string;
@@ -80,22 +111,16 @@ export async function getGatewayMonitorSummary(input: {
   if (runtimeConfig.clientMode !== 'upstream' || !runtimeConfig.apiBaseUrl) {
     throw new Error('Token 监控需要在 upstream 模式下使用。');
   }
-  const client = axios.create({
-    baseURL: runtimeConfig.apiBaseUrl,
-    withCredentials: runtimeConfig.upstreamWithCredentials,
-    headers: { Accept: 'application/json' },
-  });
-  client.interceptors.request.use((config) => {
-    const session = readStoredAuthSession();
-    if (session?.accessToken) {
-      config.headers = AxiosHeaders.from(config.headers);
-      config.headers.set('Authorization', `${session.tokenType || 'Bearer'} ${session.accessToken}`);
-    }
-    return config;
-  });
-  const response = await client.get<GatewayMonitorSummary>(
+  const response = await gatewayMonitorHttpClient.get<GatewayMonitorSummary>(
     CAREER_AGENT_API_ROUTE_PATTERNS.gatewayMonitorSummary,
-    { params: { range: input.range, sessionId: input.sessionId?.trim() || undefined, limit: input.limit ?? 100 } },
+    {
+      headers: { 'Cache-Control': 'no-cache' },
+      params: {
+        range: input.range,
+        sessionId: input.sessionId?.trim() || undefined,
+        limit: input.limit ?? 100,
+      },
+    },
   );
   return response.data;
 }

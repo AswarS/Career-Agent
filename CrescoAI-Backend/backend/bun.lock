@@ -67,7 +67,7 @@
         "p-map": "*",
         "pdfjs-dist": "^6.3.289",
         "picomatch": "*",
-        "playwright": "*",
+        "playwright": "1.62.1",
         "proper-lockfile": "*",
         "qrcode": "*",
         "react": "*",

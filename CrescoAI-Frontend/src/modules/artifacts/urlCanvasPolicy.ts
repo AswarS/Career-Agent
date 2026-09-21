@@ -22,7 +22,9 @@ export function resolveTrustedCanvasOrigins(options: {
         origins.push(origin);
       }
     } catch {
-      // Invalid base URL — keep the configured list only.
+      // Invalid or root-relative base ("/"). A same-origin base adds nothing:
+      // resolveTrustedCanvasUrl already trusts currentOrigin, and assets served
+      // through it are absolutized to that same origin.
     }
   }
   return origins;

@@ -1,5 +1,6 @@
 import type { ChildProcess, ExecFileException } from 'child_process'
 import { execFile, spawn } from 'child_process'
+import { existsSync } from 'fs'
 import memoize from 'lodash-es/memoize.js'
 import { homedir } from 'os'
 import * as path from 'path'
@@ -28,20 +29,30 @@ type RipgrepConfig = {
   argv0?: string
 }
 
+export function selectRipgrepSource(options: {
+  preferSystem: boolean
+  systemAvailable: boolean
+  bundledAvailable: boolean
+}): 'system' | 'builtin' | 'unavailable' {
+  if (options.preferSystem && options.systemAvailable) return 'system'
+  if (options.bundledAvailable) return 'builtin'
+  if (options.systemAvailable) return 'system'
+  return 'unavailable'
+}
+
 const getRipgrepConfig = memoize((): RipgrepConfig => {
   const userWantsSystemRipgrep = isEnvDefinedFalsy(
     process.env.USE_BUILTIN_RIPGREP,
   )
+  const { cmd: systemPath } = findExecutable('rg', [])
+  const systemAvailable = systemPath !== 'rg'
 
   // Try system ripgrep if user wants it
-  if (userWantsSystemRipgrep) {
-    const { cmd: systemPath } = findExecutable('rg', [])
-    if (systemPath !== 'rg') {
-      // SECURITY: Use command name 'rg' instead of systemPath to prevent PATH hijacking
-      // If we used systemPath, a malicious ./rg.exe in current directory could be executed
-      // Using just 'rg' lets the OS resolve it safely with NoDefaultCurrentDirectoryInExePath protection
-      return { mode: 'system', command: 'rg', args: [] }
-    }
+  if (userWantsSystemRipgrep && systemAvailable) {
+    // SECURITY: Use command name 'rg' instead of systemPath to prevent PATH hijacking
+    // If we used systemPath, a malicious ./rg.exe in current directory could be executed
+    // Using just 'rg' lets the OS resolve it safely with NoDefaultCurrentDirectoryInExePath protection
+    return { mode: 'system', command: 'rg', args: [] }
   }
 
   // In bundled (native) mode, ripgrep is statically compiled into bun-internal
@@ -60,6 +71,21 @@ const getRipgrepConfig = memoize((): RipgrepConfig => {
     process.platform === 'win32'
       ? path.resolve(rgRoot, `${process.arch}-win32`, 'rg.exe')
       : path.resolve(rgRoot, `${process.arch}-${process.platform}`, 'rg')
+
+  const source = selectRipgrepSource({
+    preferSystem: userWantsSystemRipgrep,
+    systemAvailable,
+    bundledAvailable: existsSync(command),
+  })
+
+  if (source === 'system') {
+    return { mode: 'system', command: 'rg', args: [] }
+  }
+  if (source === 'unavailable') {
+    throw new Error(
+      `ripgrep is unavailable: bundled executable not found at ${command} and no system rg was found in PATH`,
+    )
+  }
 
   return { mode: 'builtin', command, args: [] }
 })

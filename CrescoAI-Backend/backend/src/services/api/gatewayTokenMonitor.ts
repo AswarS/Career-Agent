@@ -3,6 +3,8 @@ import { createHash } from 'node:crypto'
 import { join, resolve } from 'node:path'
 
 type JsonRecord = Record<string, unknown>
+const TRAJECTORY_PREVIEW_LIMIT = 1_600
+const TRAJECTORY_ENTRY_LIMIT = 120
 
 export interface GatewayMonitorContext {
   requestId: string
@@ -31,6 +33,19 @@ export interface GatewayRequestBreakdown {
     kind: string
     toolName?: string
     estimatedTokens: number
+  }>
+  trajectory: Array<{
+    index: number
+    role: string
+    kind: string
+    toolName?: string
+    estimatedTokens: number
+    contentPreview?: string
+    toolCalls?: Array<{
+      id?: string
+      name: string
+      argumentsPreview: string
+    }>
   }>
   shapeHash: string
 }
@@ -100,6 +115,16 @@ function functionName(tool: JsonRecord): string {
   return typeof fn?.name === 'string' && fn.name ? fn.name : 'unknown_tool'
 }
 
+function previewValue(value: unknown, limit = TRAJECTORY_PREVIEW_LIMIT): string {
+  let text: string
+  try {
+    text = typeof value === 'string' ? value : JSON.stringify(value ?? '')
+  } catch {
+    text = String(value ?? '')
+  }
+  return text.length > limit ? `${text.slice(0, limit)}…` : text
+}
+
 export function analyzeGatewayRequest(request: JsonRecord): GatewayRequestBreakdown {
   let systemTokens = 0
   let userMessageTokens = 0
@@ -108,6 +133,7 @@ export function analyzeGatewayRequest(request: JsonRecord): GatewayRequestBreakd
   let toolResultTokens = 0
   let otherTokens = 0
   const messages: GatewayRequestBreakdown['messages'] = []
+  const trajectory: GatewayRequestBreakdown['trajectory'] = []
   const toolNameByCallId = new Map<string, string>()
 
   for (const [index, value] of (Array.isArray(request.messages) ? request.messages : []).entries()) {
@@ -117,11 +143,19 @@ export function analyzeGatewayRequest(request: JsonRecord): GatewayRequestBreakd
     const callTokens = Array.isArray(value.tool_calls)
       ? estimateGatewayTokens(value.tool_calls)
       : 0
+    const toolCalls: NonNullable<GatewayRequestBreakdown['trajectory'][number]['toolCalls']> = []
     if (Array.isArray(value.tool_calls)) {
       for (const rawCall of value.tool_calls) {
         if (!isRecord(rawCall)) continue
         const id = typeof rawCall.id === 'string' ? rawCall.id : ''
-        if (id) toolNameByCallId.set(id, functionName(rawCall))
+        const name = functionName(rawCall)
+        if (id) toolNameByCallId.set(id, name)
+        const fn = isRecord(rawCall.function) ? rawCall.function : null
+        toolCalls.push({
+          ...(id ? { id } : {}),
+          name,
+          argumentsPreview: previewValue(fn?.arguments ?? ''),
+        })
       }
     }
 
@@ -151,6 +185,16 @@ export function analyzeGatewayRequest(request: JsonRecord): GatewayRequestBreakd
       kind,
       ...(toolName ? { toolName } : {}),
       estimatedTokens: contentTokens + callTokens,
+    })
+    const contentPreview = previewValue(value.content ?? '')
+    trajectory.push({
+      index,
+      role,
+      kind,
+      ...(toolName ? { toolName } : {}),
+      estimatedTokens: contentTokens + callTokens,
+      ...(contentPreview ? { contentPreview } : {}),
+      ...(toolCalls.length ? { toolCalls } : {}),
     })
   }
 
@@ -195,6 +239,7 @@ export function analyzeGatewayRequest(request: JsonRecord): GatewayRequestBreakd
     messages: [...messages]
       .sort((left, right) => right.estimatedTokens - left.estimatedTokens)
       .slice(0, 30),
+    trajectory: trajectory.slice(-TRAJECTORY_ENTRY_LIMIT),
     shapeHash,
   }
 }
@@ -227,7 +272,7 @@ export async function recordGatewayRequest(
   })
 }
 
-function responseUsage(value: unknown): JsonRecord | null {
+export function normalizeGatewayUsage(value: unknown): JsonRecord | null {
   const usage = isRecord(value) ? value : null
   if (!usage) return null
   const promptDetails = isRecord(usage.prompt_tokens_details)
@@ -236,12 +281,14 @@ function responseUsage(value: unknown): JsonRecord | null {
   const completionDetails = isRecord(usage.completion_tokens_details)
     ? usage.completion_tokens_details
     : null
+  const inputTokens = Number(usage.prompt_tokens ?? usage.input_tokens ?? 0)
+  const outputTokens = Number(usage.completion_tokens ?? usage.output_tokens ?? 0)
   return {
-    prompt_tokens: Number(usage.prompt_tokens ?? 0),
-    completion_tokens: Number(usage.completion_tokens ?? 0),
+    prompt_tokens: inputTokens,
+    completion_tokens: outputTokens,
     total_tokens: Number(
       usage.total_tokens ??
-      (Number(usage.prompt_tokens ?? 0) + Number(usage.completion_tokens ?? 0)),
+      (inputTokens + outputTokens),
     ),
     cached_tokens: Number(promptDetails?.cached_tokens ?? 0),
     reasoning_tokens: Number(completionDetails?.reasoning_tokens ?? 0),
@@ -269,7 +316,10 @@ export async function recordGatewayResponse(
     status: input.status,
     outcome: input.outcome,
     duration_ms: Date.now() - context.startedAt,
-    usage: responseUsage(input.usage),
+    usage: normalizeGatewayUsage(input.usage),
     error_name: input.error instanceof Error ? input.error.name : null,
+    error_message: input.error ? previewValue(
+      input.error instanceof Error ? input.error.message : input.error,
+    ) : null,
   })
 }

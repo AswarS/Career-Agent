@@ -4,7 +4,12 @@ import path from "node:path";
 const playwrightModule = process.env.WEB_APP_PLAYWRIGHT_MODULE
   ? await import(process.env.WEB_APP_PLAYWRIGHT_MODULE)
   : await import("playwright");
-const { chromium } = playwrightModule;
+// Node exposes the CommonJS Playwright package below `default`, while Bun
+// exposes its named exports directly. Support both because the backend uses
+// Bun but browser automation must run under Node on Windows.
+const { chromium } = playwrightModule.chromium
+  ? playwrightModule
+  : playwrightModule.default;
 
 function parseArgs(argv) {
   const args = {

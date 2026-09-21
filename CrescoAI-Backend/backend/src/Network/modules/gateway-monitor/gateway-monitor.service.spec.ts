@@ -145,6 +145,34 @@ describe('GatewayMonitorService aggregation', () => {
     });
   });
 
+  test('keeps failed responses with reported usage out of successful composition', () => {
+    const timestamp = '2026-09-03T12:00:00.000Z';
+    const summary = aggregateGatewayMonitorEvents([
+      {
+        event: 'gateway.request', request_id: 'ok', timestamp,
+        breakdown: { estimatedTokens: 100, systemTokens: 100 },
+      },
+      {
+        event: 'gateway.response', request_id: 'ok', timestamp,
+        outcome: 'completed', usage: { prompt_tokens: 100 },
+      },
+      {
+        event: 'gateway.request', request_id: 'failed-with-usage', timestamp,
+        breakdown: { estimatedTokens: 900, toolDefinitionTokens: 900 },
+      },
+      {
+        event: 'gateway.response', request_id: 'failed-with-usage', timestamp,
+        outcome: 'http_error', status: 429, usage: { prompt_tokens: 900 },
+      },
+    ], { range: 'all', limit: 20, now: Date.parse(timestamp) + 1_000 });
+
+    expect(summary.componentShares).toEqual([
+      { key: 'system', label: 'System Prompt', tokens: 100, percentage: 100 },
+    ]);
+    expect(summary.sessions.find((session) => session.sessionId === 'unattributed')?.componentShares)
+      .toEqual([{ key: 'system', label: 'System Prompt', tokens: 100, percentage: 100 }]);
+  });
+
   test('groups a complete agent loop by session for ablation comparison', () => {
     const timestamp = '2026-09-03T12:00:00.000Z';
     const events = [

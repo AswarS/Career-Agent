@@ -274,13 +274,23 @@ export function createCompactProfileTools(runtime: ProfileToolRuntime): Tool[] {
 }
 
 export function createProductProfileTools(runtime: ProfileToolRuntime): Tool[] {
-  const readInput = lazySchema(() => z.union([
-    z.strictObject({ source: z.literal('product') }),
-    z.strictObject({
-      source: z.literal('relevant'),
-      query: z.string().min(1).max(2_000),
-    }),
-  ]));
+  // Keep the function-argument schema as a root object. Some OpenAI-compatible
+  // providers ignore properties that exist only inside a root `anyOf` (which is
+  // how a Zod union is serialized) and consequently emit an empty `{}` call.
+  // The refinement preserves the conditional query requirement for local
+  // validation without hiding source/query from those providers.
+  const readInput = lazySchema(() => z.strictObject({
+    source: z.enum(['product', 'relevant']),
+    query: z.string().min(1).max(2_000).optional(),
+  }).superRefine((input, context) => {
+    if (input.source === 'relevant' && !input.query) {
+      context.addIssue({
+        code: 'custom',
+        path: ['query'],
+        message: 'query is required when source is relevant',
+      });
+    }
+  }));
   const updateInput = lazySchema(() => z.strictObject({
     fieldKey: z.enum(PROFILE_PRODUCT_FIELD_KEYS),
     operation: z.enum(['set', 'clear', 'add', 'remove']),

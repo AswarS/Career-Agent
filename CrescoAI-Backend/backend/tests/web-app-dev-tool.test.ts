@@ -26,6 +26,7 @@ import { bindTrustedInformationRequest } from '../src/tools/WebAppInformationCol
 import { buildDevelopWebGameChildContext } from '../src/tools/DevelopWebGameTool/DevelopWebGameTool.js'
 import {
   findPlaywrightBrowserExecutable,
+  resolvePlaywrightDriverExecutable,
   validatePlaywrightAppDirectory,
 } from '../src/tools/WebAppPlaywrightTool/WebAppPlaywrightTool.js'
 import { ReturnSkillResultTool } from '../src/tools/ReturnSkillResultTool/ReturnSkillResultTool.js'
@@ -306,6 +307,32 @@ describe('WebAppDev Tool facade', () => {
     await writeFile(newer, 'new', 'utf8')
 
     await expect(findPlaywrightBrowserExecutable([root])).resolves.toBe(newer)
+  })
+
+  test('falls back to an installed system Chromium browser', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'web-app-system-browser-'))
+    temporaryRoots.push(root)
+    const browser = join(root, 'chrome.exe')
+    await writeFile(browser, 'browser', 'utf8')
+
+    await expect(findPlaywrightBrowserExecutable([], [browser])).resolves.toBe(
+      browser,
+    )
+  })
+
+  test('uses Node instead of Bun to drive Playwright on Windows', () => {
+    expect(
+      resolvePlaywrightDriverExecutable(
+        'C:\\tools\\bun.exe',
+        'C:\\Program Files\\nodejs\\node.exe',
+      ),
+    ).toBe('C:\\Program Files\\nodejs\\node.exe')
+    expect(
+      resolvePlaywrightDriverExecutable(
+        'C:\\Program Files\\nodejs\\node.exe',
+        'C:\\other\\node.exe',
+      ),
+    ).toBe('C:\\Program Files\\nodejs\\node.exe')
   })
 
   test('accepts a delivered app only when entry and manifest are valid', async () => {

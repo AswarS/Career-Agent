@@ -1,11 +1,11 @@
 import type { ConversationMemoryWriteMode } from './conversationMemoryTypes.js'
 
-function isExplicitlyFalse(value: string | undefined): boolean {
-  return value !== undefined && /^(0|false|off|no)$/i.test(value.trim())
+function isExplicitlyTrue(value: string | undefined): boolean {
+  return value !== undefined && /^(1|true|on|yes)$/i.test(value.trim())
 }
 
 export function isConversationMemoryEnabled(): boolean {
-  return !isExplicitlyFalse(
+  return isExplicitlyTrue(
     process.env.CAREER_AGENT_CONVERSATION_MEMORY_ENABLED,
   )
 }

@@ -55,6 +55,22 @@ describe('resolveRuntimeConfig', () => {
     });
   });
 
+  it('normalizes a same-origin base to a root-relative one', () => {
+    const upstream = { VITE_CAREER_AGENT_CLIENT_MODE: 'upstream' };
+
+    for (const value of ['.', '/', './', ' / ']) {
+      const config = resolveRuntimeConfig({
+        ...upstream,
+        VITE_CAREER_AGENT_API_BASE_URL: value,
+      });
+
+      // A page-relative base resolves against the current SPA route and would
+      // turn /api/... into /threads/api/... .
+      expect(config.apiBaseUrl).toBe('/');
+      expect(config.upstreamConfigured).toBe(true);
+    }
+  });
+
   it('enables skipAuth when the flag is set', () => {
     const config = resolveRuntimeConfig({ VITE_CAREER_AGENT_SKIP_AUTH: 'true' });
     expect(config.skipAuth).toBe(true);

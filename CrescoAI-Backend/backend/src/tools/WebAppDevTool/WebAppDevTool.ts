@@ -13,6 +13,7 @@ import { lazySchema } from '../../utils/lazySchema.js'
 import type { SkillToolProgress } from '../../types/tools.js'
 import { createWebAppLoadSkillTool } from '../WebAppLoadSkillTool/WebAppLoadSkillTool.js'
 import {
+  checkWebAppPlaywrightAvailability,
   createWebAppPlaywrightTool,
   runWebAppPlaywrightVerification,
 } from '../WebAppPlaywrightTool/WebAppPlaywrightTool.js'
@@ -488,6 +489,12 @@ export const WebAppDevTool = buildTool({
     if (!runtime?.workspaceDir) {
       throw new Error(
         'MISSING_WEB_APP_WORKSPACE: a trusted workspace is required',
+      )
+    }
+    const playwrightAvailability = await checkWebAppPlaywrightAvailability()
+    if (!playwrightAvailability.available) {
+      throw new Error(
+        `WEB_APP_VERIFICATION_UNAVAILABLE: ${playwrightAvailability.code}: ${playwrightAvailability.diagnostics} Do not bypass verification by regenerating the app with file tools.`,
       )
     }
     const stagingDirectory = createWebAppStagingDirectory(runtime.workspaceDir)

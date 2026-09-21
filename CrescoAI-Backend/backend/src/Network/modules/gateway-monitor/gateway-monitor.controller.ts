@@ -1,4 +1,4 @@
-import { Controller, Get, Query, Req } from '@nestjs/common';
+import { Controller, Get, Header, Query, Req } from '@nestjs/common';
 import type { Request } from 'express';
 import { GatewayMonitorService } from './gateway-monitor.service.js';
 
@@ -7,6 +7,7 @@ export class GatewayMonitorController {
   constructor(private readonly gatewayMonitorService: GatewayMonitorService) {}
 
   @Get('summary')
+  @Header('Cache-Control', 'no-store')
   summary(
     @Req() req: Request,
     @Query('range') range?: string,

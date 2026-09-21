@@ -102,7 +102,7 @@ export async function prepareConversationMemoryTurn(
 
   const obligation =
     context.conversationMemoryTurn.writeMode === 'required'
-      ? 'This update is required before you finish the turn. Complete the user-facing answer first, then wait for the internal checkpoint reminder before using Edit or Write for this checkpoint.'
+      ? 'This update is required before you finish the turn. Complete the user-facing answer first, then wait for the internal checkpoint reminder before replacing the summary with one complete Write.'
       : 'Update it when the request creates or changes durable session information.'
 
   return [
@@ -123,7 +123,7 @@ export async function prepareConversationMemoryTurn(
     `Exact transcript file (Read only): ${layout.transcriptPath}`,
     obligation,
     'For exact details from another recalled session, first Read its internal source locator, then take the transcript_file value and Read that direct file from the same user transcript directory. Never guess another user directory.',
-    'Use the existing Read tool for exact details. During checkpoint maintenance, use existing Edit or Write to update only the writable summary file.',
+    'Use the existing Read tool for exact details. During checkpoint maintenance, replace only the writable summary file with one complete Write. Do not split the checkpoint across Edit calls.',
     'Perform the checkpoint update silently. Do not narrate the memory maintenance or include it in the user-facing answer.',
     'Preserve YAML fields, increment revision, set last_processed_turn to the current turn id, set updated_at, and organize durable facts beneath level-two topic headings chosen by you.',
     'Summarize decisions, constraints, results, unresolved items, and useful references. Do not copy secrets, raw chain-of-thought, or the full transcript.',
@@ -162,7 +162,7 @@ export async function getConversationMemoryStopBlocker(
   return [
     CONVERSATION_MEMORY_REMINDER_MARKER,
     'Conversation-memory checkpoint is incomplete.',
-    `Before ending this turn, Read and update ${turn.sessionSummaryPath} with Edit or Write.`,
+    `Before ending this turn, Read ${turn.sessionSummaryPath}, then replace it with one complete Write.`,
     `Set last_processed_turn to ${turn.requiredTurnId}, increment revision, update updated_at, and retain the required H1 transcript filename plus agent-chosen H2 topics.`,
     'Do not change Profile Memory, Auto Memory, MEMORY.md, daily, state, or index files.',
   ].join(' ')

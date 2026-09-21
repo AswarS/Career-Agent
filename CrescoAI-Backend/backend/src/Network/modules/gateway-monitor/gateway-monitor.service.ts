@@ -121,7 +121,8 @@ export function aggregateGatewayMonitorEvents(
     const calibration = promptTokens > 0 && estimatedPromptTokens > 0
       ? promptTokens / estimatedPromptTokens
       : 1;
-    const hasActualUsage = promptTokens > 0;
+    const isCompleted = response?.outcome === 'completed';
+    const hasBilledUsage = isCompleted && promptTokens > 0;
     const components = componentDefinitions.map(([key, label, field]) => {
       const estimatedTokens = numberValue(breakdown[field]);
       const calibratedTokens = Math.round(estimatedTokens * calibration);
@@ -129,7 +130,7 @@ export function aggregateGatewayMonitorEvents(
         key,
         (attemptedComponentTotals.get(key) ?? 0) + estimatedTokens,
       );
-      if (hasActualUsage) {
+      if (hasBilledUsage) {
         componentTotals.set(key, (componentTotals.get(key) ?? 0) + calibratedTokens);
       }
       return { key, label, estimatedTokens, calibratedTokens, percentage: 0 };
@@ -143,7 +144,7 @@ export function aggregateGatewayMonitorEvents(
 
     for (const tool of Array.isArray(breakdown.toolDefinitions) ? breakdown.toolDefinitions : []) {
       if (typeof tool?.name !== 'string') continue;
-      if (hasActualUsage) {
+      if (hasBilledUsage) {
         const current = toolTotals.get(tool.name) ?? { tokens: 0, requests: 0 };
         current.tokens += Math.round(numberValue(tool.estimatedTokens) * calibration);
         current.requests += 1;
@@ -177,6 +178,8 @@ export function aggregateGatewayMonitorEvents(
       stream: request.stream === true,
       outcome: response?.outcome ?? 'pending',
       status: response?.status ?? null,
+      errorName: response?.error_name ?? null,
+      errorMessage: response?.error_message ?? null,
       durationMs: numberValue(response?.duration_ms),
       promptTokens,
       completionTokens,
@@ -193,6 +196,7 @@ export function aggregateGatewayMonitorEvents(
       components,
       largestMessages: breakdown.messages ?? [],
       largestToolDefinitions: breakdown.toolDefinitions ?? [],
+      trajectory: breakdown.trajectory ?? breakdown.messages ?? [],
     };
   }).sort((left, right) => {
     const leftValue = left.totalTokens || left.estimatedPromptTokens;
@@ -298,7 +302,7 @@ export function aggregateGatewayMonitorEvents(
         component.key,
         (current.attemptedComponentTotals.get(component.key) ?? 0) + component.estimatedTokens,
       );
-      if (row.promptTokens > 0) {
+      if (row.outcome === 'completed' && row.promptTokens > 0) {
         current.componentTotals.set(
           component.key,
           (current.componentTotals.get(component.key) ?? 0) + component.calibratedTokens,

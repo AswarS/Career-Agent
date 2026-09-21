@@ -19,6 +19,7 @@ import { ProfileProductProjectionService } from '../src/Network/modules/profile/
 import { ProfileRecallService } from '../src/Network/modules/profile/profile-recall.service.js';
 import { createProfileRefreshTools } from '../src/Network/modules/profile/profile-refresh.tools.js';
 import { createProductProfileTools } from '../src/Network/modules/profile/profile.tools.js';
+import { zodToJsonSchema } from '../src/utils/zodToJsonSchema.js';
 import type { ProfileProjectionService } from '../src/Network/modules/profile/profile-projection.service.js';
 import { createDefaultProfile } from '../src/Network/modules/profile/profile.types.js';
 import { ProfileV2Service } from '../src/Network/modules/profile/profile-v2.service.js';
@@ -330,6 +331,8 @@ describe('Profile V2 snapshot integration', () => {
   });
 
   test('Profile recall does not open nested SQLite initialization transactions', async () => {
+    const previousRecallFlag = process.env.CAREER_AGENT_PROFILE_V2_RECALL;
+    process.env.CAREER_AGENT_PROFILE_V2_RECALL = 'true';
     const dataSource = await createTestDataSource();
     const user = await createUser(dataSource, 'Recall user');
     const service = profileV2Service(dataSource);
@@ -337,10 +340,18 @@ describe('Profile V2 snapshot integration', () => {
       list: async () => [],
     } as unknown as ProfileMemoryService);
 
-    await expect(recall.buildContext(user.id, '帮我做职业规划')).resolves.toMatchObject({
-      version: 1,
-      queryIntent: 'career_planning',
-    });
+    try {
+      await expect(recall.buildContext(user.id, '帮我做职业规划')).resolves.toMatchObject({
+        version: 1,
+        queryIntent: 'career_planning',
+      });
+    } finally {
+      if (previousRecallFlag === undefined) {
+        delete process.env.CAREER_AGENT_PROFILE_V2_RECALL;
+      } else {
+        process.env.CAREER_AGENT_PROFILE_V2_RECALL = previousRecallFlag;
+      }
+    }
   });
 
   test('Product Profile education fields update the existing education JSON', async () => {
@@ -459,6 +470,39 @@ describe('Profile V2 snapshot integration', () => {
       .toBe('product-profile-refresh');
     expect(refresh.find((tool) => tool.name === 'profile_update')?.schemaCacheNamespace)
       .toBe('product-profile-refresh');
+  });
+
+  test('product profile read exposes root properties to OpenAI-compatible providers', () => {
+    const tools = createProductProfileTools({
+      userId: 1,
+      conversationId: 'conversation',
+      baseService: {} as ProfileV2Service,
+      memoryService: {} as ProfileMemoryService,
+      proposalService: {} as never,
+      productProjectionService: {} as ProfileProductProjectionService,
+      productMutationService: {} as ProfileProductMutationService,
+    });
+    const readTool = tools.find((tool) => tool.name === 'profile_read');
+
+    expect(readTool).toBeDefined();
+    const schema = zodToJsonSchema(readTool!.inputSchema) as {
+      type?: string;
+      properties?: Record<string, unknown>;
+      required?: string[];
+      anyOf?: unknown;
+    };
+    expect(schema.type).toBe('object');
+    expect(schema.properties).toHaveProperty('source');
+    expect(schema.properties).toHaveProperty('query');
+    expect(schema.required).toContain('source');
+    expect(schema.anyOf).toBeUndefined();
+    expect(readTool!.inputSchema.safeParse({ source: 'product' }).success).toBe(true);
+    expect(readTool!.inputSchema.safeParse({
+      source: 'relevant',
+      query: 'build an SFT practice web app',
+    }).success).toBe(true);
+    expect(readTool!.inputSchema.safeParse({ source: 'relevant' }).success).toBe(false);
+    expect(readTool!.inputSchema.safeParse({}).success).toBe(false);
   });
 
   test('two concurrent first snapshots both succeed', async () => {

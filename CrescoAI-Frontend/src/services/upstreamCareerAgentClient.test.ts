@@ -436,4 +436,28 @@ describe('createUpstreamCareerAgentClient', () => {
 
     await expect(client.updateProfile(sanitizeProfileRecord({}))).rejects.toThrow('code=PROFILE_VALIDATION_FAILED, request_id=req-123');
   });
+
+  it('keeps a same-origin stream request root-relative so deep SPA routes stay proxied', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: {
+        getReader: () => ({
+          read: async () => ({ value: undefined, done: true }),
+        }),
+      },
+    } as unknown as Response);
+    const client = createUpstreamCareerAgentClient({
+      baseUrl: '/',
+      userId: '1',
+      httpClient: createHttpClient(vi.fn()),
+    });
+
+    for await (const _event of client.streamMessage!('12', { content: 'hi' })) {
+      // No body events are produced by the stub; only the request URL matters.
+    }
+
+    expect(fetchSpy).toHaveBeenCalledWith('/api/career-agent/threads/12/messages/stream', expect.anything());
+    fetchSpy.mockRestore();
+  });
 });

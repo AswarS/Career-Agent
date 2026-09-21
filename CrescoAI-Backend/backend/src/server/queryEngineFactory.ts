@@ -33,6 +33,7 @@ import { getCareerAgentMemoryRoutingPrompt } from '../Network/prompts/careerAgen
 import { getProfileAgentSystemPrompt } from '../Network/modules/profile/profile-agent.prompt.js'
 import { checkSessionWorkspacePath } from './workspaceSecurity.js'
 import { checkShellCommandWorkspace } from './shellWorkspaceGuard.js'
+import { getPlatform } from '../utils/platform.js'
 
 // ---------------------------------------------------------------------------
 // Per-session AppState
@@ -379,6 +380,16 @@ function waitForToolResponse(
   return new Promise((resolve) => {
     const timeout = setTimeout(() => {
       context.pendingToolResponses.delete(toolUseId)
+      // Once the wait expires, the frontend's answer POST can only fail with a
+      // "no longer waiting" error, so make the expiry visible in the logs.
+      console.warn(
+        '[QueryEngine] Interactive tool response timed out; the pending question was discarded',
+        {
+          sessionId: context.sessionId,
+          toolUseId,
+          timeoutMs: INTERACTIVE_TOOL_RESPONSE_TIMEOUT_MS,
+        },
+      )
       resolve(undefined)
     }, INTERACTIVE_TOOL_RESPONSE_TIMEOUT_MS)
 
@@ -417,7 +428,7 @@ export function createQueryEngineForSession(
 
   // Get the full tool set — this includes Read, Write, Edit, Bash, Glob, Grep, etc.
   // getTools filters based on toolPermissionContext and features.
-  const builtInTools = getTools(toolPermissionContext)
+  const builtInTools = filterNetworkPlatformTools(getTools(toolPermissionContext))
 
   // Merge MCP tools if provided
   const mcpTools = options.mcpTools ?? []
@@ -425,7 +436,9 @@ export function createQueryEngineForSession(
   const extensionTools = [...extraTools, ...mcpTools]
   const tools = options.exactTools
     ?? (extensionTools.length > 0
-      ? assembleToolPool(toolPermissionContext, extensionTools)
+      ? filterNetworkPlatformTools(
+          assembleToolPool(toolPermissionContext, extensionTools),
+        )
       : builtInTools)
   setAppState(prev => ({
     ...prev,
@@ -475,4 +488,12 @@ export function createQueryEngineForSession(
   }
 
   return new QueryEngine(config)
+}
+
+export function filterNetworkPlatformTools(
+  tools: readonly Tool[],
+  platform = getPlatform(),
+): Tool[] {
+  if (platform !== 'windows') return [...tools]
+  return tools.filter((tool) => tool.name !== 'Bash')
 }

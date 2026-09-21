@@ -1,6 +1,6 @@
 {
   "manifest_version": "1.0",
-  "generated_at": "2026-09-14T04:04:29.316Z",
+  "generated_at": "2026-09-14T07:05:51.373Z",
   "source_revision": {
     "branch": "<unknown>",
     "commit": "<unknown>",
@@ -14037,40 +14037,25 @@
       "search_hint": "read the authenticated user product career and education profile",
       "input_schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "source": {
-                "type": "string",
-                "const": "product"
-              }
-            },
-            "required": [
-              "source"
-            ],
-            "additionalProperties": false
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "product",
+              "relevant"
+            ]
           },
-          {
-            "type": "object",
-            "properties": {
-              "source": {
-                "type": "string",
-                "const": "relevant"
-              },
-              "query": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 2000
-              }
-            },
-            "required": [
-              "source",
-              "query"
-            ],
-            "additionalProperties": false
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
           }
-        ]
+        },
+        "required": [
+          "source"
+        ],
+        "additionalProperties": false
       },
       "output_schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -14118,7 +14103,7 @@
         "file": "CrescoAI-Backend/backend/src/Network/modules/profile/profile.tools.ts",
         "export": "createProfileTools"
       },
-      "schema_hash": "sha256:e560153600ccc138a0eda433d622b1ef06dcc535b1537642518d289a6525208c"
+      "schema_hash": "sha256:b80f3c14d50f5596b0b52cbd9e032a9bbdc1a5eb43643e1a40d86fb9dd24161d"
     },
     {
       "id": "network.conversation:harness_tool:profile_update:product-profile-interactive",

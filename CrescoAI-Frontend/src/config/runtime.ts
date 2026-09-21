@@ -36,11 +36,21 @@ function normalizeClientMode(value: string | undefined): CareerAgentClientMode {
   return value === 'upstream' ? 'upstream' : 'mock';
 }
 
+// "." , "./" and "/" all mean "same origin, go through the dev proxy". They are
+// normalized to a root-relative base because a page-relative base is resolved
+// against the *current* URL: on a deep SPA route such as /threads/abc, "./api/x"
+// resolves to /threads/api/x, which bypasses the proxy and 404s.
+const SAME_ORIGIN_BASE_URL_PATTERN = /^\.?\/?$/;
+
 function normalizeBaseUrl(value: string | undefined): string | null {
   const nextValue = value?.trim();
 
   if (!nextValue) {
     return null;
+  }
+
+  if (SAME_ORIGIN_BASE_URL_PATTERN.test(nextValue)) {
+    return '/';
   }
 
   return nextValue.replace(/\/+$/, '');

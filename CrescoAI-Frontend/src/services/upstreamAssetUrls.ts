@@ -25,8 +25,25 @@ export function resolveUpstreamAssetUrl(
   }
 
   try {
-    return new URL(nextValue, config.apiBaseUrl).toString();
+    return new URL(nextValue, resolveAssetBaseUrl(config.apiBaseUrl)).toString();
   } catch {
     return nextValue;
+  }
+}
+
+/**
+ * `new URL(value, base)` rejects a root-relative base such as "/", so anchor the
+ * base to the document origin first. Without this, a same-origin upstream (dev
+ * proxy) would leave generated-app URLs relative to the current SPA route.
+ */
+function resolveAssetBaseUrl(baseUrl: string) {
+  if (typeof window === 'undefined') {
+    return baseUrl;
+  }
+
+  try {
+    return new URL(baseUrl, window.location.origin).toString();
+  } catch {
+    return baseUrl;
   }
 }

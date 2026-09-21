@@ -953,6 +953,15 @@ export class ConversationService implements OnModuleInit {
     };
   }
 
+  /**
+   * True while the conversation is blocked on a user-interactive tool.
+   * The SSE handler uses this to avoid aborting a turn that is waiting on a
+   * human rather than on the network.
+   */
+  hasPendingInteractiveTool(conversationId: string): boolean {
+    return this.agentService.hasPendingInteractiveTool(conversationId);
+  }
+
   async respondToInteractiveTool(
     conversationId: string,
     toolUseId: string,

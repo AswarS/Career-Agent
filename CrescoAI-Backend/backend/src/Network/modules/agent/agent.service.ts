@@ -643,15 +643,7 @@ export class AgentService {
     const externalAbort = () => ctx.abortController.abort();
     input.abortSignal?.addEventListener('abort', externalAbort, { once: true });
 
-    const previous = {
-      apiKey: process.env.ANTHROPIC_API_KEY,
-      baseUrl: process.env.ANTHROPIC_BASE_URL,
-      model: process.env.ANTHROPIC_MODEL,
-    };
     try {
-      if (saved?.apiKey) process.env.ANTHROPIC_API_KEY = saved.apiKey;
-      if (saved?.baseUrl) process.env.ANTHROPIC_BASE_URL = saved.baseUrl;
-      if (saved?.model) process.env.ANTHROPIC_MODEL = saved.model;
       await runWithSessionContext(ctx, async () => {
         const queryEngine = createQueryEngineForSession(ctx, {
           initialMessages: [],
@@ -673,15 +665,7 @@ export class AgentService {
       input.abortSignal?.removeEventListener('abort', externalAbort);
       ctx.abortController.abort();
       ctx.queryEngine = null;
-      this.restoreEnvironment('ANTHROPIC_API_KEY', previous.apiKey);
-      this.restoreEnvironment('ANTHROPIC_BASE_URL', previous.baseUrl);
-      this.restoreEnvironment('ANTHROPIC_MODEL', previous.model);
     }
-  }
-
-  private restoreEnvironment(name: string, value: string | undefined) {
-    if (value === undefined) delete process.env[name];
-    else process.env[name] = value;
   }
 
   async runIsolatedPrompt(input: {
@@ -915,6 +899,20 @@ export class AgentService {
     }
   }
 
+  /**
+   * True while the conversation runtime is blocked on a user-interactive tool
+   * (e.g. AskUserQuestion) and is waiting for the frontend to submit an answer.
+   *
+   * Callers use this to keep the runtime alive across transport hiccups: the
+   * wait depends on a human, not on the network, so dropping the SSE connection
+   * must not abort the turn.
+   */
+  hasPendingInteractiveTool(conversationId: string): boolean {
+    return (
+      (this.sessionContexts.get(conversationId)?.pendingToolResponses.size ?? 0) > 0
+    );
+  }
+
   /** Resolve an interactive tool invocation for the active conversation session. */
   async respondToInteractiveTool(
     conversationId: string,
@@ -926,6 +924,18 @@ export class AgentService {
     const context = this.sessionContexts.get(conversationId);
     const pending = context?.pendingToolResponses.get(toolUseId);
     if (!pending) {
+      // A rejected answer is indistinguishable from a stale one at the HTTP
+      // layer, so record the runtime state that produced the rejection.
+      console.warn(
+        '[AgentService] Rejected interactive tool response for a question that is no longer pending',
+        {
+          conversationId,
+          userId,
+          toolUseId,
+          hasRuntime: Boolean(context),
+          pendingToolUseIds: context ? [...context.pendingToolResponses.keys()] : [],
+        },
+      );
       return false;
     }
 
@@ -1486,27 +1496,7 @@ export class AgentService {
         messageInput.abortSignal.addEventListener('abort', abortHandler, { once: true });
       }
 
-      const prevApiKey = process.env.ANTHROPIC_API_KEY;
-      const prevBaseUrl = process.env.ANTHROPIC_BASE_URL;
-      const prevModel = process.env.ANTHROPIC_MODEL;
-      const prevSmallFastModel = process.env.ANTHROPIC_SMALL_FAST_MODEL;
       const profileTurnPrompt = await this.getProfileTurnPrompt(userId, content);
-
-      if (config.apiKey) {
-        process.env.ANTHROPIC_API_KEY = config.apiKey;
-      }
-      if (config.baseUrl) {
-        process.env.ANTHROPIC_BASE_URL = config.baseUrl;
-      }
-      if (config.model) {
-        process.env.ANTHROPIC_MODEL = config.model;
-        // Haiku-class utility calls (WebFetch content extraction, session
-        // titles, tool-use summaries) resolve their model through
-        // getSmallFastModel(). Point them at the user's configured model so
-        // they inherit the same gateway/model access as the main loop
-        // instead of defaulting to claude-haiku-4-5.
-        process.env.ANTHROPIC_SMALL_FAST_MODEL = config.model;
-      }
 
       const result = await (async () => {
         try {
@@ -1782,26 +1772,6 @@ export class AgentService {
             };
           });
         } finally {
-          if (prevApiKey === undefined) {
-            delete process.env.ANTHROPIC_API_KEY;
-          } else {
-            process.env.ANTHROPIC_API_KEY = prevApiKey;
-          }
-          if (prevBaseUrl === undefined) {
-            delete process.env.ANTHROPIC_BASE_URL;
-          } else {
-            process.env.ANTHROPIC_BASE_URL = prevBaseUrl;
-          }
-          if (prevModel === undefined) {
-            delete process.env.ANTHROPIC_MODEL;
-          } else {
-            process.env.ANTHROPIC_MODEL = prevModel;
-          }
-          if (prevSmallFastModel === undefined) {
-            delete process.env.ANTHROPIC_SMALL_FAST_MODEL;
-          } else {
-            process.env.ANTHROPIC_SMALL_FAST_MODEL = prevSmallFastModel;
-          }
           removeSessionMultimodalConfig(conversationId);
           if (abortHandler && messageInput.abortSignal) {
             messageInput.abortSignal.removeEventListener('abort', abortHandler);
@@ -1917,27 +1887,7 @@ export class AgentService {
       const ctx = this.sessionContexts.get(conversationId)!;
 
       // Run inside ALS context so all module-level helpers route correctly
-      const prevApiKey = process.env.ANTHROPIC_API_KEY
-      const prevBaseUrl = process.env.ANTHROPIC_BASE_URL
-      const prevModel = process.env.ANTHROPIC_MODEL
-      const prevSmallFastModel = process.env.ANTHROPIC_SMALL_FAST_MODEL
       const profileTurnPrompt = await this.getProfileTurnPrompt(userId, content)
-
-      if (config.apiKey) {
-        process.env.ANTHROPIC_API_KEY = config.apiKey
-      }
-      if (config.baseUrl) {
-        process.env.ANTHROPIC_BASE_URL = config.baseUrl
-      }
-      if (config.model) {
-        process.env.ANTHROPIC_MODEL = config.model
-        // Haiku-class utility calls (WebFetch content extraction, session
-        // titles, tool-use summaries) resolve their model through
-        // getSmallFastModel(). Point them at the user's configured model so
-        // they inherit the same gateway/model access as the main loop
-        // instead of defaulting to claude-haiku-4-5.
-        process.env.ANTHROPIC_SMALL_FAST_MODEL = config.model
-      }
 
       const result = await (async () => {
         try {
@@ -2098,26 +2048,6 @@ export class AgentService {
             return { reply, thinking, blocks, model, usage, skillResults, assistantMessageId };
           });
         } finally {
-          if (prevApiKey === undefined) {
-            delete process.env.ANTHROPIC_API_KEY;
-          } else {
-            process.env.ANTHROPIC_API_KEY = prevApiKey;
-          }
-          if (prevBaseUrl === undefined) {
-            delete process.env.ANTHROPIC_BASE_URL;
-          } else {
-            process.env.ANTHROPIC_BASE_URL = prevBaseUrl;
-          }
-          if (prevModel === undefined) {
-            delete process.env.ANTHROPIC_MODEL;
-          } else {
-            process.env.ANTHROPIC_MODEL = prevModel;
-          }
-          if (prevSmallFastModel === undefined) {
-            delete process.env.ANTHROPIC_SMALL_FAST_MODEL;
-          } else {
-            process.env.ANTHROPIC_SMALL_FAST_MODEL = prevSmallFastModel;
-          }
           removeSessionMultimodalConfig(conversationId);
         }
       })();

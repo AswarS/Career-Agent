@@ -243,6 +243,52 @@ export function getConversationMemoryToolPathError(
   return null
 }
 
+export function getConversationMemoryEditPathError(
+  filePath: string,
+): string | null {
+  const turn = getSessionContext()?.conversationMemoryTurn
+  if (
+    !turn?.enabled ||
+    resolve(filePath) !== resolve(turn.sessionSummaryPath)
+  ) {
+    return null
+  }
+  return 'Conversation memory checkpoints must be replaced with one complete Write; Edit is not allowed'
+}
+
+export async function getConversationMemoryPreWriteError(
+  filePath: string,
+  content: string,
+): Promise<string | null> {
+  const contentError = getConversationMemoryToolPathError(filePath, content)
+  if (contentError) return contentError
+
+  const turn = getSessionContext()?.conversationMemoryTurn
+  if (
+    !turn?.enabled ||
+    resolve(filePath) !== resolve(turn.sessionSummaryPath)
+  ) {
+    return null
+  }
+  if (
+    turn.status === 'committed' ||
+    turn.committedTurnId === turn.requiredTurnId
+  ) {
+    return 'Conversation memory checkpoint for this turn is already committed'
+  }
+
+  const parsed = parseConversationMemorySummary(content)
+  const priorState = await readConversationMemoryState(
+    turn.rootDir,
+    turn.conversationId,
+  )
+  const priorRevision = Number(priorState?.revision ?? 0)
+  if (parsed.frontmatter.revision <= priorRevision) {
+    return `Conversation memory revision must be greater than ${priorRevision}`
+  }
+  return null
+}
+
 export function assertConversationMemoryContainsNoSecrets(
   content: string,
 ): void {

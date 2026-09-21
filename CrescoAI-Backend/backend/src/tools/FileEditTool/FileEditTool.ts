@@ -5,6 +5,7 @@ import { checkNativeAutoMemorySecrets } from '../../memdir/autoMemorySecretGuard
 import { commitNativeAutoMemoryTopicWrite } from '../../memdir/autoMemoryWriteLock.js'
 import {
   commitConversationMemorySessionUpdate,
+  getConversationMemoryEditPathError,
   getConversationMemoryToolPathError,
 } from '../../Network/memory/conversationMemoryStorage.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js'
@@ -146,6 +147,16 @@ export const FileEditTool = buildTool({
     // Use expandPath for consistent path normalization (especially on Windows
     // where "/" vs "\" can cause readFileState lookup mismatches)
     const fullFilePath = expandPath(file_path)
+
+    const conversationMemoryEditError =
+      getConversationMemoryEditPathError(fullFilePath)
+    if (conversationMemoryEditError) {
+      return {
+        result: false,
+        message: conversationMemoryEditError,
+        errorCode: 0,
+      }
+    }
 
     const conversationMemoryPathError =
       getConversationMemoryToolPathError(fullFilePath)

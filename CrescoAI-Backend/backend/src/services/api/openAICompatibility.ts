@@ -672,9 +672,16 @@ export function createOpenAICompatibilityFetch(
       throw error
     }
     if (!response.ok) {
+      let responseError = ''
+      try {
+        responseError = await response.clone().text()
+      } catch {
+        // The status and outcome still identify the failed request.
+      }
       await recordGatewayResponse(monitorContext, {
         status: response.status,
         outcome: 'http_error',
+        error: responseError,
       })
       return response
     }

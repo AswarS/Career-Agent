@@ -71,13 +71,37 @@ export class ConversationController {
     const abortController = new AbortController();
     let sequence = 0;
     const abortOnDisconnect = () => {
-      if (!response.writableEnded) {
-        abortController.abort();
+      if (response.writableEnded) {
+        return;
       }
+
+      // An interactive tool (AskUserQuestion) is waiting on a human, not on this
+      // socket. Aborting here would tear down the pending question, so the
+      // answer the user is about to submit would be rejected as "no longer
+      // waiting". Keep the turn alive; the frontend recovers the reply from
+      // conversation history once the answer lands.
+      if (this.conversationService.hasPendingInteractiveTool(conversationId)) {
+        return;
+      }
+
+      abortController.abort();
     };
 
     req.once('aborted', abortOnDisconnect);
     response.once('close', abortOnDisconnect);
+
+    // A long-lived SSE response can outlive its peer. Without a listener, a
+    // write to a reset socket surfaces as an unhandled 'error' event.
+    const onResponseError = (error: Error) => {
+      if (!response.destroyed) {
+        response.destroy();
+      }
+      console.warn(
+        `[ConversationController] SSE response error for conversation ${conversationId}:`,
+        error.message,
+      );
+    };
+    response.on('error', onResponseError);
 
     response.status(200);
     response.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
@@ -121,6 +145,7 @@ export class ConversationController {
       clearInterval(heartbeat);
       req.removeListener('aborted', abortOnDisconnect);
       response.removeListener('close', abortOnDisconnect);
+      response.removeListener('error', onResponseError);
       if (!response.destroyed) {
         response.end();
       }

@@ -6,7 +6,7 @@ import { checkNativeAutoMemorySecrets } from '../../memdir/autoMemorySecretGuard
 import { commitNativeAutoMemoryTopicWrite } from '../../memdir/autoMemoryWriteLock.js'
 import {
   commitConversationMemorySessionUpdate,
-  getConversationMemoryToolPathError,
+  getConversationMemoryPreWriteError,
 } from '../../Network/memory/conversationMemoryStorage.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js'
 import { diagnosticTracker } from '../../services/diagnosticTracking.js'
@@ -160,7 +160,7 @@ export const FileWriteTool = buildTool({
   async validateInput({ file_path, content }, toolUseContext: ToolUseContext) {
     const fullFilePath = expandPath(file_path)
 
-    const conversationMemoryPathError = getConversationMemoryToolPathError(
+    const conversationMemoryPathError = await getConversationMemoryPreWriteError(
       fullFilePath,
       content,
     )

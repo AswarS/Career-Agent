@@ -44,7 +44,8 @@ async function bootstrap() {
   const port = process.env.PORT ?? 4000;
   const host = process.env.HOST?.trim() || '0.0.0.0';
   await app.listen(port, host);
-  console.log(`Server started on http://${host}:${port}`);
+  const displayHost = host === '0.0.0.0' || host === '::' ? '127.0.0.1' : host;
+  console.log(`Server started on http://${displayHost}:${port} (listening on ${host})`);
   const skipAuth = process.env.CAREER_AGENT_SKIP_AUTH?.trim().toLowerCase();
   if (skipAuth === '1' || skipAuth === 'true' || skipAuth === 'yes' || skipAuth === 'on') {
     console.warn(

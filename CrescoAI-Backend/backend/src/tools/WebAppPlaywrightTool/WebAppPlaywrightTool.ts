@@ -13,7 +13,7 @@ import { createServer, type Server } from 'node:http'
 import { createRequire } from 'node:module'
 import { type AddressInfo } from 'node:net'
 import { homedir } from 'node:os'
-import { extname, isAbsolute, join, relative, resolve } from 'node:path'
+import { basename, extname, isAbsolute, join, relative, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { z } from 'zod/v4'
 import {
@@ -24,6 +24,7 @@ import {
 } from '../../Tool.js'
 import { getGlobalSkillRoot } from '../../skills/globalSkillPaths.js'
 import { execFileNoThrowWithCwd } from '../../utils/execFileNoThrow.js'
+import { findExecutable } from '../../utils/findExecutable.js'
 import { lazySchema } from '../../utils/lazySchema.js'
 
 const TOOL_NAME = 'WebAppPlaywright' as const
@@ -231,13 +232,79 @@ function resolvePlaywrightModuleUrl(): string | null {
   }
 }
 
-export async function findPlaywrightBrowserExecutable(
-  searchRoots: readonly string[] = [
+export function resolvePlaywrightDriverExecutable(
+  runtimeExecutable = process.execPath,
+  nodeExecutable = findExecutable('node', []).cmd,
+): string | null {
+  const runtimeName = basename(runtimeExecutable).toLowerCase()
+  if (!runtimeName.startsWith('bun')) return runtimeExecutable
+  return nodeExecutable === 'node' ? null : nodeExecutable
+}
+
+function defaultPlaywrightSearchRoots(): string[] {
+  return [
     ...(process.env.PLAYWRIGHT_BROWSERS_PATH
       ? [process.env.PLAYWRIGHT_BROWSERS_PATH]
       : []),
+    ...(process.env.LOCALAPPDATA
+      ? [join(process.env.LOCALAPPDATA, 'ms-playwright')]
+      : []),
     join(homedir(), '.cache', 'ms-playwright'),
-  ],
+  ]
+}
+
+function defaultSystemChromiumExecutables(): string[] {
+  if (process.platform !== 'win32') return []
+  return [
+    ...(process.env.PROGRAMFILES
+      ? [join(process.env.PROGRAMFILES, 'Google', 'Chrome', 'Application', 'chrome.exe')]
+      : []),
+    ...(process.env['PROGRAMFILES(X86)']
+      ? [
+          join(
+            process.env['PROGRAMFILES(X86)'],
+            'Google',
+            'Chrome',
+            'Application',
+            'chrome.exe',
+          ),
+          join(
+            process.env['PROGRAMFILES(X86)'],
+            'Microsoft',
+            'Edge',
+            'Application',
+            'msedge.exe',
+          ),
+        ]
+      : []),
+    ...(process.env.LOCALAPPDATA
+      ? [
+          join(
+            process.env.LOCALAPPDATA,
+            'Google',
+            'Chrome',
+            'Application',
+            'chrome.exe',
+          ),
+        ]
+      : []),
+    ...(process.env.PROGRAMFILES
+      ? [
+          join(
+            process.env.PROGRAMFILES,
+            'Microsoft',
+            'Edge',
+            'Application',
+            'msedge.exe',
+          ),
+        ]
+      : []),
+  ]
+}
+
+export async function findPlaywrightBrowserExecutable(
+  searchRoots: readonly string[] = defaultPlaywrightSearchRoots(),
+  systemCandidates: readonly string[] = defaultSystemChromiumExecutables(),
 ): Promise<string | undefined> {
   for (const root of searchRoots) {
     const names = await readdir(root).catch(() => [])
@@ -250,6 +317,8 @@ export async function findPlaywrightBrowserExecutable(
       })
     for (const directory of chromiumDirectories) {
       for (const relativeExecutable of [
+        join('chrome-win64', 'chrome.exe'),
+        join('chrome-win', 'chrome.exe'),
         join('chrome-linux64', 'chrome'),
         join('chrome-linux', 'chrome'),
       ]) {
@@ -259,7 +328,47 @@ export async function findPlaywrightBrowserExecutable(
       }
     }
   }
+  for (const candidate of systemCandidates) {
+    const candidateStats = await stat(candidate).catch(() => null)
+    if (candidateStats?.isFile()) return candidate
+  }
   return undefined
+}
+
+export async function checkWebAppPlaywrightAvailability(): Promise<{
+  available: boolean
+  code: string
+  diagnostics: string
+}> {
+  if (!resolvePlaywrightModuleUrl()) {
+    return {
+      available: false,
+      code: 'playwright_not_installed',
+      diagnostics: 'The backend Playwright package is not installed.',
+    }
+  }
+  if (!resolvePlaywrightDriverExecutable()) {
+    return {
+      available: false,
+      code: 'playwright_node_runtime_not_installed',
+      diagnostics:
+        'Playwright browser verification requires Node.js when the backend runs under Bun.',
+    }
+  }
+  const browser = await findPlaywrightBrowserExecutable()
+  if (!browser) {
+    return {
+      available: false,
+      code: 'playwright_browser_not_installed',
+      diagnostics:
+        'No Playwright Chromium download or supported system Chrome/Edge installation was found.',
+    }
+  }
+  return {
+    available: true,
+    code: 'playwright_available',
+    diagnostics: `Browser executable: ${browser}`,
+  }
 }
 
 async function readRunArtifacts(runDirectory: string): Promise<{
@@ -334,6 +443,20 @@ export async function runWebAppPlaywrightVerification(input: {
       exit_code: 1,
     })
   }
+  const driverExecutable = resolvePlaywrightDriverExecutable()
+  if (!driverExecutable) {
+    return outputSchema().parse({
+      status: 'unavailable',
+      code: 'playwright_node_runtime_not_installed',
+      run_directory: runDirectory,
+      screenshots: [],
+      states: [],
+      console_errors: [],
+      diagnostics:
+        'Playwright browser verification requires Node.js when the backend runs under Bun.',
+      exit_code: 1,
+    })
+  }
 
   const appServer = await startStaticAppServer(appDir)
   try {
@@ -356,7 +479,7 @@ export async function runWebAppPlaywrightVerification(input: {
     if (value.click_selector) {
       args.push('--click-selector', value.click_selector)
     }
-    const execution = await execFileNoThrowWithCwd(process.execPath, args, {
+    const execution = await execFileNoThrowWithCwd(driverExecutable, args, {
       cwd: appDir,
       abortSignal: input.context.abortController.signal,
       timeout: 120_000,

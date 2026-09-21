@@ -26,6 +26,13 @@ const goalLevelSchema = z.enum(['working', 'independent', 'advanced']).nullable(
 const confidenceSchema = z.enum(['low', 'medium', 'high'])
 
 const nullableString = z.string().optional().nullable()
+const optionalNullableString = z
+  .string()
+  .trim()
+  .min(1)
+  .optional()
+  .nullable()
+  .transform(value => value ?? undefined)
 
 const learningPlanSchema = z.object({
   schema_version: z.string(),
@@ -36,9 +43,9 @@ const learningPlanSchema = z.object({
   planning_constraints: z.object({
     available_time_per_week: z.string().trim().min(1),
     deadline: z.string().trim().min(1).nullable(),
-    resource_constraints: z.string().trim().min(1).optional(),
-    explicit_goals: z.string().trim().min(1).optional(),
-    notes: z.string().trim().min(1).optional(),
+    resource_constraints: optionalNullableString,
+    explicit_goals: optionalNullableString,
+    notes: optionalNullableString,
   }),
   lineage: z.object({
     model_ref: z.string().nullable(),

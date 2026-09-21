@@ -1,4 +1,5 @@
 import { isEnvTruthy } from './envUtils.js'
+import { getSessionContext } from '../server/SessionContext.js'
 
 /**
  * Env vars to strip from subprocess environments when running inside GitHub
@@ -76,19 +77,37 @@ export function registerUpstreamProxyEnvFn(
   _getUpstreamProxyEnv = fn
 }
 
+function buildSessionEnvOverrides(): Record<string, string> {
+  const ctx = getSessionContext()
+  if (!ctx) return {}
+
+  const overrides: Record<string, string> = {}
+  if (ctx.config.apiKey) overrides.ANTHROPIC_API_KEY = ctx.config.apiKey
+  if (ctx.config.baseUrl) overrides.ANTHROPIC_BASE_URL = ctx.config.baseUrl
+  if (ctx.config.model) {
+    overrides.ANTHROPIC_MODEL = ctx.config.model
+    overrides.ANTHROPIC_SMALL_FAST_MODEL = ctx.config.model
+  }
+  return overrides
+}
+
 export function subprocessEnv(): NodeJS.ProcessEnv {
   // CCR upstreamproxy: inject HTTPS_PROXY + CA bundle vars so curl/gh/python
   // in agent subprocesses route through the local relay. Returns {} when the
   // proxy is disabled or not registered (non-CCR), so this is a no-op outside
   // CCR containers.
   const proxyEnv = _getUpstreamProxyEnv?.() ?? {}
+  const sessionEnv = buildSessionEnvOverrides()
+
+  const hasOverrides =
+    Object.keys(proxyEnv).length > 0 || Object.keys(sessionEnv).length > 0
 
   if (!isEnvTruthy(process.env.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB)) {
-    return Object.keys(proxyEnv).length > 0
-      ? { ...process.env, ...proxyEnv }
+    return hasOverrides
+      ? { ...process.env, ...proxyEnv, ...sessionEnv }
       : process.env
   }
-  const env = { ...process.env, ...proxyEnv }
+  const env = { ...process.env, ...proxyEnv, ...sessionEnv }
   for (const k of GHA_SUBPROCESS_SCRUB) {
     delete env[k]
     // GitHub Actions auto-creates INPUT_<NAME> for `with:` inputs, duplicating
