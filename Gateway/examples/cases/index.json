@@ -1,0 +1,124 @@
+{
+  "schemaVersion": "gateway.example-cases.v1",
+  "description": "Offline source mapping and evaluation criteria. Do not submit this index as a run or put it in the agent workspace.",
+  "cases": [
+    {
+      "case": "application_document_audit.json",
+      "taskId": "task_1b944bc9ea585b0117ae",
+      "title": "求职材料一致性与格式审计",
+      "source": "../task_environment_packages_llm_5/packages/application_document_audit",
+      "acceptanceCriteria": [
+        "清单中必须覆盖简历、求职信和项目证据三份材料的交叉核对",
+        "每个一致性或事实边界问题需指明涉及的材料名称与具体字段",
+        "格式问题需标注所在材料与大致位置",
+        "审计结果中不得出现材料未提及的虚构事实"
+      ],
+      "materials": [
+        {
+          "path": "materials/application_resume.md",
+          "sourceLogicalPath": "/workspace/materials/application_resume.md",
+          "sha256": "cdc2d9994061870663e3493e8fbaf913647ca061d3bcfaaa1d06b95577654b64",
+          "sizeBytes": 1581
+        },
+        {
+          "path": "materials/cover_letter.md",
+          "sourceLogicalPath": "/workspace/materials/cover_letter.md",
+          "sha256": "0bbf1a2c24f2a6758688266b729a2a9eb96de4f8321690831a2c10d684d2589b",
+          "sizeBytes": 1062
+        },
+        {
+          "path": "materials/project_evidence.md",
+          "sourceLogicalPath": "/workspace/materials/project_evidence.md",
+          "sha256": "85b31244ceed21e12f9d96fb9f5d1afac913ad5969b6a4d95e0872e6dcaf6494",
+          "sizeBytes": 1037
+        }
+      ],
+      "requiresLiveJobResearch": false,
+      "requestBytes": 13284
+    },
+    {
+      "case": "career_direction_validation.json",
+      "taskId": "task_839313c08c0486e9da14",
+      "title": "企业数字化与供应链方向对比及四周验证计划",
+      "source": "../task_environment_packages_llm_5/packages/career_direction_validation",
+      "acceptanceCriteria": [
+        "方向对比分析中必须出现'企业数字化'和'供应链'两个关键词",
+        "验证计划必须覆盖四周，每周任务清晰且可核验",
+        "所有引用的个人经历、技能和项目信息必须来自档案已有事实，不得虚构"
+      ],
+      "materials": [],
+      "requiresLiveJobResearch": false,
+      "requestBytes": 10986
+    },
+    {
+      "case": "learning_progress_review.json",
+      "taskId": "task_bc9c303668a5096740e8",
+      "title": "2026年9月第一周学习进度评估与学习状态更新",
+      "source": "../task_environment_packages_llm_5/packages/learning_progress_review",
+      "acceptanceCriteria": [
+        "评估报告中每一项已掌握技能都能在 week1_learning_log.md 的activities或outcomes中找到对应证据",
+        "若学习证据不足以支持里程碑达成，则学习状态保持不变并给出补充学习建议",
+        "下一阶段建议与persona中learning.milestones的第二阶段内容一致或相关"
+      ],
+      "materials": [
+        {
+          "path": "materials/week1_learning_log.md",
+          "sourceLogicalPath": "/workspace/materials/week1_learning_log.md",
+          "sha256": "259f49c66367ab861951dadc095f9d7bef5fa9fcdc451753e3f14e340adfacfd",
+          "sizeBytes": 2207
+        }
+      ],
+      "requiresLiveJobResearch": false,
+      "requestBytes": 12256
+    },
+    {
+      "case": "opportunity_resume_tailoring.json",
+      "taskId": "task_5e02dd6a1f9c4f4b9258",
+      "title": "B2B SaaS产品运营岗位简历定制",
+      "source": "../task_environment_packages_llm_5/packages/opportunity_resume_tailoring",
+      "acceptanceCriteria": [
+        "简历中姓名、教育背景、工作经历与提供的两份材料一致",
+        "简历突出B2B SaaS产品运营相关技能与项目经验，与目标岗位需求对应",
+        "所有量化数据和项目结果均来自原始材料，无虚构内容",
+        "简历格式完整，包含个人简介、技能、工作经历、项目经验和教育背景"
+      ],
+      "materials": [
+        {
+          "path": "materials/base_resume.md",
+          "sourceLogicalPath": "/workspace/materials/base_resume.md",
+          "sha256": "5cff5728567395748e8c724e12a34ea26926160bb62919019507cd70eb846b79",
+          "sizeBytes": 1462
+        },
+        {
+          "path": "materials/project_evidence.md",
+          "sourceLogicalPath": "/workspace/materials/project_evidence.md",
+          "sha256": "6443d70202c28be3f969c6901f7d370b99e4f4e36cc6ded1837ee3075a46d31b",
+          "sizeBytes": 1265
+        }
+      ],
+      "requiresLiveJobResearch": true,
+      "requestBytes": 12347
+    },
+    {
+      "case": "resume_edit_fact_preserving.json",
+      "taskId": "task_e115e2d9c8519f6c4c01",
+      "title": "简历草稿精确替换与事实保留校验",
+      "source": "../task_environment_packages_llm_5/packages/resume_edit_fact_preserving",
+      "acceptanceCriteria": [
+        "文件中\"负责前端页面开发、维护及性能优化\"恰好出现一次",
+        "文件中\"负责前端页面开发和维护\"不再出现",
+        "除该处替换外，文件其余所有文字与原始内容完全一致"
+      ],
+      "materials": [
+        {
+          "path": "materials/resume_draft.md",
+          "sourceLogicalPath": "/workspace/materials/resume_draft.md",
+          "sha256": "3070c3837c5d5d184cc3f3c2b11cb81b054c56e5e6e2fc2f15f016aa141f9e42",
+          "sizeBytes": 1051
+        }
+      ],
+      "requiresLiveJobResearch": false,
+      "requestBytes": 10893
+    }
+  ]
+}

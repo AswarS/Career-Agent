@@ -22,6 +22,8 @@ import {
   getSessionId,
 } from '../../bootstrap/state.js'
 import { getSessionContext } from '../../server/SessionContext.js'
+import { getAgentContext } from '../../utils/agentContext.js'
+import { createTrainingFetch } from './trainingTransport.js'
 import { getOauthConfig } from '../../constants/oauth.js'
 import { isDebugToStdErr, logForDebugging } from '../../utils/debug.js'
 import {
@@ -96,17 +98,19 @@ export async function getAnthropicClient({
   model,
   fetchOverride,
   source,
+  trainingAgentId,
 }: {
   apiKey?: string
   maxRetries: number
   model?: string
   fetchOverride?: ClientOptions['fetch']
   source?: string
+  trainingAgentId?: string
 }): Promise<Anthropic> {
   // Server mode fast path: use session's apiKey/baseUrl directly
   const sessionCtx = getSessionContext()
   if (sessionCtx) {
-    if (sessionCtx.anthropicClient) return sessionCtx.anthropicClient
+    if (sessionCtx.anthropicClient && !sessionCtx.config.trainingTransport) return sessionCtx.anthropicClient
     // Resolve API key: session config > argument > ANTHROPIC_AUTH_TOKEN env > ANTHROPIC_API_KEY env
     const resolvedApiKey = sessionCtx.config.apiKey
       ?? apiKey
@@ -120,16 +124,20 @@ export async function getAnthropicClient({
     const openAICompatible = isOpenAICompatibleProvider(
       sessionCtx.config.provider,
     )
+    const wireFetch = sessionCtx.config.trainingTransport
+      ? createTrainingFetch(sessionCtx.config.trainingTransport, sessionCtx.sessionId, source,
+          () => trainingAgentId ?? getAgentContext()?.agentId, fetchOverride ?? globalThis.fetch)
+      : fetchOverride
     const resolvedFetch =
       openAICompatible && resolvedBaseUrl
         ? createOpenAICompatibilityFetch({
             apiKey: resolvedApiKey,
             baseUrl: resolvedBaseUrl,
-            fetchImpl: fetchOverride ?? globalThis.fetch,
+            fetchImpl: wireFetch ?? globalThis.fetch,
             sessionId: sessionCtx.sessionId,
             userId: sessionCtx.userId,
           })
-        : fetchOverride
+        : wireFetch
     console.log(`[API Client] session mode: apiKey=${resolvedApiKey ? 'SET' : 'NONE'}, baseURL=${resolvedBaseUrl ?? 'NONE'}, sessionApiKey=${sessionCtx.config.apiKey ? 'SET' : 'NONE'}, sessionBaseUrl=${sessionCtx.config.baseUrl ?? 'NONE'}`)
     const client = new Anthropic({
       apiKey: resolvedApiKey,
@@ -142,7 +150,7 @@ export async function getAnthropicClient({
       },
       ...(resolvedFetch ? { fetch: resolvedFetch } : {}),
     })
-    sessionCtx.anthropicClient = client
+    if (!sessionCtx.config.trainingTransport) sessionCtx.anthropicClient = client
     return client
   }
 

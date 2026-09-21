@@ -1,0 +1,27 @@
+{
+  "requirements": [
+    {
+      "accepted_media_types": [
+        "text/markdown",
+        "text/plain"
+      ],
+      "content_constraints": {
+        "must_contain": [
+          "React"
+        ],
+        "must_contain_exactly_once": [
+          "负责前端页面开发和维护"
+        ]
+      },
+      "material_id": "draft",
+      "payload_field_contains": {},
+      "payload_schema": "markdown_document_v1",
+      "purpose": "提供需要精确修改的简历草稿",
+      "required": true,
+      "semantic_type": "editable_text",
+      "title": "待修改简历"
+    }
+  ],
+  "schema_version": "eduagentworld.material_requirements.v1",
+  "task_id": "task_e115e2d9c8519f6c4c01"
+}

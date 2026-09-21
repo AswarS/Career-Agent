@@ -486,7 +486,7 @@ function appendArtifactBlockIfNeeded(
     {
       id: 'artifact-0',
       type: 'artifact' as const,
-      title: '生成内容',
+      title: media.length || files.length ? '生成内容' : null,
       text: media.length || files.length ? '已生成可打开或下载的内容。' : '',
       media: media.map(toMediaView),
       files: files.map(toFileView),

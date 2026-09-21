@@ -1,0 +1,24 @@
+{
+  "initial_resource_ids": [
+    "state:LearningState@1.0"
+  ],
+  "public_contract": {
+    "persona_field_contains": {
+      "job.locations": [
+        "上海"
+      ],
+      "learning.goals": [
+        "云原生"
+      ]
+    },
+    "required_phrases": [
+      "上海",
+      "云原生运维",
+      "2026年9月",
+      "week1_learning_log.md"
+    ]
+  },
+  "scenario_id": "learning_progress_review",
+  "summary": "Create and activate a learning plan, then assess supplied learning evidence.",
+  "task_brief": "用户目标是上海地区初级云原生运维工程师，需根据2026年9月第一周学习证据评估进度并仅在证据支持时更新学习状态。"
+}

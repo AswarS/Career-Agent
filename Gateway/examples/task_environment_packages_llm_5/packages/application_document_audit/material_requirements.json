@@ -1,0 +1,48 @@
+{
+  "requirements": [
+    {
+      "accepted_media_types": [
+        "text/markdown",
+        "text/plain"
+      ],
+      "content_constraints": {},
+      "material_id": "resume",
+      "payload_field_contains": {},
+      "payload_schema": "resume_v1",
+      "purpose": "待审计的简历正文",
+      "required": true,
+      "semantic_type": "resume",
+      "title": "投递简历"
+    },
+    {
+      "accepted_media_types": [
+        "text/markdown",
+        "text/plain"
+      ],
+      "content_constraints": {},
+      "material_id": "letter",
+      "payload_field_contains": {},
+      "payload_schema": "markdown_document_v1",
+      "purpose": "待审计的求职信",
+      "required": true,
+      "semantic_type": "supporting_document",
+      "title": "求职信"
+    },
+    {
+      "accepted_media_types": [
+        "text/markdown",
+        "text/plain"
+      ],
+      "content_constraints": {},
+      "material_id": "projects",
+      "payload_field_contains": {},
+      "payload_schema": "project_evidence_v1",
+      "purpose": "核查材料陈述的事实来源",
+      "required": true,
+      "semantic_type": "project_evidence",
+      "title": "项目事实依据"
+    }
+  ],
+  "schema_version": "eduagentworld.material_requirements.v1",
+  "task_id": "task_1b944bc9ea585b0117ae"
+}

@@ -1,0 +1,136 @@
+{
+  "career_agent": {
+    "base_profile_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "birthDate": {
+          "format": "date",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "contactLanguage": {
+          "maxLength": 100,
+          "type": "string"
+        },
+        "currentCity": {
+          "maxLength": 200,
+          "type": "string"
+        },
+        "currentIndustry": {
+          "maxLength": 300,
+          "type": "string"
+        },
+        "currentRole": {
+          "maxLength": 300,
+          "type": "string"
+        },
+        "currentStatus": {
+          "maxLength": 200,
+          "type": "string"
+        },
+        "educationBackground": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "degree": {
+                "maxLength": 100,
+                "type": "string"
+              },
+              "description": {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "graduationDate": {
+                "format": "date",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "major": {
+                "maxLength": 300,
+                "type": "string"
+              },
+              "school": {
+                "maxLength": 300,
+                "type": "string"
+              }
+            },
+            "required": [
+              "school",
+              "major",
+              "degree",
+              "description"
+            ],
+            "type": "object"
+          },
+          "maxItems": 20,
+          "type": "array"
+        },
+        "educationLevel": {
+          "maxLength": 200,
+          "type": "string"
+        },
+        "gender": {
+          "maxLength": 100,
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 200,
+          "type": "string"
+        },
+        "yearsOfExperience": {
+          "maximum": 80,
+          "minimum": 0,
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "product_field_codecs": {
+      "base.currentCity": "text",
+      "base.currentIndustry": "text",
+      "base.currentRole": "text",
+      "base.currentStatus": "text",
+      "base.educationLevel": "text",
+      "base.name": "text",
+      "base.yearsOfExperience": "number",
+      "career.direction": "text",
+      "career.projectExperience": "line_list",
+      "career.skills": "string_list",
+      "career.workExperience": "line_list",
+      "education.degree": "text",
+      "education.description": "text",
+      "education.graduationDate": "date",
+      "education.major": "text",
+      "education.school": "text",
+      "job.exclusions": "string_list",
+      "job.locations": "string_list",
+      "job.salaryExpectation": "text",
+      "job.searchStatus": "text",
+      "job.targetIndustries": "string_list",
+      "job.targetRoles": "string_list",
+      "job.workModes": "string_list",
+      "learning.activeSkills": "string_list",
+      "learning.blockers": "string_list",
+      "learning.goals": "line_list",
+      "learning.milestones": "line_list",
+      "learning.nextFocus": "text",
+      "profile.summary": "text"
+    },
+    "profile_product_schema_version": "career_profile_product_v2",
+    "reference_revision": "73c7f984e164856975bc0f816641f2fa13614a2b",
+    "repository": "https://github.com/AswarS/Career-Agent"
+  },
+  "environment_schema_version": "eduagentworld.task_environment.v1",
+  "persona_schema_version": "eduagentworld.career_agent_persona.v1",
+  "tool_manifest": {
+    "path": "/home/zzdong/graph_data_generation/EduAgentWorld/stage2_task_generation/tools_v0/source/v1/network-tool-manifest.json",
+    "sha256": "f9a7e66bafb2fb2b00372cd5a6a6542e40cb3fa3123457c36090bd98d43ea472"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "initial_resource_ids": [
+    "state:ProductProfile"
+  ],
+  "public_contract": {
+    "persona_field_contains": {
+      "career.direction": [
+        "企业数字化",
+        "供应链"
+      ]
+    },
+    "required_phrases": [
+      "企业数字化",
+      "供应链",
+      "四周"
+    ]
+  },
+  "scenario_id": "career_direction_validation",
+  "summary": "Use a complete product profile to compare career directions and make a validation plan.",
+  "task_brief": "用户要比较企业数字化与供应链科技相关方向，并制定四周验证计划；不得改成其他职业方向。"
+}

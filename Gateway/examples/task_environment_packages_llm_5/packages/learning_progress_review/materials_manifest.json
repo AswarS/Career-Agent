@@ -1,0 +1,20 @@
+{
+  "materials": [
+    {
+      "logical_path": "/workspace/materials/week1_learning_log.md",
+      "material_id": "learning_log",
+      "media_type": "text/markdown",
+      "package_path": "materials/week1_learning_log.md",
+      "payload_schema": "learning_evidence_v1",
+      "provenance": "synthetic_fixture",
+      "purpose": "为阶段学习评估提供可追溯证据",
+      "renderer": "learning_evidence_markdown_v1",
+      "semantic_type": "learning_evidence",
+      "sha256": "259f49c66367ab861951dadc095f9d7bef5fa9fcdc451753e3f14e340adfacfd",
+      "size_bytes": 2207,
+      "title": "第一周学习证据"
+    }
+  ],
+  "schema_version": "eduagentworld.material_manifest.v1",
+  "task_id": "task_bc9c303668a5096740e8"
+}

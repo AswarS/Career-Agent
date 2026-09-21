@@ -145,6 +145,9 @@ describe('AppInteractionQueryService', () => {
       expect(latest.sessions).toHaveLength(1)
       expect(latest.sessions[0]?.app.app_id).toBe('web-app-simulation')
       expect(latest.sessions[0]?.session_id).toBe('simulation-session')
+      expect(latest.data_quality.notes.join(' ')).toContain(
+        'Event names alone do not prove user causality',
+      )
 
       const fraction = await queryService.read(3, {
         mode: 'latest_session',
@@ -235,6 +238,7 @@ describe('app_interaction_read Tool', () => {
     expect(tool.name).toBe('app_interaction_read')
     expect((await tool.description({} as never)).toLowerCase()).toContain('do not search')
     expect(await tool.prompt({} as never)).toContain('最近一次')
+    expect(await tool.prompt({} as never)).toContain('automatic start events')
 
     const result = await (tool as any).call({ mode: 'latest_session' })
     expect(receivedUserId).toBe(42)

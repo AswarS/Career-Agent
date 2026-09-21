@@ -11,6 +11,7 @@ import 'reflect-metadata';
 process.env.DISABLE_INTERLEAVED_THINKING = '1';
 
 import { NestFactory } from '@nestjs/core';
+import { json } from 'express';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { enableConfigs } from '../utils/config.js';
@@ -27,6 +28,8 @@ initBundledSkills();
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  // Training tasks carry initial workspace files; normal API parser limits remain unchanged.
+  app.use('/api/career-agent/training', json({ limit: '2mb' }));
 
   app.enableCors({
     origin: true,

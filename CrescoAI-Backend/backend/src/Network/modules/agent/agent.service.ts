@@ -11,6 +11,7 @@ import {
   createConversation,
 } from './agent.runtime';
 import { extractAskUserQuestions } from './ask-user-question.js';
+import { reportTrainingToolResults, type TrainingTransport } from '../../../services/api/trainingTransport.js';
 import {
   runWithSessionContext,
   type SessionContext,
@@ -42,6 +43,7 @@ import {
 import { TOOL_RESULTS_SUBDIR } from '../../../utils/toolResultStorage.js';
 import {
   appendNetworkTranscriptEvent,
+  assertNetworkUserWorkspaceBinding,
   ensureNetworkUserWorkspaceDir,
   ensureNetworkTranscriptDir,
   getNetworkAutoMemoryDir,
@@ -78,6 +80,7 @@ import { ProfileRecallService } from '../profile/profile-recall.service';
 import { ProfileProductProjectionService } from '../profile/profile-product-projection.service';
 import { ProfileProductMutationService } from '../profile/profile-product-mutation.service';
 import { ProfileEvidenceService } from '../profile/profile-evidence.service';
+import { createPraxisTools } from '../integration/praxis.tools.js';
 import {
   decodeProfileProductMemoryValue,
   isListProfileProductCodec,
@@ -883,6 +886,9 @@ export class AgentService {
     this.sessionContexts.delete(conversationId);
     this.conversationConfigs.delete(conversationId);
     this.queryEngineInitializations.delete(conversationId);
+    this.trainingConversationOwners.delete(conversationId);
+    this.trainingTransports.delete(conversationId);
+    this.trainingWorkspaces.delete(conversationId);
     removeSessionMultimodalConfig(conversationId);
   }
 
@@ -1229,6 +1235,14 @@ export class AgentService {
     }
 
     const qeResult = await inferencePromise;
+    if (!qeResult.success && this.trainingConversationOwners.get(conversationId) === userId) {
+      yield {
+        type: 'error', conversationId, userMessageId,
+        assistantMessageId: fallbackAssistantMessageId,
+        code: 'TRAINING_EXECUTION_FAILED', message: 'Training inference did not complete',
+      };
+      return;
+    }
     if (qeResult.success) {
       if (!qeResult.messageCreated) {
         yield {
@@ -1494,6 +1508,7 @@ export class AgentService {
           }
         };
         messageInput.abortSignal.addEventListener('abort', abortHandler, { once: true });
+        if (messageInput.abortSignal.aborted) abortHandler();
       }
 
       const profileTurnPrompt = await this.getProfileTurnPrompt(userId, content);
@@ -1556,6 +1571,9 @@ export class AgentService {
             });
 
             for await (const msg of stream) {
+              if (ctx.config.trainingTransport?.rootConversationId === ctx.sessionId) {
+                await reportTrainingToolResults(ctx.config.trainingTransport, msg);
+              }
               emitPendingSkillResults();
               if (messageInput.abortSignal?.aborted) {
                 return {
@@ -2106,6 +2124,8 @@ export class AgentService {
     conversationId: string,
     sourceMessageId: string,
   ) {
+    // This enrichment reads Conversation Memory; Profile itself remains enabled.
+    if ([...this.trainingConversationOwners.values()].includes(String(userId))) return;
     if (!this.profileEvidenceService || !this.profileMemoryService) return;
     try {
       const [memories, units] = await Promise.all([
@@ -2152,15 +2172,34 @@ export class AgentService {
     }
   }
 
+  private readonly trainingConversationOwners = new Map<string, string>();
+  private readonly trainingTransports = new Map<string, TrainingTransport>();
+  private readonly trainingWorkspaces = new Map<string, string>();
+
+  configureTrainingConversation(userId: string, conversationId: string, transport?: TrainingTransport, workspaceRoot?: string): void {
+    this.assertCachedSessionOwner(conversationId, userId);
+    if (this.sessionContexts.has(conversationId)) throw new Error('Training policy must be configured before execution');
+    this.trainingConversationOwners.set(conversationId, userId);
+    this.trainingWorkspaces.set(conversationId, resolve(workspaceRoot ?? getNetworkUserWorkspaceDir(userId)));
+    if (transport) this.trainingTransports.set(conversationId, transport);
+  }
+
   private buildSessionContext(
     conversationId: string,
     userId: string,
     config: ConversationConfig = {},
     workspaceDir?: string,
   ): SessionContext {
+    const trainingRoot = [...this.trainingConversationOwners].find(([, owner]) => owner === userId)?.[0];
+    const training = trainingRoot !== undefined;
     const resolvedWorkspaceDir = resolve(
       workspaceDir ?? getNetworkUserWorkspaceDir(userId),
     );
+    const preparedWorkspace = trainingRoot ? this.trainingWorkspaces.get(trainingRoot) : undefined;
+    if (training) {
+      if (!preparedWorkspace) throw new Error('Training workspace was not prepared');
+      assertNetworkUserWorkspaceBinding(userId, preparedWorkspace, resolvedWorkspaceDir);
+    }
     const autoMemoryDir = resolve(getNetworkAutoMemoryDir(userId));
     const transcriptDir = getNetworkTranscriptDir(userId);
     const conversationMemoryDir = resolve(
@@ -2192,6 +2231,9 @@ export class AgentService {
       } as any),
       config: {
         cwd: resolvedWorkspaceDir,
+        conversationMemoryEnabled: training ? false : undefined,
+        trainingHarness: training,
+        trainingTransport: trainingRoot ? this.trainingTransports.get(trainingRoot) : undefined,
         apiKey: config.apiKey,
         baseUrl: config.baseUrl,
         provider: config.provider,
@@ -2199,8 +2241,8 @@ export class AgentService {
         userId,
         workspaceRoot: resolvedWorkspaceDir,
         autoMemoryDir,
-        conversationMemoryDir,
-        conversationMemorySessionFile,
+        conversationMemoryDir: training ? undefined : conversationMemoryDir,
+        conversationMemorySessionFile: training ? undefined : conversationMemorySessionFile,
         userReadOnlyRoots: [
           {
             id: `user-${userId}-uploads`,
@@ -2322,6 +2364,7 @@ export class AgentService {
           extraTools: [
             ...this.getProfileTools(userId, conversationId),
             ...this.getAppInteractionTools(userId),
+            ...this.getPraxisTools(userId, conversationId),
           ],
           mcpTools: mcpRuntime.tools,
         });
@@ -2421,6 +2464,16 @@ export class AgentService {
         service: this.appInteractionQueryService,
       }),
     ];
+  }
+
+  private getPraxisTools(userId: string, conversationId: string): Tool[] {
+    return createPraxisTools({
+      userId,
+      conversationId,
+      // The read client will be supplied after Praxis publishes its endpoint.
+      // Until then praxis_read stays out of the model-visible tool pool.
+      readEnabled: false,
+    });
   }
 
   private async ensureGithubMcpRuntime(userId: string): Promise<GithubMcpRuntimeSnapshot> {

@@ -1,0 +1,96 @@
+{
+  "base_profile": {
+    "birthDate": "1996-03-15",
+    "contactLanguage": "中文",
+    "currentCity": "杭州",
+    "currentIndustry": "互联网/电子商务",
+    "currentRole": "前端开发工程师",
+    "currentStatus": "在职看机会",
+    "educationBackground": [
+      {
+        "degree": "工学学士",
+        "description": "主修Web前端开发、数据结构与算法、软件工程导论等课程，毕业设计为基于React的校园活动管理平台",
+        "graduationDate": "2018-06-30",
+        "major": "软件工程",
+        "school": "杭州电子科技大学"
+      }
+    ],
+    "educationLevel": "本科",
+    "gender": "男",
+    "name": "陈思远",
+    "yearsOfExperience": 5
+  },
+  "career_agent_profile_product_schema_version": "career_profile_product_v2",
+  "career_agent_reference_revision": "73c7f984e164856975bc0f816641f2fa13614a2b",
+  "product_fields": {
+    "base.currentCity": "杭州",
+    "base.currentIndustry": "互联网/电子商务",
+    "base.currentRole": "前端开发工程师",
+    "base.currentStatus": "在职看机会",
+    "base.educationLevel": "本科",
+    "base.name": "陈思远",
+    "base.yearsOfExperience": 5,
+    "career.direction": "向高级前端开发工程师方向发展，深耕React技术栈与前端性能优化领域",
+    "career.projectExperience": [
+      "云栈SaaS管理后台 — 使用React与TypeScript构建后台管理系统，实现权限管理与数据可视化模块",
+      "星澜电商前端性能优化 — 对现有React应用进行打包体积分析与渲染优化，首屏加载时间降低约40%"
+    ],
+    "career.skills": [
+      "React",
+      "TypeScript",
+      "Webpack",
+      "Redux",
+      "HTML5",
+      "CSS3",
+      "Jest"
+    ],
+    "career.workExperience": [
+      "2018.07-2020.05 杭州云栈科技有限公司 前端开发工程师 负责公司SaaS管理后台的页面开发与迭代维护",
+      "2020.06-至今 杭州星澜网络科技有限公司 前端开发工程师 负责电商平台前端架构改进与性能优化"
+    ],
+    "education.degree": "工学学士",
+    "education.description": "主修Web前端开发、数据结构与算法、软件工程导论等课程，毕业设计为基于React的校园活动管理平台",
+    "education.graduationDate": "2018-06-30",
+    "education.major": "软件工程",
+    "education.school": "杭州电子科技大学",
+    "job.exclusions": [
+      "频繁出差",
+      "纯外包项目"
+    ],
+    "job.locations": [
+      "杭州"
+    ],
+    "job.salaryExpectation": "20-28K·14薪",
+    "job.searchStatus": "在职看机会",
+    "job.targetIndustries": [
+      "互联网/电子商务",
+      "金融科技"
+    ],
+    "job.targetRoles": [
+      "高级前端开发工程师",
+      "前端技术专家"
+    ],
+    "job.workModes": [
+      "全职"
+    ],
+    "learning.activeSkills": [
+      "React性能优化",
+      "Webpack配置调优"
+    ],
+    "learning.blockers": [
+      "工作日晚上学习时间有限",
+      "缺少大型团队协作的Code Review环境"
+    ],
+    "learning.goals": [
+      "系统掌握React渲染优化与状态管理最佳实践",
+      "提升Webpack构建速度与产物体积控制能力"
+    ],
+    "learning.milestones": [
+      "2024年3月：完成React并发渲染与Suspense机制的系统学习",
+      "2024年5月：在星澜电商项目中落地首屏性能优化方案"
+    ],
+    "learning.nextFocus": "深入React Fiber架构与调度机制，准备高级前端面试",
+    "profile.summary": "5年前端开发经验，精通React技术栈，具备电商与SaaS后台开发经验，当前关注前端性能优化方向，寻求杭州高级前端开发岗位。"
+  },
+  "schema_version": "eduagentworld.career_agent_persona.v1"
+}

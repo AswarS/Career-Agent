@@ -1,0 +1,26 @@
+{
+  "initial_resource_ids": [
+    "state:ProductProfile",
+    "state:PublicWeb"
+  ],
+  "public_contract": {
+    "persona_field_contains": {
+      "job.locations": [
+        "上海"
+      ],
+      "job.targetRoles": [
+        "产品运营"
+      ]
+    },
+    "required_phrases": [
+      "上海",
+      "B2B SaaS",
+      "产品运营",
+      "base_resume.md",
+      "project_evidence.md"
+    ]
+  },
+  "scenario_id": "opportunity_resume_tailoring",
+  "summary": "Research a real opportunity and tailor fact-grounded application materials.",
+  "task_brief": "用户要在上海寻找 B2B SaaS 产品运营岗位，并依据两份指定材料定制简历；不得改成其他城市或岗位。"
+}

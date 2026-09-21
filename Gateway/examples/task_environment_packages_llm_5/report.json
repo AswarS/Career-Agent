@@ -1,0 +1,12 @@
+{
+  "generated": 5,
+  "generation_methods": [
+    "llm_synthesis"
+  ],
+  "manifest": "/home/zzdong/graph_data_generation/EduAgentWorld/stage2_task_generation/tools_v0/source/v1/network-tool-manifest.json",
+  "manifest_sha256": "f9a7e66bafb2fb2b00372cd5a6a6542e40cb3fa3123457c36090bd98d43ea472",
+  "output_dir": "stage2_task_generation/tools_v0/data/v1_smoke/task_environment_packages_llm_5",
+  "schema_version": "eduagentworld.task_environment_run.v1",
+  "status": "complete",
+  "validation_passed": 5
+}

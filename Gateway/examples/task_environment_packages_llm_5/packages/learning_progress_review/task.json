@@ -1,0 +1,26 @@
+{
+  "acceptance_criteria": [
+    "评估报告中每一项已掌握技能都能在 week1_learning_log.md 的activities或outcomes中找到对应证据",
+    "若学习证据不足以支持里程碑达成，则学习状态保持不变并给出补充学习建议",
+    "下一阶段建议与persona中learning.milestones的第二阶段内容一致或相关"
+  ],
+  "available_inputs": [
+    "已装载的 Career-Agent 用户画像",
+    "第一周学习证据（/workspace/materials/week1_learning_log.md）"
+  ],
+  "constraints": [
+    "评估必须严格基于 week1_learning_log.md 中记录的活动、结果与证据，不得引入未记录的事实",
+    "学习状态更新仅在证据充分支持阶段里程碑要求时执行，否则保持当前状态不变",
+    "不得虚构证书、成绩或项目效果"
+  ],
+  "deliverables": [
+    "第一周学习进度评估报告，包含已掌握技能与未覆盖内容的逐项说明",
+    "学习状态更新建议，明确是否满足里程碑条件及理由",
+    "下一阶段学习重点建议"
+  ],
+  "id": "task_bc9c303668a5096740e8",
+  "scenario_id": "learning_progress_review",
+  "schema_version": "eduagentworld.task.v1",
+  "task": "我是陈思远，目前在上海从事系统运维工作，正在向云原生运维方向转型。我的学习计划第一阶段覆盖2026年9月，目标包括掌握云原生运维核心技能。我已完成第一周的学习并记录在 week1_learning_log.md 中，学习周期为2026-09-01至2026-09-07，内容涉及Kubernetes调度策略与Helm包管理。请根据 week1_learning_log.md 中的学习证据评估我的学习进度，判断是否达到第一阶段里程碑的预期要求，并仅在证据充分支持的情况下更新我的学习状态。评估结果需指出已掌握的技能、尚未覆盖的内容以及下一阶段的建议重点。不要凭空推断证据中未记录的学习活动或成果。",
+  "title": "2026年9月第一周学习进度评估与学习状态更新"
+}

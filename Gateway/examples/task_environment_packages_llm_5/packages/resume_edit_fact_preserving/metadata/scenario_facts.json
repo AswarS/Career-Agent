@@ -1,0 +1,15 @@
+{
+  "initial_resource_ids": [
+    "state:WorkspaceFilesystem"
+  ],
+  "public_contract": {
+    "required_phrases": [
+      "resume_draft.md",
+      "负责前端页面开发和维护",
+      "负责前端页面开发、维护及性能优化"
+    ]
+  },
+  "scenario_id": "resume_edit_fact_preserving",
+  "summary": "Read and edit a resume file while preserving facts and verifying the exact replacement.",
+  "task_brief": "只执行一次精确替换并验证结果：旧句为“负责前端页面开发和维护”，新句为“负责前端页面开发、维护及性能优化”；不得扩展到其他改写。"
+}

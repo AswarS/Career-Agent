@@ -339,7 +339,6 @@ describe('Profile V2 snapshot integration', () => {
     const recall = new ProfileRecallService(service, {
       list: async () => [],
     } as unknown as ProfileMemoryService);
-
     try {
       await expect(recall.buildContext(user.id, '帮我做职业规划')).resolves.toMatchObject({
         version: 1,

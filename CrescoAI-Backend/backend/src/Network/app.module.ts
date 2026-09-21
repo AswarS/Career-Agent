@@ -19,6 +19,7 @@ import { AppService } from './app.service';
 import { ProfileModule } from './modules/profile/profile.module';
 import { PraxisIntegrationModule } from './modules/integration/praxis-integration.module';
 import { GatewayMonitorModule } from './modules/gateway-monitor/gateway-monitor.module';
+import { TrainingHarnessModule } from './modules/training-harness/training-harness.module';
 
 const synchronizeSchema =
   process.env.CAREER_AGENT_SCHEMA_SYNC === 'true';
@@ -47,6 +48,7 @@ const synchronizeSchema =
     PraxisIntegrationModule,
     GeneratedModule,
     GatewayMonitorModule,
+    TrainingHarnessModule,
   ],
   providers: [AppService],
 })

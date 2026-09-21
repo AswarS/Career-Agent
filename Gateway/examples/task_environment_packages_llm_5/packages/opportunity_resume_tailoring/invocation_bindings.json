@@ -1,0 +1,800 @@
+{
+  "invocations": [
+    {
+      "input_bindings": [
+        {
+          "input_field": "source",
+          "source": "literal",
+          "value": "product"
+        }
+      ],
+      "input_schema_sha256": "ddf60d2b637faae0c1f4dcdcba6d4e2aad278e837ce8227a57831642a994d70a",
+      "invocation_id": "profile",
+      "tool_id": "network.conversation:harness_tool:profile_read:product-profile-interactive",
+      "tool_name": "profile_read",
+      "validation_witness_arguments": {
+        "source": "product"
+      }
+    },
+    {
+      "input_bindings": [
+        {
+          "input_field": "query",
+          "source": "literal",
+          "value": "2026 上海 B2B SaaS 产品运营 招聘 官方"
+        }
+      ],
+      "input_schema_sha256": "ce035ada7312377e4219f1f4d74d325e1db5b9e3b9c4bf9b8e46e7e119b7cbbb",
+      "invocation_id": "search",
+      "tool_id": "network.conversation:harness_tool:WebSearch",
+      "tool_name": "WebSearch",
+      "validation_witness_arguments": {
+        "query": "2026 上海 B2B SaaS 产品运营 招聘 官方"
+      }
+    },
+    {
+      "input_bindings": [
+        {
+          "input_field": "url",
+          "invocation_id": "search",
+          "source": "prior_output",
+          "witness_value": "https://example.com/jobs/product-operations"
+        },
+        {
+          "input_field": "prompt",
+          "source": "literal",
+          "value": "提取岗位职责、硬性要求、发布日期和投递方式"
+        }
+      ],
+      "input_schema_sha256": "29188b18ff3e3cc1a8326091768850706c9b5aa545717facb774eae4f6d7ed85",
+      "invocation_id": "fetch",
+      "tool_id": "network.conversation:harness_tool:WebFetch",
+      "tool_name": "WebFetch",
+      "validation_witness_arguments": {
+        "prompt": "提取岗位职责、硬性要求、发布日期和投递方式",
+        "url": "https://example.com/jobs/product-operations"
+      }
+    },
+    {
+      "input_bindings": [
+        {
+          "input_field": "opportunity_criteria",
+          "source": "literal",
+          "value": {
+            "location": "上海",
+            "role": "B2B SaaS 产品运营"
+          }
+        },
+        {
+          "input_field": "opportunity_search_results",
+          "invocation_id": "search",
+          "source": "prior_output",
+          "witness_value": [
+            {
+              "title": "产品运营"
+            }
+          ]
+        },
+        {
+          "input_field": "opportunity_detail_extracts",
+          "invocation_id": "fetch",
+          "source": "prior_output",
+          "witness_value": {
+            "role": "产品运营"
+          }
+        },
+        {
+          "input_field": "result_size_limit",
+          "source": "literal",
+          "value": 3
+        }
+      ],
+      "input_schema_sha256": "72439191b1fbcc75160b5da9a3e94c59bbef9c99904852ff7c6764d9b00623db",
+      "invocation_id": "opportunity",
+      "tool_id": "network.conversation:skill_tool:FindRealOpportunities",
+      "tool_name": "FindRealOpportunities",
+      "validation_witness_arguments": {
+        "opportunity_criteria": {
+          "location": "上海",
+          "role": "B2B SaaS 产品运营"
+        },
+        "opportunity_detail_extracts": {
+          "role": "产品运营"
+        },
+        "opportunity_search_results": [
+          {
+            "title": "产品运营"
+          }
+        ],
+        "result_size_limit": 3
+      }
+    },
+    {
+      "input_bindings": [
+        {
+          "input_field": "target_direction",
+          "source": "literal",
+          "value": "B2B SaaS 产品运营"
+        },
+        {
+          "input_field": "target_region",
+          "source": "literal",
+          "value": "上海"
+        },
+        {
+          "input_field": "target_level",
+          "source": "literal",
+          "value": "初中级"
+        },
+        {
+          "input_field": "entry_search_results",
+          "invocation_id": "search",
+          "source": "prior_output",
+          "witness_value": [
+            {
+              "title": "产品运营"
+            }
+          ]
+        },
+        {
+          "input_field": "entry_page_extracts",
+          "invocation_id": "fetch",
+          "source": "prior_output",
+          "witness_value": {
+            "requirements": [
+              "数据分析",
+              "跨团队协作"
+            ]
+          }
+        }
+      ],
+      "input_schema_sha256": "e8fe2db12d3daa36081a50a98a579983420d1230bf486cae777c448241e99b19",
+      "invocation_id": "requirements",
+      "tool_id": "network.conversation:skill_tool:EntryRequirementsReport",
+      "tool_name": "EntryRequirementsReport",
+      "validation_witness_arguments": {
+        "entry_page_extracts": {
+          "requirements": [
+            "数据分析",
+            "跨团队协作"
+          ]
+        },
+        "entry_search_results": [
+          {
+            "title": "产品运营"
+          }
+        ],
+        "target_direction": "B2B SaaS 产品运营",
+        "target_level": "初中级",
+        "target_region": "上海"
+      }
+    },
+    {
+      "input_bindings": [
+        {
+          "input_field": "user_profile",
+          "source": "persona_snapshot"
+        },
+        {
+          "input_field": "target_direction",
+          "source": "literal",
+          "value": "B2B SaaS 产品运营"
+        },
+        {
+          "input_field": "requirements_input",
+          "invocation_id": "requirements",
+          "source": "prior_output",
+          "witness_value": {
+            "requirements": [
+              "数据分析"
+            ]
+          }
+        },
+        {
+          "input_field": "requirement_search_results",
+          "invocation_id": "search",
+          "source": "prior_output",
+          "witness_value": [
+            {
+              "title": "产品运营"
+            }
+          ]
+        }
+      ],
+      "input_schema_sha256": "6911a1c305da9962cb36ce4f6f29eac9ad2b2885c7ba65c412fa3fbc09df655d",
+      "invocation_id": "compare",
+      "tool_id": "network.conversation:skill_tool:CompareProfileWithRequirements",
+      "tool_name": "CompareProfileWithRequirements",
+      "validation_witness_arguments": {
+        "requirement_search_results": [
+          {
+            "title": "产品运营"
+          }
+        ],
+        "requirements_input": {
+          "requirements": [
+            "数据分析"
+          ]
+        },
+        "target_direction": "B2B SaaS 产品运营",
+        "user_profile": {
+          "base.currentCity": "上海",
+          "base.currentIndustry": "企业服务SaaS",
+          "base.currentRole": "产品运营专员",
+          "base.currentStatus": "在职看机会",
+          "base.educationLevel": "本科",
+          "base.name": "陈思远",
+          "base.yearsOfExperience": 6,
+          "career.direction": "向B2B SaaS产品运营方向发展，聚焦客户生命周期运营与数据驱动增长",
+          "career.projectExperience": [
+            "客户健康度评分模型搭建与预警运营项目",
+            "新客户Onboarding流程数字化改造项目"
+          ],
+          "career.skills": [
+            "SQL",
+            "Python",
+            "客户成功运营",
+            "用户旅程分析",
+            "数据看板搭建",
+            "A/B测试",
+            "需求文档撰写"
+          ],
+          "career.workExperience": [
+            "2021-04至今 云启智联科技 产品运营专员",
+            "2018-07至2021-03 数策软件科技 运营助理"
+          ],
+          "education.degree": "工学学士",
+          "education.description": "主修信息系统分析与设计、数据库原理、市场营销学、用户研究方法等课程",
+          "education.graduationDate": "2018-06-30",
+          "education.major": "信息管理与信息系统",
+          "education.school": "华东理工大学",
+          "job.exclusions": [
+            "纯C端社交产品",
+            "硬件制造行业"
+          ],
+          "job.locations": [
+            "上海"
+          ],
+          "job.salaryExpectation": "18-22K·13薪",
+          "job.searchStatus": "积极投递中",
+          "job.targetIndustries": [
+            "B2B SaaS",
+            "企业服务"
+          ],
+          "job.targetRoles": [
+            "产品运营"
+          ],
+          "job.workModes": [
+            "全职",
+            "混合办公"
+          ],
+          "learning.activeSkills": [
+            "SQL",
+            "Python",
+            "客户成功运营",
+            "用户旅程分析",
+            "数据看板搭建",
+            "A/B测试",
+            "需求文档撰写"
+          ],
+          "learning.blockers": [
+            "缺乏大型团队项目管理经验",
+            "对GTM策略理解不够系统"
+          ],
+          "learning.goals": [
+            "系统掌握B2B SaaS客户生命周期运营方法论",
+            "提升数据建模与客户健康度量化能力"
+          ],
+          "learning.milestones": [
+            "2024-09完成客户健康度评分模型搭建并上线",
+            "2024-12完成新客户Onboarding流程数字化改造"
+          ],
+          "learning.nextFocus": "深入研究B2B SaaS领域的GTM策略与客户分层运营",
+          "profile.summary": "6年企业服务SaaS行业产品运营经验，擅长客户生命周期管理与数据驱动增长，熟悉SQL与Python数据分析，期望在上海寻找B2B SaaS产品运营方向的机会。"
+        }
+      }
+    },
+    {
+      "input_bindings": [
+        {
+          "input_field": "evidence_gap_analysis",
+          "invocation_id": "compare",
+          "source": "prior_output",
+          "witness_value": {
+            "matched": [
+              "数据分析"
+            ]
+          }
+        },
+        {
+          "input_field": "target_direction",
+          "source": "literal",
+          "value": "B2B SaaS 产品运营"
+        },
+        {
+          "input_field": "user_profile",
+          "source": "persona_snapshot"
+        }
+      ],
+      "input_schema_sha256": "f63a24d0fc6a9933a1c58a7c4fdc871737c11b8d191288a0a0bb460cebf00b1c",
+      "invocation_id": "focus",
+      "tool_id": "network.conversation:skill_tool:ApplicationFocusBrief",
+      "tool_name": "ApplicationFocusBrief",
+      "validation_witness_arguments": {
+        "evidence_gap_analysis": {
+          "matched": [
+            "数据分析"
+          ]
+        },
+        "target_direction": "B2B SaaS 产品运营",
+        "user_profile": {
+          "base.currentCity": "上海",
+          "base.currentIndustry": "企业服务SaaS",
+          "base.currentRole": "产品运营专员",
+          "base.currentStatus": "在职看机会",
+          "base.educationLevel": "本科",
+          "base.name": "陈思远",
+          "base.yearsOfExperience": 6,
+          "career.direction": "向B2B SaaS产品运营方向发展，聚焦客户生命周期运营与数据驱动增长",
+          "career.projectExperience": [
+            "客户健康度评分模型搭建与预警运营项目",
+            "新客户Onboarding流程数字化改造项目"
+          ],
+          "career.skills": [
+            "SQL",
+            "Python",
+            "客户成功运营",
+            "用户旅程分析",
+            "数据看板搭建",
+            "A/B测试",
+            "需求文档撰写"
+          ],
+          "career.workExperience": [
+            "2021-04至今 云启智联科技 产品运营专员",
+            "2018-07至2021-03 数策软件科技 运营助理"
+          ],
+          "education.degree": "工学学士",
+          "education.description": "主修信息系统分析与设计、数据库原理、市场营销学、用户研究方法等课程",
+          "education.graduationDate": "2018-06-30",
+          "education.major": "信息管理与信息系统",
+          "education.school": "华东理工大学",
+          "job.exclusions": [
+            "纯C端社交产品",
+            "硬件制造行业"
+          ],
+          "job.locations": [
+            "上海"
+          ],
+          "job.salaryExpectation": "18-22K·13薪",
+          "job.searchStatus": "积极投递中",
+          "job.targetIndustries": [
+            "B2B SaaS",
+            "企业服务"
+          ],
+          "job.targetRoles": [
+            "产品运营"
+          ],
+          "job.workModes": [
+            "全职",
+            "混合办公"
+          ],
+          "learning.activeSkills": [
+            "SQL",
+            "Python",
+            "客户成功运营",
+            "用户旅程分析",
+            "数据看板搭建",
+            "A/B测试",
+            "需求文档撰写"
+          ],
+          "learning.blockers": [
+            "缺乏大型团队项目管理经验",
+            "对GTM策略理解不够系统"
+          ],
+          "learning.goals": [
+            "系统掌握B2B SaaS客户生命周期运营方法论",
+            "提升数据建模与客户健康度量化能力"
+          ],
+          "learning.milestones": [
+            "2024-09完成客户健康度评分模型搭建并上线",
+            "2024-12完成新客户Onboarding流程数字化改造"
+          ],
+          "learning.nextFocus": "深入研究B2B SaaS领域的GTM策略与客户分层运营",
+          "profile.summary": "6年企业服务SaaS行业产品运营经验，擅长客户生命周期管理与数据驱动增长，熟悉SQL与Python数据分析，期望在上海寻找B2B SaaS产品运营方向的机会。"
+        }
+      }
+    },
+    {
+      "input_bindings": [
+        {
+          "input_field": "user_profile",
+          "source": "persona_snapshot"
+        },
+        {
+          "input_field": "user_supplied_material",
+          "material_id": "resume",
+          "source": "material_content"
+        }
+      ],
+      "input_schema_sha256": "9b6a0d989f0b9d543b9a15a2c07949d9f06d4f01d489d57baed67210f2448da1",
+      "invocation_id": "base_resume",
+      "tool_id": "network.conversation:skill_tool:BuildBaseResumeBank",
+      "tool_name": "BuildBaseResumeBank",
+      "validation_witness_arguments": {
+        "user_profile": {
+          "base.currentCity": "上海",
+          "base.currentIndustry": "企业服务SaaS",
+          "base.currentRole": "产品运营专员",
+          "base.currentStatus": "在职看机会",
+          "base.educationLevel": "本科",
+          "base.name": "陈思远",
+          "base.yearsOfExperience": 6,
+          "career.direction": "向B2B SaaS产品运营方向发展，聚焦客户生命周期运营与数据驱动增长",
+          "career.projectExperience": [
+            "客户健康度评分模型搭建与预警运营项目",
+            "新客户Onboarding流程数字化改造项目"
+          ],
+          "career.skills": [
+            "SQL",
+            "Python",
+            "客户成功运营",
+            "用户旅程分析",
+            "数据看板搭建",
+            "A/B测试",
+            "需求文档撰写"
+          ],
+          "career.workExperience": [
+            "2021-04至今 云启智联科技 产品运营专员",
+            "2018-07至2021-03 数策软件科技 运营助理"
+          ],
+          "education.degree": "工学学士",
+          "education.description": "主修信息系统分析与设计、数据库原理、市场营销学、用户研究方法等课程",
+          "education.graduationDate": "2018-06-30",
+          "education.major": "信息管理与信息系统",
+          "education.school": "华东理工大学",
+          "job.exclusions": [
+            "纯C端社交产品",
+            "硬件制造行业"
+          ],
+          "job.locations": [
+            "上海"
+          ],
+          "job.salaryExpectation": "18-22K·13薪",
+          "job.searchStatus": "积极投递中",
+          "job.targetIndustries": [
+            "B2B SaaS",
+            "企业服务"
+          ],
+          "job.targetRoles": [
+            "产品运营"
+          ],
+          "job.workModes": [
+            "全职",
+            "混合办公"
+          ],
+          "learning.activeSkills": [
+            "SQL",
+            "Python",
+            "客户成功运营",
+            "用户旅程分析",
+            "数据看板搭建",
+            "A/B测试",
+            "需求文档撰写"
+          ],
+          "learning.blockers": [
+            "缺乏大型团队项目管理经验",
+            "对GTM策略理解不够系统"
+          ],
+          "learning.goals": [
+            "系统掌握B2B SaaS客户生命周期运营方法论",
+            "提升数据建模与客户健康度量化能力"
+          ],
+          "learning.milestones": [
+            "2024-09完成客户健康度评分模型搭建并上线",
+            "2024-12完成新客户Onboarding流程数字化改造"
+          ],
+          "learning.nextFocus": "深入研究B2B SaaS领域的GTM策略与客户分层运营",
+          "profile.summary": "6年企业服务SaaS行业产品运营经验，擅长客户生命周期管理与数据驱动增长，熟悉SQL与Python数据分析，期望在上海寻找B2B SaaS产品运营方向的机会。"
+        },
+        "user_supplied_material": "# 基础简历\n\n姓名：陈思远\n\n## 个人概述\n6年企业服务SaaS行业产品运营经验，擅长客户生命周期管理与数据驱动增长，熟悉SQL与Python数据分析，期望在上海寻找B2B SaaS产品运营方向的机会。\n\n## 技能\n- SQL\n- Python\n- 客户成功运营\n- 用户旅程分析\n- 数据看板搭建\n- A/B测试\n- 需求文档撰写\n\n## 工作经历\n### 云启智联科技｜产品运营专员\n2021-04至今\n- 负责SaaS产品客户生命周期运营体系搭建，设计并落地客户健康度评分模型，覆盖活跃客户1200余家\n- 主导新客户Onboarding流程数字化改造，将客户首次价值实现时间从14天缩短至9天\n### 数策软件科技｜运营助理\n2018-07至2021-03\n- 协助产品经理完成需求调研与竞品分析，产出需求文档20余份\n- 搭建运营数据看板，使用SQL提取并分析客户使用行为数据，为产品迭代提供数据支撑\n\n## 项目经历\n### 客户健康度评分模型搭建与预警运营项目｜项目核心负责人\n- 基于客户登录频次、功能使用深度、工单提交量等维度构建健康度评分体系，联动客户成功团队实现流失预警\n### 新客户Onboarding流程数字化改造项目｜项目执行负责人\n- 梳理客户上线全流程节点，设计自动化触发规则与里程碑提醒，减少人工跟进遗漏\n\n## 教育经历\n- 华东理工大学｜信息管理与信息系统｜工学学士｜2018-06-30\n"
+      }
+    },
+    {
+      "input_bindings": [
+        {
+          "input_field": "project_entries",
+          "material_id": "projects",
+          "source": "material_payload"
+        },
+        {
+          "input_field": "target_opportunity",
+          "invocation_id": "opportunity",
+          "source": "prior_output",
+          "witness_value": {
+            "role": "产品运营"
+          }
+        },
+        {
+          "input_field": "evidence_gap_analysis",
+          "invocation_id": "compare",
+          "source": "prior_output",
+          "witness_value": {
+            "matched": [
+              "数据分析"
+            ]
+          }
+        },
+        {
+          "input_field": "user_profile",
+          "source": "persona_snapshot"
+        }
+      ],
+      "input_schema_sha256": "1f6572b006862608e0f28a913c6347a4924f4ff6495420ac64a1ed33f568325e",
+      "invocation_id": "rewrite_projects",
+      "tool_id": "network.conversation:skill_tool:RewriteProjectAccountsForOpportunity",
+      "tool_name": "RewriteProjectAccountsForOpportunity",
+      "validation_witness_arguments": {
+        "evidence_gap_analysis": {
+          "matched": [
+            "数据分析"
+          ]
+        },
+        "project_entries": {
+          "projects": [
+            {
+              "actions": [
+                "梳理客户关键行为指标，选取登录频次、功能使用深度、工单提交量等维度作为评分因子",
+                "使用SQL从数据仓库提取客户行为数据，通过Python进行权重回归分析确定各因子权重",
+                "设计健康度分级预警规则，与客户成功团队协同建立分级响应SOP"
+              ],
+              "project_name": "客户健康度评分模型搭建与预警运营项目",
+              "results": [
+                "模型覆盖活跃客户1200余家，高风险客户识别准确率达到82%",
+                "预警机制上线后季度客户流失率环比下降3.2个百分点"
+              ],
+              "role": "项目核心负责人",
+              "skills": [
+                "SQL",
+                "Python",
+                "客户成功运营",
+                "数据看板搭建"
+              ]
+            },
+            {
+              "actions": [
+                "访谈8家典型客户梳理上线全流程节点，识别关键卡点与人工跟进瓶颈",
+                "设计自动化触发规则与里程碑提醒机制，配置系统内引导任务与邮件通知",
+                "搭建Onboarding进度数据看板，实时监控各阶段转化率与平均耗时"
+              ],
+              "project_name": "新客户Onboarding流程数字化改造项目",
+              "results": [
+                "客户首次价值实现时间从14天缩短至9天",
+                "Onboarding阶段人工跟进工时减少约30%"
+              ],
+              "role": "项目执行负责人",
+              "skills": [
+                "用户旅程分析",
+                "需求文档撰写",
+                "A/B测试",
+                "数据看板搭建"
+              ]
+            }
+          ]
+        },
+        "target_opportunity": {
+          "role": "产品运营"
+        },
+        "user_profile": {
+          "base.currentCity": "上海",
+          "base.currentIndustry": "企业服务SaaS",
+          "base.currentRole": "产品运营专员",
+          "base.currentStatus": "在职看机会",
+          "base.educationLevel": "本科",
+          "base.name": "陈思远",
+          "base.yearsOfExperience": 6,
+          "career.direction": "向B2B SaaS产品运营方向发展，聚焦客户生命周期运营与数据驱动增长",
+          "career.projectExperience": [
+            "客户健康度评分模型搭建与预警运营项目",
+            "新客户Onboarding流程数字化改造项目"
+          ],
+          "career.skills": [
+            "SQL",
+            "Python",
+            "客户成功运营",
+            "用户旅程分析",
+            "数据看板搭建",
+            "A/B测试",
+            "需求文档撰写"
+          ],
+          "career.workExperience": [
+            "2021-04至今 云启智联科技 产品运营专员",
+            "2018-07至2021-03 数策软件科技 运营助理"
+          ],
+          "education.degree": "工学学士",
+          "education.description": "主修信息系统分析与设计、数据库原理、市场营销学、用户研究方法等课程",
+          "education.graduationDate": "2018-06-30",
+          "education.major": "信息管理与信息系统",
+          "education.school": "华东理工大学",
+          "job.exclusions": [
+            "纯C端社交产品",
+            "硬件制造行业"
+          ],
+          "job.locations": [
+            "上海"
+          ],
+          "job.salaryExpectation": "18-22K·13薪",
+          "job.searchStatus": "积极投递中",
+          "job.targetIndustries": [
+            "B2B SaaS",
+            "企业服务"
+          ],
+          "job.targetRoles": [
+            "产品运营"
+          ],
+          "job.workModes": [
+            "全职",
+            "混合办公"
+          ],
+          "learning.activeSkills": [
+            "SQL",
+            "Python",
+            "客户成功运营",
+            "用户旅程分析",
+            "数据看板搭建",
+            "A/B测试",
+            "需求文档撰写"
+          ],
+          "learning.blockers": [
+            "缺乏大型团队项目管理经验",
+            "对GTM策略理解不够系统"
+          ],
+          "learning.goals": [
+            "系统掌握B2B SaaS客户生命周期运营方法论",
+            "提升数据建模与客户健康度量化能力"
+          ],
+          "learning.milestones": [
+            "2024-09完成客户健康度评分模型搭建并上线",
+            "2024-12完成新客户Onboarding流程数字化改造"
+          ],
+          "learning.nextFocus": "深入研究B2B SaaS领域的GTM策略与客户分层运营",
+          "profile.summary": "6年企业服务SaaS行业产品运营经验，擅长客户生命周期管理与数据驱动增长，熟悉SQL与Python数据分析，期望在上海寻找B2B SaaS产品运营方向的机会。"
+        }
+      }
+    },
+    {
+      "input_bindings": [
+        {
+          "input_field": "resume_draft",
+          "material_id": "resume",
+          "source": "material_content"
+        },
+        {
+          "input_field": "target_opportunity",
+          "invocation_id": "opportunity",
+          "source": "prior_output",
+          "witness_value": {
+            "role": "产品运营"
+          }
+        },
+        {
+          "input_field": "application_focus_brief",
+          "invocation_id": "focus",
+          "source": "prior_output",
+          "witness_value": {
+            "focus": [
+              "留存分析"
+            ]
+          }
+        },
+        {
+          "input_field": "user_profile",
+          "source": "persona_snapshot"
+        },
+        {
+          "input_field": "format_preferences",
+          "source": "literal",
+          "value": {
+            "language": "zh-CN",
+            "length": "one_page"
+          }
+        }
+      ],
+      "input_schema_sha256": "ff4226bf78e6e1caf7ee1e8306fa3ed55014b47cfd7f74afc0f1e1d8f43a7703",
+      "invocation_id": "tailor",
+      "tool_id": "network.conversation:skill_tool:TailorResumeForOpportunity",
+      "tool_name": "TailorResumeForOpportunity",
+      "validation_witness_arguments": {
+        "application_focus_brief": {
+          "focus": [
+            "留存分析"
+          ]
+        },
+        "format_preferences": {
+          "language": "zh-CN",
+          "length": "one_page"
+        },
+        "resume_draft": "# 基础简历\n\n姓名：陈思远\n\n## 个人概述\n6年企业服务SaaS行业产品运营经验，擅长客户生命周期管理与数据驱动增长，熟悉SQL与Python数据分析，期望在上海寻找B2B SaaS产品运营方向的机会。\n\n## 技能\n- SQL\n- Python\n- 客户成功运营\n- 用户旅程分析\n- 数据看板搭建\n- A/B测试\n- 需求文档撰写\n\n## 工作经历\n### 云启智联科技｜产品运营专员\n2021-04至今\n- 负责SaaS产品客户生命周期运营体系搭建，设计并落地客户健康度评分模型，覆盖活跃客户1200余家\n- 主导新客户Onboarding流程数字化改造，将客户首次价值实现时间从14天缩短至9天\n### 数策软件科技｜运营助理\n2018-07至2021-03\n- 协助产品经理完成需求调研与竞品分析，产出需求文档20余份\n- 搭建运营数据看板，使用SQL提取并分析客户使用行为数据，为产品迭代提供数据支撑\n\n## 项目经历\n### 客户健康度评分模型搭建与预警运营项目｜项目核心负责人\n- 基于客户登录频次、功能使用深度、工单提交量等维度构建健康度评分体系，联动客户成功团队实现流失预警\n### 新客户Onboarding流程数字化改造项目｜项目执行负责人\n- 梳理客户上线全流程节点，设计自动化触发规则与里程碑提醒，减少人工跟进遗漏\n\n## 教育经历\n- 华东理工大学｜信息管理与信息系统｜工学学士｜2018-06-30\n",
+        "target_opportunity": {
+          "role": "产品运营"
+        },
+        "user_profile": {
+          "base.currentCity": "上海",
+          "base.currentIndustry": "企业服务SaaS",
+          "base.currentRole": "产品运营专员",
+          "base.currentStatus": "在职看机会",
+          "base.educationLevel": "本科",
+          "base.name": "陈思远",
+          "base.yearsOfExperience": 6,
+          "career.direction": "向B2B SaaS产品运营方向发展，聚焦客户生命周期运营与数据驱动增长",
+          "career.projectExperience": [
+            "客户健康度评分模型搭建与预警运营项目",
+            "新客户Onboarding流程数字化改造项目"
+          ],
+          "career.skills": [
+            "SQL",
+            "Python",
+            "客户成功运营",
+            "用户旅程分析",
+            "数据看板搭建",
+            "A/B测试",
+            "需求文档撰写"
+          ],
+          "career.workExperience": [
+            "2021-04至今 云启智联科技 产品运营专员",
+            "2018-07至2021-03 数策软件科技 运营助理"
+          ],
+          "education.degree": "工学学士",
+          "education.description": "主修信息系统分析与设计、数据库原理、市场营销学、用户研究方法等课程",
+          "education.graduationDate": "2018-06-30",
+          "education.major": "信息管理与信息系统",
+          "education.school": "华东理工大学",
+          "job.exclusions": [
+            "纯C端社交产品",
+            "硬件制造行业"
+          ],
+          "job.locations": [
+            "上海"
+          ],
+          "job.salaryExpectation": "18-22K·13薪",
+          "job.searchStatus": "积极投递中",
+          "job.targetIndustries": [
+            "B2B SaaS",
+            "企业服务"
+          ],
+          "job.targetRoles": [
+            "产品运营"
+          ],
+          "job.workModes": [
+            "全职",
+            "混合办公"
+          ],
+          "learning.activeSkills": [
+            "SQL",
+            "Python",
+            "客户成功运营",
+            "用户旅程分析",
+            "数据看板搭建",
+            "A/B测试",
+            "需求文档撰写"
+          ],
+          "learning.blockers": [
+            "缺乏大型团队项目管理经验",
+            "对GTM策略理解不够系统"
+          ],
+          "learning.goals": [
+            "系统掌握B2B SaaS客户生命周期运营方法论",
+            "提升数据建模与客户健康度量化能力"
+          ],
+          "learning.milestones": [
+            "2024-09完成客户健康度评分模型搭建并上线",
+            "2024-12完成新客户Onboarding流程数字化改造"
+          ],
+          "learning.nextFocus": "深入研究B2B SaaS领域的GTM策略与客户分层运营",
+          "profile.summary": "6年企业服务SaaS行业产品运营经验，擅长客户生命周期管理与数据驱动增长，熟悉SQL与Python数据分析，期望在上海寻找B2B SaaS产品运营方向的机会。"
+        }
+      }
+    }
+  ],
+  "schema_version": "eduagentworld.invocation_bindings.v1",
+  "task_id": "task_5e02dd6a1f9c4f4b9258"
+}

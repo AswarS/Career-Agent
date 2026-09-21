@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { mkdir, readFile, readdir } from 'node:fs/promises'
 import { join, relative, resolve, sep } from 'node:path'
 import sqlite3 from 'sqlite3'
+import { getSessionContext } from '../../server/SessionContext.js'
 import { parse as parseYaml } from 'yaml'
 import type {
   ConversationMemoryEvidenceUnit,
@@ -50,6 +51,7 @@ type ConversationMemorySearchOptions = {
 export async function syncConversationMemoryIndex(
   rootDir: string,
 ): Promise<void> {
+  if (getSessionContext()?.config.conversationMemoryEnabled === false) return
   const canonicalRoot = resolve(rootDir)
   const indexDir = join(canonicalRoot, '.index')
   await mkdir(indexDir, { recursive: true })
@@ -153,6 +155,7 @@ export async function searchProfileEvidenceCandidates(
   queries: string[],
   options: ProfileEvidenceSearchOptions = {},
 ): Promise<ConversationMemoryEvidenceUnit[]> {
+  if (getSessionContext()?.config.conversationMemoryEnabled === false) return []
   await syncConversationMemoryIndex(rootDir)
   const db = await openDatabase(
     join(resolve(rootDir), '.index', 'conversation-memory.sqlite'),
@@ -224,6 +227,7 @@ export async function resolveConversationEvidenceUnits(
   rootDir: string,
   unitIds: Iterable<string>,
 ): Promise<Map<string, ConversationMemoryEvidenceUnit>> {
+  if (getSessionContext()?.config.conversationMemoryEnabled === false) return new Map()
   await syncConversationMemoryIndex(rootDir)
   const db = await openDatabase(join(resolve(rootDir), '.index', 'conversation-memory.sqlite'))
   try {
@@ -250,6 +254,7 @@ export async function searchConversationMemory(
   limit: number,
   options: ConversationMemorySearchOptions = {},
 ): Promise<ConversationMemorySearchResult[]> {
+  if (getSessionContext()?.config.conversationMemoryEnabled === false) return []
   await syncConversationMemoryIndex(rootDir)
   const db = await openDatabase(
     join(resolve(rootDir), '.index', 'conversation-memory.sqlite'),

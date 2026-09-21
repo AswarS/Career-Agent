@@ -1,0 +1,16 @@
+{
+  "initial_resource_ids": [
+    "state:ProductProfile",
+    "state:WorkspaceFilesystem"
+  ],
+  "public_contract": {
+    "required_phrases": [
+      "application_resume.md",
+      "cover_letter.md",
+      "project_evidence.md"
+    ]
+  },
+  "scenario_id": "application_document_audit",
+  "summary": "Inspect a small application document set and audit facts and formatting.",
+  "task_brief": "审计三份指定求职材料的一致性、事实边界与 Markdown 格式，不得要求生成新的虚构经历。"
+}

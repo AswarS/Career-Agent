@@ -26,7 +26,7 @@ export async function prepareConversationMemoryTurn(
   requiredTurnId: string,
   userQuery: string,
 ): Promise<string | undefined> {
-  if (!isConversationMemoryEnabled() || !context.userId) {
+  if (context.config.conversationMemoryEnabled === false || !isConversationMemoryEnabled() || !context.userId) {
     context.conversationMemoryTurn = undefined
     return undefined
   }
@@ -138,6 +138,7 @@ export async function getConversationMemoryStopBlocker(
 ): Promise<string | null> {
   const turn = context?.conversationMemoryTurn
   if (
+    context?.config.conversationMemoryEnabled === false ||
     !turn?.enabled ||
     agentId ||
     turn.writeMode !== 'required' ||
@@ -178,7 +179,7 @@ export function getConversationMemoryPreCompactInstructions(
   context: SessionContext | undefined,
 ): string | undefined {
   const turn = context?.conversationMemoryTurn
-  if (!turn?.enabled || turn.status !== 'pending') return undefined
+  if (context?.config.conversationMemoryEnabled === false || !turn?.enabled || turn.status !== 'pending') return undefined
   return [
     'Preserve the current Conversation Memory checkpoint obligation during compaction.',
     `After completing the request, the main agent must update ${turn.sessionSummaryPath}`,

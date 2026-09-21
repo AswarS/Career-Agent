@@ -15,7 +15,7 @@ export type AgentAccent = 'teal' | 'amber' | 'blue' | 'slate';
 export type ArtifactStatus = 'idle' | 'loading' | 'streaming' | 'ready' | 'stale' | 'error';
 export type ArtifactRenderMode = 'html' | 'markdown' | 'cards' | 'url';
 export type ArtifactViewMode = 'pane' | 'focus' | 'immersive';
-export type MessageActionKind = 'open-artifact';
+export type MessageActionKind = 'open-artifact' | 'launch-praxis';
 export type MessageMediaKind = 'image' | 'audio' | 'video' | 'html' | 'app' | 'file';
 export type DraftMessageAttachmentKind = 'image' | 'file';
 export type SkillOutcome = 'success' | 'insufficient_input' | 'error';
@@ -51,13 +51,22 @@ export interface AskQuestionResponse {
   annotations?: Record<string, { preview?: string; notes?: string }>;
 }
 
-export interface MessageAction {
+export interface OpenArtifactMessageAction {
   id: string;
-  kind: MessageActionKind;
+  kind: 'open-artifact';
   label: string;
   artifactId: string;
   viewMode?: ArtifactViewMode;
 }
+
+export interface LaunchPraxisMessageAction {
+  id: string;
+  kind: 'launch-praxis';
+  label: string;
+  destination: 'home';
+}
+
+export type MessageAction = OpenArtifactMessageAction | LaunchPraxisMessageAction;
 
 export interface MessageMedia {
   id: string;

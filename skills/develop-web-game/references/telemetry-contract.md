@@ -17,6 +17,12 @@ const AgentTelemetry = {
 window.AgentTelemetry = AgentTelemetry;
 ```
 
+`record` accepts either the convenience form
+`record(type, { milestone: "stage_2" })` or the structured form
+`record(type, { target: "stage", data: { milestone: "stage_2" } })`. Prefer the
+structured form when a target is useful. Only allow-listed fields are retained
+in either form.
+
 Persist to `localStorage` under a namespaced key containing the app slug and telemetry version. If storage is unavailable, continue in memory and disclose that export ends when the page closes.
 
 ## Event envelope

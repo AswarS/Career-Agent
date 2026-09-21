@@ -1,0 +1,46 @@
+{
+  "compatibility": {
+    "career_agent_profile_contract": "eduagentworld.career_agent_persona.v1",
+    "career_agent_profile_product_schema_version": "career_profile_product_v2",
+    "career_agent_reference_revision": "73c7f984e164856975bc0f816641f2fa13614a2b",
+    "career_agent_repository": "https://github.com/AswarS/Career-Agent",
+    "logical_paths_require_downstream_materialization": true,
+    "source_manifest_sha256": "5094fde71c7856a0cc9fd9424b7c590ecd8fd872b051d0e7a8976dbda3d804a5",
+    "source_manifest_version": "1.1"
+  },
+  "generation": {
+    "method": "llm_synthesis",
+    "model": "GLM-5.2",
+    "provider": "paratera",
+    "recompiled_from_supplied_synthesis": true
+  },
+  "input_closure": {
+    "initial_resource_ids": [
+      "state:LearningState@1.0"
+    ],
+    "produced_resource_ids": [
+      "artifact:BaselineAssessment@1.0",
+      "artifact:CareerCompetencyModel@1.0",
+      "artifact:LearningPlan@1.0",
+      "artifact:LearningProgressAssessment@1.0",
+      "artifact:LearningStagePackage@1.0"
+    ],
+    "runtime_external_resource_ids": [],
+    "terminal_resource_ids": [
+      "artifact:BaselineAssessment@1.0",
+      "artifact:CareerCompetencyModel@1.0",
+      "artifact:LearningPlan@1.0",
+      "artifact:LearningProgressAssessment@1.0",
+      "artifact:LearningStagePackage@1.0",
+      "state:LearningState@1.0"
+    ]
+  },
+  "invocation_bindings_ref": "invocation_bindings.json",
+  "material_requirements_ref": "material_requirements.json",
+  "materials_manifest_ref": "materials_manifest.json",
+  "persona_ref": "persona.json",
+  "schema_version": "eduagentworld.task_environment.v1",
+  "task_id": "task_bc9c303668a5096740e8",
+  "validation_report_ref": "metadata/validation_report.json",
+  "workspace_mount": "/workspace"
+}

@@ -6,6 +6,7 @@
  * during dead code elimination
  */
 import { getMainLoopModelOverride } from '../../bootstrap/state.js'
+import { getSessionContext } from '../../server/SessionContext.js'
 import {
   getSubscriptionType,
   isClaudeAISubscriber,

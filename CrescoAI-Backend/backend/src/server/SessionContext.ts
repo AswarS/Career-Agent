@@ -38,6 +38,10 @@ export type SessionConfig = {
   autoMemoryDir?: string
   /** User-scoped OpenClaw-style conversation-memory root. */
   conversationMemoryDir?: string
+  /** Explicit training policy; undefined preserves existing production behavior. */
+  conversationMemoryEnabled?: boolean
+  trainingHarness?: boolean
+  trainingTransport?: import('../services/api/trainingTransport.js').TrainingTransport
   /** The only conversation-memory summary file writable by this session. */
   conversationMemorySessionFile?: string
   /** User-owned inputs outside workspaceRoot, for example uploaded files. */

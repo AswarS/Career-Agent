@@ -1,0 +1,190 @@
+{
+  "invocations": [
+    {
+      "input_bindings": [
+        {
+          "input_field": "career_target",
+          "source": "literal",
+          "value": "上海地区初级云原生运维工程师"
+        }
+      ],
+      "input_schema_sha256": "df535b0afe28e1a18151d08a61a5a2de6855628f84886e43fc5387595e2ac4cf",
+      "invocation_id": "model",
+      "tool_id": "network.conversation:skill_tool:CareerCompetencyModel",
+      "tool_name": "CareerCompetencyModel",
+      "validation_witness_arguments": {
+        "career_target": "上海地区初级云原生运维工程师"
+      }
+    },
+    {
+      "input_bindings": [
+        {
+          "input_field": "assessment_target",
+          "source": "literal",
+          "value": "Linux、容器与 Kubernetes 基础"
+        }
+      ],
+      "input_schema_sha256": "d584ba2280cbc4fe9a04d8261b8582596068a2398cec3f25f709b919d5871ac3",
+      "invocation_id": "baseline",
+      "tool_id": "network.conversation:skill_tool:BaselineAssessment",
+      "tool_name": "BaselineAssessment",
+      "validation_witness_arguments": {
+        "assessment_target": "Linux、容器与 Kubernetes 基础"
+      }
+    },
+    {
+      "input_bindings": [
+        {
+          "input_field": "model_ref",
+          "invocation_id": "model",
+          "source": "prior_output",
+          "witness_value": "artifact://11111111-1111-4111-8111-111111111111"
+        },
+        {
+          "input_field": "baseline_ref",
+          "invocation_id": "baseline",
+          "source": "prior_output",
+          "witness_value": "artifact://22222222-2222-4222-8222-222222222222"
+        },
+        {
+          "input_field": "goal_level",
+          "source": "literal",
+          "value": "working"
+        },
+        {
+          "input_field": "constraints",
+          "source": "literal",
+          "value": {
+            "available_time_per_week": "每周 8 小时",
+            "deadline": "2026-12-31",
+            "resource_constraints": "仅使用免费或已有资源"
+          }
+        }
+      ],
+      "input_schema_sha256": "2d00f1bf801400cad76a0a1bb1a256627a859d8819bedc2139df813846343d92",
+      "invocation_id": "plan",
+      "tool_id": "network.conversation:skill_tool:LearningPlan",
+      "tool_name": "LearningPlan",
+      "validation_witness_arguments": {
+        "baseline_ref": "artifact://22222222-2222-4222-8222-222222222222",
+        "constraints": {
+          "available_time_per_week": "每周 8 小时",
+          "deadline": "2026-12-31",
+          "resource_constraints": "仅使用免费或已有资源"
+        },
+        "goal_level": "working",
+        "model_ref": "artifact://11111111-1111-4111-8111-111111111111"
+      }
+    },
+    {
+      "input_bindings": [
+        {
+          "input_field": "plan_ref",
+          "invocation_id": "plan",
+          "source": "prior_output",
+          "witness_value": "artifact://33333333-3333-4333-8333-333333333333"
+        }
+      ],
+      "input_schema_sha256": "94fc368a8c67c60b4f61f76ec998bebadaea646dabb216ea038b5606aee8f9e0",
+      "invocation_id": "activate",
+      "tool_id": "network.conversation:harness_tool:ActivateLearningPlan",
+      "tool_name": "ActivateLearningPlan",
+      "validation_witness_arguments": {
+        "plan_ref": "artifact://33333333-3333-4333-8333-333333333333"
+      }
+    },
+    {
+      "input_bindings": [
+        {
+          "input_field": "plan_id",
+          "source": "literal",
+          "value": "plan-cloud-native-001"
+        },
+        {
+          "input_field": "constraints",
+          "source": "literal",
+          "value": {
+            "available_time": "每周 8 小时",
+            "learning_preferences": "项目驱动"
+          }
+        }
+      ],
+      "input_schema_sha256": "9cf662ddad98aee340197b1256a8c8abb219d84152b2e18187e7c43fdb77b9e6",
+      "invocation_id": "stage",
+      "tool_id": "network.conversation:skill_tool:LearningStageDesign",
+      "tool_name": "LearningStageDesign",
+      "validation_witness_arguments": {
+        "constraints": {
+          "available_time": "每周 8 小时",
+          "learning_preferences": "项目驱动"
+        },
+        "plan_id": "plan-cloud-native-001"
+      }
+    },
+    {
+      "input_bindings": [
+        {
+          "input_field": "plan_id",
+          "source": "literal",
+          "value": "plan-cloud-native-001"
+        },
+        {
+          "input_field": "evidence",
+          "material_id": "learning_log",
+          "source": "material_evidence"
+        }
+      ],
+      "input_schema_sha256": "80b630a79d8aa45061a204673d3e9b64d1748a4d98c41126d64a591f602bb3ea",
+      "invocation_id": "assess",
+      "tool_id": "network.conversation:skill_tool:LearningProgressAssessment",
+      "tool_name": "LearningProgressAssessment",
+      "validation_witness_arguments": {
+        "evidence": [
+          {
+            "source_ref": "/workspace/materials/week1_learning_log.md",
+            "source_type": "workspace_file",
+            "summary": "为阶段学习评估提供可追溯证据"
+          }
+        ],
+        "plan_id": "plan-cloud-native-001"
+      }
+    },
+    {
+      "input_bindings": [
+        {
+          "input_field": "plan_id",
+          "source": "literal",
+          "value": "plan-cloud-native-001"
+        },
+        {
+          "input_field": "operation",
+          "source": "literal",
+          "value": "apply_assessment"
+        },
+        {
+          "input_field": "assessment_ref",
+          "invocation_id": "assess",
+          "source": "prior_output",
+          "witness_value": "artifact://44444444-4444-4444-8444-444444444444"
+        },
+        {
+          "input_field": "decision",
+          "source": "literal",
+          "value": "hold"
+        }
+      ],
+      "input_schema_sha256": "3cc01ee51308f892e15804e64974d9ed3393432754a07d60ba0027ee0c3226e4",
+      "invocation_id": "update",
+      "tool_id": "network.conversation:harness_tool:UpdateLearningProgress",
+      "tool_name": "UpdateLearningProgress",
+      "validation_witness_arguments": {
+        "assessment_ref": "artifact://44444444-4444-4444-8444-444444444444",
+        "decision": "hold",
+        "operation": "apply_assessment",
+        "plan_id": "plan-cloud-native-001"
+      }
+    }
+  ],
+  "schema_version": "eduagentworld.invocation_bindings.v1",
+  "task_id": "task_bc9c303668a5096740e8"
+}

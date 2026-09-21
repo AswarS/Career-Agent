@@ -1,0 +1,20 @@
+{
+  "materials": [
+    {
+      "logical_path": "/workspace/materials/resume_draft.md",
+      "material_id": "draft",
+      "media_type": "text/markdown",
+      "package_path": "materials/resume_draft.md",
+      "payload_schema": "markdown_document_v1",
+      "provenance": "synthetic_fixture",
+      "purpose": "提供需要精确修改的简历草稿",
+      "renderer": "markdown_document_v1",
+      "semantic_type": "editable_text",
+      "sha256": "3070c3837c5d5d184cc3f3c2b11cb81b054c56e5e6e2fc2f15f016aa141f9e42",
+      "size_bytes": 1051,
+      "title": "待修改简历"
+    }
+  ],
+  "schema_version": "eduagentworld.material_manifest.v1",
+  "task_id": "task_e115e2d9c8519f6c4c01"
+}

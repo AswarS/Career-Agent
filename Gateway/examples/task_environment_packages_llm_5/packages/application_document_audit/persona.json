@@ -1,0 +1,99 @@
+{
+  "base_profile": {
+    "birthDate": "1996-03-15",
+    "contactLanguage": "中文",
+    "currentCity": "深圳",
+    "currentIndustry": "互联网",
+    "currentRole": "后端开发工程师",
+    "currentStatus": "在职看机会",
+    "educationBackground": [
+      {
+        "degree": "工学学士",
+        "description": "主修软件工程、数据库系统与计算机网络，毕业设计为基于Spring Boot的校园活动管理平台",
+        "graduationDate": "2018-06-30",
+        "major": "计算机科学与技术",
+        "school": "华东理工大学"
+      }
+    ],
+    "educationLevel": "本科",
+    "gender": "男",
+    "name": "陈思远",
+    "yearsOfExperience": 6
+  },
+  "career_agent_profile_product_schema_version": "career_profile_product_v2",
+  "career_agent_reference_revision": "73c7f984e164856975bc0f816641f2fa13614a2b",
+  "product_fields": {
+    "base.currentCity": "深圳",
+    "base.currentIndustry": "互联网",
+    "base.currentRole": "后端开发工程师",
+    "base.currentStatus": "在职看机会",
+    "base.educationLevel": "本科",
+    "base.name": "陈思远",
+    "base.yearsOfExperience": 6,
+    "career.direction": "向技术专家路线发展，深耕后端架构与高并发系统设计",
+    "career.projectExperience": [
+      "电商订单微服务系统",
+      "实时日志分析平台"
+    ],
+    "career.skills": [
+      "Java",
+      "Spring Boot",
+      "MySQL",
+      "Redis",
+      "Kafka",
+      "Docker",
+      "Python",
+      "Elasticsearch",
+      "React",
+      "TypeScript"
+    ],
+    "career.workExperience": [
+      "2018-07 至 2021-08 深圳云启科技有限公司 后端开发工程师",
+      "2021-09 至今 深圳星河数据技术有限公司 高级后端开发工程师"
+    ],
+    "education.degree": "工学学士",
+    "education.description": "主修软件工程、数据库系统与计算机网络，毕业设计为基于Spring Boot的校园活动管理平台",
+    "education.graduationDate": "2018-06-30",
+    "education.major": "计算机科学与技术",
+    "education.school": "华东理工大学",
+    "job.exclusions": [
+      "外包",
+      "频繁出差"
+    ],
+    "job.locations": [
+      "深圳"
+    ],
+    "job.salaryExpectation": "25-35K·14薪",
+    "job.searchStatus": "在职看机会",
+    "job.targetIndustries": [
+      "互联网",
+      "电商",
+      "云计算"
+    ],
+    "job.targetRoles": [
+      "高级后端开发工程师",
+      "后端架构师"
+    ],
+    "job.workModes": [
+      "全职"
+    ],
+    "learning.activeSkills": [
+      "Kubernetes",
+      "Go语言"
+    ],
+    "learning.blockers": [
+      "工作日加班较多，学习时间有限"
+    ],
+    "learning.goals": [
+      "掌握Kubernetes生产级集群运维",
+      "学习Go语言以扩展技术栈"
+    ],
+    "learning.milestones": [
+      "2024-03 完成CKA认证考试备考",
+      "2024-06 用Go重写个人博客后端"
+    ],
+    "learning.nextFocus": "Kubernetes Operator 开发实战",
+    "profile.summary": "6年Java后端开发经验，专注高并发系统设计与微服务架构，熟悉电商与数据平台领域，具备React和TypeScript前端协作能力"
+  },
+  "schema_version": "eduagentworld.career_agent_persona.v1"
+}

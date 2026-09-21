@@ -1,0 +1,111 @@
+{
+  "taskId": "task_e115e2d9c8519f6c4c01",
+  "profile": {
+    "schemaVersion": "career_profile_v1",
+    "basicInfo": {
+      "fullName": "陈思远",
+      "displayName": "陈思远",
+      "contactEmail": "",
+      "phoneOrPreferredContact": "",
+      "currentCity": "杭州",
+      "profileAssets": []
+    },
+    "careerProfile": {
+      "candidateType": "",
+      "currentRole": "前端开发工程师",
+      "employmentStatus": "在职看机会",
+      "careerStage": "",
+      "educationBackground": "[\n  {\n    \"degree\": \"工学学士\",\n    \"description\": \"主修Web前端开发、数据结构与算法、软件工程导论等课程，毕业设计为基于React的校园活动管理平台\",\n    \"graduationDate\": \"2018-06-30\",\n    \"major\": \"软件工程\",\n    \"school\": \"杭州电子科技大学\"\n  }\n]",
+      "workExperience": "2018.07-2020.05 杭州云栈科技有限公司 前端开发工程师 负责公司SaaS管理后台的页面开发与迭代维护\n2020.06-至今 杭州星澜网络科技有限公司 前端开发工程师 负责电商平台前端架构改进与性能优化",
+      "projectExperience": "云栈SaaS管理后台 — 使用React与TypeScript构建后台管理系统，实现权限管理与数据可视化模块\n星澜电商前端性能优化 — 对现有React应用进行打包体积分析与渲染优化，首屏加载时间降低约40%",
+      "skills": [
+        "React",
+        "TypeScript",
+        "Webpack",
+        "Redux",
+        "HTML5",
+        "CSS3",
+        "Jest"
+      ],
+      "interests": [],
+      "strengthTags": [],
+      "weaknessTags": [],
+      "personalityTraits": []
+    },
+    "intentConstraints": {
+      "targetIndustry": "互联网/电子商务",
+      "targetIndustries": [
+        "互联网/电子商务",
+        "金融科技"
+      ],
+      "targetRole": "高级前端开发工程师\n前端技术专家",
+      "targetCity": "杭州",
+      "expectedSalary": "20-28K·14薪",
+      "availableTime": "",
+      "jobSearchStatus": "在职看机会",
+      "constraints": [
+        "频繁出差",
+        "纯外包项目"
+      ],
+      "workPreferences": [
+        "全职"
+      ],
+      "learningPreferences": [],
+      "careerGoal": "向高级前端开发工程师方向发展，深耕React技术栈与前端性能优化领域"
+    },
+    "activityRecords": {
+      "learningRecords": [],
+      "projectRecords": [],
+      "applicationRecords": [],
+      "interviewRecords": [],
+      "offerRecords": [],
+      "workRecords": []
+    },
+    "artifacts": {
+      "resumeSummary": "5年前端开发经验，精通React技术栈，具备电商与SaaS后台开发经验，当前关注前端性能优化方向，寻求杭州高级前端开发岗位。\n\n完整原始画像事实（base_profile / product_fields）：\n{\n  \"base_profile\": {\n    \"birthDate\": \"1996-03-15\",\n    \"contactLanguage\": \"中文\",\n    \"currentCity\": \"杭州\",\n    \"currentIndustry\": \"互联网/电子商务\",\n    \"currentRole\": \"前端开发工程师\",\n    \"currentStatus\": \"在职看机会\",\n    \"educationBackground\": [\n      {\n        \"degree\": \"工学学士\",\n        \"description\": \"主修Web前端开发、数据结构与算法、软件工程导论等课程，毕业设计为基于React的校园活动管理平台\",\n        \"graduationDate\": \"2018-06-30\",\n        \"major\": \"软件工程\",\n        \"school\": \"杭州电子科技大学\"\n      }\n    ],\n    \"educationLevel\": \"本科\",\n    \"gender\": \"男\",\n    \"name\": \"陈思远\",\n    \"yearsOfExperience\": 5\n  },\n  \"product_fields\": {\n    \"base.currentCity\": \"杭州\",\n    \"base.currentIndustry\": \"互联网/电子商务\",\n    \"base.currentRole\": \"前端开发工程师\",\n    \"base.currentStatus\": \"在职看机会\",\n    \"base.educationLevel\": \"本科\",\n    \"base.name\": \"陈思远\",\n    \"base.yearsOfExperience\": 5,\n    \"career.direction\": \"向高级前端开发工程师方向发展，深耕React技术栈与前端性能优化领域\",\n    \"career.projectExperience\": [\n      \"云栈SaaS管理后台 — 使用React与TypeScript构建后台管理系统，实现权限管理与数据可视化模块\",\n      \"星澜电商前端性能优化 — 对现有React应用进行打包体积分析与渲染优化，首屏加载时间降低约40%\"\n    ],\n    \"career.skills\": [\n      \"React\",\n      \"TypeScript\",\n      \"Webpack\",\n      \"Redux\",\n      \"HTML5\",\n      \"CSS3\",\n      \"Jest\"\n    ],\n    \"career.workExperience\": [\n      \"2018.07-2020.05 杭州云栈科技有限公司 前端开发工程师 负责公司SaaS管理后台的页面开发与迭代维护\",\n      \"2020.06-至今 杭州星澜网络科技有限公司 前端开发工程师 负责电商平台前端架构改进与性能优化\"\n    ],\n    \"education.degree\": \"工学学士\",\n    \"education.description\": \"主修Web前端开发、数据结构与算法、软件工程导论等课程，毕业设计为基于React的校园活动管理平台\",\n    \"education.graduationDate\": \"2018-06-30\",\n    \"education.major\": \"软件工程\",\n    \"education.school\": \"杭州电子科技大学\",\n    \"job.exclusions\": [\n      \"频繁出差\",\n      \"纯外包项目\"\n    ],\n    \"job.locations\": [\n      \"杭州\"\n    ],\n    \"job.salaryExpectation\": \"20-28K·14薪\",\n    \"job.searchStatus\": \"在职看机会\",\n    \"job.targetIndustries\": [\n      \"互联网/电子商务\",\n      \"金融科技\"\n    ],\n    \"job.targetRoles\": [\n      \"高级前端开发工程师\",\n      \"前端技术专家\"\n    ],\n    \"job.workModes\": [\n      \"全职\"\n    ],\n    \"learning.activeSkills\": [\n      \"React性能优化\",\n      \"Webpack配置调优\"\n    ],\n    \"learning.blockers\": [\n      \"工作日晚上学习时间有限\",\n      \"缺少大型团队协作的Code Review环境\"\n    ],\n    \"learning.goals\": [\n      \"系统掌握React渲染优化与状态管理最佳实践\",\n      \"提升Webpack构建速度与产物体积控制能力\"\n    ],\n    \"learning.milestones\": [\n      \"2024年3月：完成React并发渲染与Suspense机制的系统学习\",\n      \"2024年5月：在星澜电商项目中落地首屏性能优化方案\"\n    ],\n    \"learning.nextFocus\": \"深入React Fiber架构与调度机制，准备高级前端面试\",\n    \"profile.summary\": \"5年前端开发经验，精通React技术栈，具备电商与SaaS后台开发经验，当前关注前端性能优化方向，寻求杭州高级前端开发岗位。\"\n  }\n}",
+      "portfolioLinks": [],
+      "projectMaterials": [],
+      "coverLetters": []
+    },
+    "feedbackSignals": {
+      "userFeedback": [],
+      "interviewFeedback": [],
+      "mentorFeedback": [],
+      "managerFeedback": [],
+      "systemAssessmentFeedback": []
+    },
+    "planState": {
+      "learningPlan": "{\n  \"learning.activeSkills\": [\n    \"React性能优化\",\n    \"Webpack配置调优\"\n  ],\n  \"learning.blockers\": [\n    \"工作日晚上学习时间有限\",\n    \"缺少大型团队协作的Code Review环境\"\n  ],\n  \"learning.goals\": [\n    \"系统掌握React渲染优化与状态管理最佳实践\",\n    \"提升Webpack构建速度与产物体积控制能力\"\n  ],\n  \"learning.milestones\": [\n    \"2024年3月：完成React并发渲染与Suspense机制的系统学习\",\n    \"2024年5月：在星澜电商项目中落地首屏性能优化方案\"\n  ],\n  \"learning.nextFocus\": \"深入React Fiber架构与调度机制，准备高级前端面试\"\n}",
+      "projectPlan": "",
+      "applicationPlan": "",
+      "interviewPlan": "",
+      "onboardingPlan": "",
+      "promotionPlan": ""
+    },
+    "chinaResumeSupplement": {
+      "jobIntentionStatement": "",
+      "educationDetail": "",
+      "awardsCertificatesHighlights": "",
+      "conditionalFields": ""
+    }
+  },
+  "query": "请读取 resume_draft.md 文件内容，找到正文中的旧句\"负责前端页面开发和维护\"，将其精确替换为新句\"负责前端页面开发、维护及性能优化\"。仅执行这一处替换，不得对简历中其他任何文字做改动、扩展或重写。替换完成后，请验证新句\"负责前端页面开发、维护及性能优化\"在文件中恰好出现一次，且旧句\"负责前端页面开发和维护\"不再存在。简历中的姓名、教育背景、工作经历、项目名称、技能列表等所有事实信息必须原样保留，不得增删或修改。\n\n可用输入：\n- 已装载的 Career-Agent 用户画像\n- 待修改简历（materials/resume_draft.md）\n\n约束：\n- 只允许执行一次精确文本替换：旧句\"负责前端页面开发和维护\"→新句\"负责前端页面开发、维护及性能优化\"\n- 不得对文件中其他任何内容进行改写、扩展或删减\n- 替换后新句在文件正文中必须恰好出现一次\n- 替换后旧句不得在文件中任何位置出现\n- 简历中的姓名、教育、工作经历、项目名称、技能等事实信息必须原样保留\n\n交付要求：\n- 修改后的 resume_draft.md 文件，其中旧句已被精确替换为新句\n- 替换结果验证说明：确认新句恰好出现一次、旧句已不存在\n\n上述材料路径相对于当前用户 workspace；正文中的同名文件均指上述 materials/ 目录中的文件。",
+  "workspace": {
+    "files": [
+      {
+        "path": "materials/resume_draft.md",
+        "encoding": "utf8",
+        "content": "# 陈思远-前端开发工程师-简历草稿\n\n## 个人信息\n姓名：陈思远 | 性别：男 | 出生年月：1996.03 | 现居城市：杭州 | 联系语言：中文\n- 求职状态：在职看机会\n- 期望薪资：20-28K·14薪\n- 期望城市：杭州\n\n## 教育背景\n2014.09-2018.06 杭州电子科技大学 软件工程 工学学士\n- 主修Web前端开发、数据结构与算法、软件工程导论等课程\n- 毕业设计为基于React的校园活动管理平台\n\n## 工作经历\n2018.07-2020.05 杭州云栈科技有限公司 前端开发工程师；2020.06-至今 杭州星澜网络科技有限公司 前端开发工程师\n- 云栈SaaS管理后台：负责前端页面开发和维护，使用React与TypeScript构建后台管理系统\n- 星澜电商前端性能优化：对现有React应用进行打包体积分析与渲染优化，首屏加载时间降低约40%\n\n## 专业技能\n熟练掌握React生态与前端工程化工具链，具备TypeScript类型系统实践经验\n- React | TypeScript | Webpack | Redux | HTML5 | CSS3 | Jest\n"
+      }
+    ]
+  },
+  "modelProfile": "main-policy",
+  "userSimulator": {
+    "modelProfile": "simulated-user"
+  },
+  "limits": {
+    "timeoutMs": 600000,
+    "maxModelCalls": 100,
+    "maxUserQuestions": 20
+  }
+}
