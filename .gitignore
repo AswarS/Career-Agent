@@ -8,6 +8,9 @@
 /generated-skills/
 /skills2/
 /web_app_skills/
+/syn_task/
+/syn_tasks/
+/trajectory_gen/trajectories/
 
 # Local Windows launchers
 /start_windows.cmd

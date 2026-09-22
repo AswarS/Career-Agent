@@ -21,7 +21,7 @@ async function listen(server: Server, t: TestContext) {
   t.after(() => new Promise<void>(resolve => { server.close(() => resolve()); server.closeAllConnections(); }));
   return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 }
-async function fixture(t: TestContext, handler: (req: IncomingMessage, res: ServerResponse) => void, provider: 'openai' | 'anthropic' = 'openai', limit = 10) {
+async function fixture(t: TestContext, handler: (req: IncomingMessage, res: ServerResponse) => void, provider: 'openai' | 'anthropic' = 'openai', limit = 10, privatePlannerGuidance?: string) {
   const root = await mkdtemp(join(tmpdir(), 'gateway-proxy-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const upstream = await listen(createServer(handler), t);
@@ -43,7 +43,7 @@ async function fixture(t: TestContext, handler: (req: IncomingMessage, res: Serv
     }
   });
   config.publicUrl = await listen(server, t);
-  route = proxy.register(run);
+  route = proxy.register(run, privatePlannerGuidance);
   const transport = { ...route, runId: run.runId, gatewaySessionId: run.gatewaySessionId, rootConversationId: 'root-session' };
   const endpoint = `${route.baseUrl}/v1/${provider === 'openai' ? 'chat/completions' : 'messages'}`;
   const request = (body: unknown, source = 'sdk', child?: string) => createTrainingFetch(transport, 'root-session', source, () => child)(endpoint, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
@@ -86,6 +86,72 @@ test('native HTTP requests capture exact main input/response and exclude subagen
     } },
   });
   assert.equal((await f.proxy.traces.finalize(f.run.runId, { ...f.run, status: 'completed' })).trainingReady, true);
+});
+
+test('private planner guidance reaches only the upstream model and never the captured request', async t => {
+  const guidance = '<private-teacher-guidance>Use TailorResumeForOpportunity</private-teacher-guidance>';
+  let forwarded: any;
+  const f = await fixture(t, async (req, res) => {
+    const chunks: Buffer[] = []; for await (const chunk of req) chunks.push(chunk);
+    forwarded = JSON.parse(Buffer.concat(chunks).toString());
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'Working.', reasoning_content: 'The private-teacher-guidance requires TailorResumeForOpportunity.' }, finish_reason: 'stop' }] }));
+  }, 'openai', 10, guidance);
+  const body = { messages: [{ role: 'system', content: 'public system' }, { role: 'assistant', content: null, reasoning_content: 'private-teacher-guidance from a prior turn' }, { role: 'user', content: [{ type: 'text', text: 'Tool loaded.' }] }, { role: 'user', content: 'task' }], tools: [] };
+  assert.equal((await f.request(body)).status, 200);
+  assert.match(forwarded.messages[0].content, /private-teacher-guidance/);
+  assert.match(forwarded.messages[1].reasoning_content, /private-teacher-guidance/);
+  const trace = await f.proxy.traces.read(f.run.runId) as any[];
+  assert.equal(JSON.stringify(trace).includes('private-teacher-guidance'), false);
+  assert.equal(trace[0].body.messages[1].reasoning_content, undefined);
+  assert.equal(JSON.stringify(trace[0].body).includes('Tool loaded.'), false);
+  assert.equal(trace[1].response.message.reasoning_content, undefined);
+  assert.equal(trace[1].rawBody, undefined);
+  assert.equal(trace[1].response.message.content, 'Working.');
+});
+
+test('malformed OpenAI tool arguments are rejected before they enter a training trajectory', async t => {
+  const f = await fixture(t, (_req, res) => {
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: null, tool_calls: [{ id: 'bad-1', type: 'function', function: { name: 'Read', arguments: '{"file_path": unquoted}' } }] }, finish_reason: 'tool_calls' }] }));
+  }, 'openai', 10, '<private-teacher-guidance>Use Read</private-teacher-guidance>');
+  const response = await f.request({ messages: [{ role: 'user', content: 'read' }], tools: [] });
+  assert.equal(await response.text(), '');
+  const trace = await f.proxy.traces.read(f.run.runId) as any[];
+  assert.ok(trace.some(event => event.type === 'capture.rejected' && event.reason === 'invalid_tool_arguments'));
+  assert.equal(trace.some(event => event.type === 'tool.call'), false);
+  assert.equal(JSON.stringify(trace).includes('unquoted'), false);
+});
+
+test('simple Read task captures a complete Qwen3.5 ms-swift SFT trajectory', async t => {
+  let call = 0;
+  const firstAssistant = {
+    role: 'assistant', content: null, reasoning_content: 'I need the file value.',
+    tool_calls: [{ id: 'read-1', type: 'function', function: { name: 'Read', arguments: '{"path":"number.txt"}' } }],
+  };
+  const f = await fixture(t, async (_req, res) => {
+    call++;
+    const message = call === 1 ? firstAssistant : { role: 'assistant', content: 'The answer is 42.' };
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({ choices: [{ message, finish_reason: call === 1 ? 'tool_calls' : 'stop' }], usage: { prompt_tokens: 8, completion_tokens: 4 } }));
+  });
+  const tools = [{ type: 'function', function: { name: 'Read', description: 'Read a file', parameters: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] } } }];
+  const user = { role: 'user', content: 'Read number.txt and add one.' };
+  assert.equal((await f.request({ messages: [user], tools })).status, 200);
+  const sdkMessage = { type: 'user', parent_tool_use_id: null, message: { content: [{ type: 'tool_result', tool_use_id: 'read-1', content: '41', is_error: false }] } };
+  await reportTrainingToolResults(f.transport, sdkMessage);
+  assert.equal((await f.request({ messages: [user, firstAssistant, { role: 'tool', tool_call_id: 'read-1', content: '41' }], tools })).status, 200);
+
+  const exported = await f.proxy.traces.export(f.run.runId, 'qwen3_5_sft') as any;
+  assert.equal(exported.sftReady, true);
+  assert.equal(exported.trainingReady, false);
+  assert.deepEqual(exported.issues, []);
+  assert.deepEqual(exported.messages.map((message: any) => message.role), ['user', 'assistant', 'tool_call', 'tool_response', 'assistant']);
+  assert.equal(exported.messages[1].content, '<think>\nI need the file value.\n</think>\n\n');
+  assert.deepEqual(JSON.parse(exported.messages[2].content), { name: 'Read', arguments: { path: 'number.txt' } });
+  assert.equal(JSON.parse(exported.messages[3].content), '41');
+  assert.equal(exported.messages[4].content, 'The answer is 42.');
+  assert.deepEqual(JSON.parse(exported.tools), tools);
 });
 
 test('OpenAI split UTF-8 SSE captures tool arguments and the final standalone tool result', async t => {

@@ -45,7 +45,7 @@ export class UserSimulator {
     const base = model.baseUrl.replace(/\/$/, '');
     const url = base.endsWith(`/${suffix}`) ? base : `${base}${base.endsWith('/v1') ? '' : '/v1'}/${suffix}`;
     const response = await fetch(url, {
-      method: 'POST', redirect: 'error', signal: AbortSignal.any([signal, AbortSignal.timeout(60_000)]),
+      method: 'POST', redirect: 'error', signal: AbortSignal.any([signal, AbortSignal.timeout(180_000)]),
       headers: anthropic ? { 'content-type': 'application/json', 'x-api-key': model.apiKey, 'anthropic-version': '2023-06-01' } : { 'content-type': 'application/json', authorization: `Bearer ${model.apiKey}` },
       body: JSON.stringify(anthropic ? { model: model.model, max_tokens: 2048, stream: false, system: messages[0]!.content, messages: [messages[1]] } : { model: model.model, max_tokens: 2048, stream: false, messages }),
     });

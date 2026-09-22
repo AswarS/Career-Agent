@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { messageExport, messagesListExport } from '../src/training/messages.ts';
+import { messageExport, messagesListExport, qwen35SftExport } from '../src/training/messages.ts';
 import type { JournalEvent } from '../src/training/export.ts';
 
 const identity = { requestId: 'r1', agentRole: 'main', purpose: 'policy' };
@@ -22,6 +22,20 @@ test('rewritten input contexts are reported rather than silently merged', () => 
   const result = messagesListExport([request, event(2, { ...request.payload, identity: { ...identity, requestId: 'r2' }, body: { messages: [{ role: 'user', content: 'rewritten' }] } })]);
   assert.equal(result.messages_list, null);
   assert.ok(result.issues.includes('context_rewritten_use_per_call_messages'));
+});
+test('Qwen3.5 SFT export refuses rewritten contexts', () => {
+  const result = qwen35SftExport([request, event(2, { ...request.payload, identity: { ...identity, requestId: 'r2' }, body: { messages: [{ role: 'user', content: 'rewritten' }] } })]);
+  assert.equal(result.sftReady, false);
+  assert.equal(result.messages, null);
+  assert.ok(result.issues.includes('context_rewritten_use_per_call_messages'));
+});
+test('Qwen3.5 SFT export removes the internal ToolSearch load marker', () => {
+  const result = qwen35SftExport([
+    event(1, { ...request.payload, body: { ...request.payload.body, messages: [...request.payload.body.messages, { role: 'user', content: [{ type: 'text', text: 'Tool loaded.' }] }] } }),
+    event(2, { type: 'model.response', identity, protocol: 'openai', status: 200, complete: true, response: { message: { role: 'assistant', content: 'done' } } }),
+  ]);
+  assert.equal(result.sftReady, true);
+  assert.deepEqual(result.messages?.map(message => message.content), [request.payload.body.messages[0].content, 'done']);
 });
 test('message export assembles legacy SSE, retaining reasoning and fragmented tool arguments', () => {
   const chunks = [
@@ -54,4 +68,36 @@ test('anthropic blocks and failed tool results survive projection', () => {
   ]);
   assert.deepEqual(result.calls[0]!.assistant, message);
   assert.equal(result.calls[0]!.tools[0]!.results[0]!.isError, true);
+});
+
+test('Qwen export includes tool schemas loaded after the first model call', () => {
+  const read = { type: 'function', function: { name: 'Read', parameters: { type: 'object' } } };
+  const tailor = { type: 'function', function: { name: 'TailorResumeForOpportunity', parameters: { type: 'object' } } };
+  const firstAssistant = { role: 'assistant', content: '', tool_calls: [{ id: 'search', type: 'function', function: { name: 'ToolSearch', arguments: '{}' } }] };
+  const secondAssistant = { role: 'assistant', content: 'done' };
+  const first = event(1, { ...request.payload, body: { messages: request.payload.body.messages, tools: [read] } });
+  const secondIdentity = { ...identity, requestId: 'r2' };
+  const history = [...first.payload.body.messages, firstAssistant, { role: 'tool', tool_call_id: 'search', content: 'loaded' }];
+  const result = qwen35SftExport([
+    first,
+    event(2, { type: 'model.response', identity, protocol: 'openai', status: 200, complete: true, response: { message: firstAssistant } }),
+    event(3, { type: 'tool.call', requestId: 'r1', toolUseId: 'search', agentId: 'main', name: 'ToolSearch' }),
+    event(4, { type: 'tool.result', toolUseId: 'search', agentId: 'main', content: 'loaded' }),
+    event(5, { ...request.payload, identity: secondIdentity, body: { messages: history, tools: [read, tailor, { type: 'function', function: { name: 'ToolSearch', parameters: { type: 'object' } } }] } }),
+    event(6, { type: 'model.response', identity: secondIdentity, protocol: 'openai', status: 200, complete: true, response: { message: secondAssistant } }),
+  ]);
+  assert.equal(result.sftReady, true);
+  assert.deepEqual(JSON.parse(result.tools!).map((tool: any) => tool.function.name), ['Read', 'TailorResumeForOpportunity', 'ToolSearch']);
+});
+
+test('Qwen export rejects a called tool with no captured schema', () => {
+  const assistant = { role: 'assistant', content: '', tool_calls: [{ id: 't1', type: 'function', function: { name: 'UnknownDeferredTool', arguments: '{}' } }] };
+  const result = qwen35SftExport([
+    event(1, { ...request.payload, body: { messages: request.payload.body.messages, tools: [] } }),
+    event(2, { type: 'model.response', identity, protocol: 'openai', status: 200, complete: true, response: { message: assistant } }),
+    event(3, { type: 'tool.call', requestId: 'r1', toolUseId: 't1', agentId: 'main', name: 'UnknownDeferredTool' }),
+    event(4, { type: 'tool.result', toolUseId: 't1', agentId: 'main', content: 'result' }),
+  ]);
+  assert.equal(result.sftReady, false);
+  assert.ok(result.issues.includes('qwen3_5_missing_tool_schema:UnknownDeferredTool'));
 });

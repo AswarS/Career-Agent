@@ -57,6 +57,20 @@ function authorized(req: IncomingMessage, token: string | undefined): boolean {
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 
+function privatePlannerGuidance(req: IncomingMessage): string | undefined {
+  const encoded = req.headers['x-private-planner-guidance'];
+  if (encoded === undefined) return undefined;
+  if (typeof encoded !== 'string' || !encoded || encoded.length > 8192 || !/^[A-Za-z0-9_-]+$/.test(encoded)) {
+    throw new ApiError(400, 'invalid_private_guidance', 'Invalid private planner guidance');
+  }
+  const bytes = Buffer.from(encoded, 'base64url');
+  const guidance = bytes.toString('utf8');
+  if (bytes.toString('base64url') !== encoded || !guidance || Buffer.from(guidance, 'utf8').compare(bytes) !== 0) {
+    throw new ApiError(400, 'invalid_private_guidance', 'Invalid private planner guidance');
+  }
+  return guidance;
+}
+
 export function createGatewayServer(config: GatewayConfig, store = new RunStore(config.maxRuns, Boolean(config.harnessUrl)), client?: HarnessClient) {
   const traces = new TraceStore(config.traceDir ?? fileURLToPath(new URL('../../data/trajectories', import.meta.url)));
   const proxy = config.publicUrl && Object.keys(config.models ?? {}).length ? new ModelProxy(config, store, traces) : undefined;
@@ -89,11 +103,12 @@ export function createGatewayServer(config: GatewayConfig, store = new RunStore(
       if (req.method === 'GET' && path === '/v1/capabilities') {
         send(res, 200, { schemaVersion: SCHEMA_VERSION, phase: 6, capabilities: { ...capabilities, harnessExecution: Boolean(runner), modelProxy: Boolean(proxy), mainAgentCapture: Boolean(proxy), userSimulator: Boolean(runner && Object.keys(config.userModels ?? {}).length), userTerminal: Boolean(runner), trajectoryIngest: true, trajectoryExport: true, trajectoryFinalization: true, durableTrajectoryStorage: true, trainingTokenIngest: true } });
       } else if (req.method === 'POST' && path === '/v1/runs') {
+        const guidance = privatePlannerGuidance(req);
         const input = validateCreateRun(await readJson(req, config.maxBodyBytes));
         if (runner && input.userSimulator && !simulator.has(input.userSimulator.modelProfile)) throw new ApiError(400, 'unknown_user_simulator_model', 'Configure the requested user simulator model');
         if (proxy && !Object.hasOwn(config.models!, input.modelProfile)) throw new ApiError(400, 'unknown_model_profile', 'Unknown Gateway model profile');
         const run = store.create(input);
-        proxy?.register(run);
+        proxy?.register(run, guidance);
         runner?.launch(run.runId);
         res.setHeader('location', `/v1/runs/${run.runId}`);
         send(res, 201, store.get(run.runId));
@@ -103,7 +118,7 @@ export function createGatewayServer(config: GatewayConfig, store = new RunStore(
           const id = trajectoryRoute[1]!, action = trajectoryRoute[2];
           if (action === 'trajectory' && req.method === 'GET') {
             const format = new URL(req.url!, 'http://gateway.local').searchParams.get('format') ?? 'events';
-            if (format !== 'events' && format !== 'messages' && format !== 'messages_list') throw new ApiError(400, 'invalid_format', 'Use events, messages or messages_list');
+            if (format !== 'events' && format !== 'messages' && format !== 'messages_list' && format !== 'qwen3_5_sft') throw new ApiError(400, 'invalid_format', 'Use events, messages, messages_list or qwen3_5_sft');
             send(res, 200, await traces.export(id, format)); return;
           }
           if (action === 'trajectory-events' && req.method === 'GET') {

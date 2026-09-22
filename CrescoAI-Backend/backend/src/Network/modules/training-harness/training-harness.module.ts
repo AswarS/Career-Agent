@@ -9,6 +9,8 @@ import { UserModule } from '../user/user.module';
 import { UserService } from '../user/user.service';
 import { ProfileModule } from '../profile/profile.module';
 import { ProfileService } from '../profile/profile.service';
+import { ProfileProductMutationService } from '../profile/profile-product-mutation.service';
+import { ProfileProductProjectionService } from '../profile/profile-product-projection.service';
 import { hasProfileInputFields } from '../profile/profile.types';
 import { SettingsModule } from '../settings/settings.module';
 import { SettingsService } from '../settings/settings.service';
@@ -20,6 +22,7 @@ import { assertNetworkUserWorkspaceBinding, ensureNetworkUserWorkspaceDir } from
 import { realpath } from 'node:fs/promises';
 import { HarnessCore } from './harness-core.js';
 import type { TrainingInput } from './harness-core.js';
+import { isEduAgentWorldPersona, materializeEduAgentWorldPersona, validateEduAgentWorldPersona } from './persona-materializer.js';
 
 @Injectable()
 class TrainingGuard implements CanActivate {
@@ -43,6 +46,8 @@ class TrainingService {
     conversations: ConversationService,
     agents: AgentService,
     users: UserService,
+    productMutations: ProfileProductMutationService,
+    productProjection: ProfileProductProjectionService,
   ) {
     // Credentials stay in this backend process, never in Gateway run responses.
     const resolveModel = (name: string) => {
@@ -64,7 +69,10 @@ class TrainingService {
             || url.pathname !== `/sessions/${request.gatewaySessionId}` || !route.token?.trim() || !route.model?.trim()
             || !['openai', 'anthropic'].includes(route.provider)) throw new Error('Invalid Gateway session route');
         } else resolveModel(request.input.modelProfile);
-        if (Object.keys(request.input.profile).length && !hasProfileInputFields(request.input.profile)) throw new Error('Profile must use supported backend Profile fields');
+        if (Object.keys(request.input.profile).length) {
+          if (isEduAgentWorldPersona(request.input.profile)) validateEduAgentWorldPersona(request.input.profile);
+          else if (!hasProfileInputFields(request.input.profile)) throw new Error('Profile must use supported backend Profile fields');
+        }
       },
       createUser: async runId => {
         const repo = db.getRepository(UserEntity);
@@ -73,7 +81,12 @@ class TrainingService {
         return user.id;
       },
       initializeProfile: async (userId, profile) => {
-        if (Object.keys(profile).length) await profiles.updateProfile(userId, { profile });
+        if (!Object.keys(profile).length) return;
+        if (isEduAgentWorldPersona(profile)) {
+          await materializeEduAgentWorldPersona(userId, profile, productMutations, productProjection);
+        } else {
+          await profiles.updateProfile(userId, { profile });
+        }
       },
       configureModel: async (userId, name, request) => {
         const route = request.gateway;

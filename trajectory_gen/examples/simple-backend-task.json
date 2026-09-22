@@ -1,0 +1,21 @@
+{
+  "taskId": "simple-backend-trajectory",
+  "profile": {},
+  "query": "Read number.txt from the workspace, add one to the number, and return only the final result.",
+  "workspace": {
+    "files": [
+      {
+        "path": "number.txt",
+        "encoding": "utf8",
+        "content": "41\n"
+      }
+    ]
+  },
+  "modelProfile": "main-policy",
+  "userSimulator": null,
+  "limits": {
+    "timeoutMs": 120000,
+    "maxModelCalls": 8,
+    "maxUserQuestions": 0
+  }
+}

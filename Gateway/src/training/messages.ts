@@ -74,7 +74,138 @@ export function messagesListExport(events: JournalEvent[]) {
     }
   }
   if (system !== undefined) messages.unshift({ role: 'system', content: structuredClone(system) });
-  const invalid = issues.some(issue => ['context_rewritten_use_per_call_messages', 'system_context_changed', 'assistant_history_mismatch', 'unsupported_request_messages', 'duplicate_request_id'].includes(issue));
+  const tools: any[] = [];
+  const toolDefinitions = new Map<string, string>();
+  for (const call of projection.calls) {
+    let definitions = call.request.tools ?? [];
+    if (typeof definitions === 'string') {
+      try { definitions = JSON.parse(definitions); } catch { issues.push('invalid_request_tools'); continue; }
+    }
+    if (!Array.isArray(definitions)) { issues.push('invalid_request_tools'); continue; }
+    for (const definition of definitions) {
+      const name = definition?.function?.name ?? definition?.name;
+      const key = typeof name === 'string' && name ? `name:${name}` : `anonymous:${canonical(definition)}`;
+      const encoded = canonical(definition);
+      const previous = toolDefinitions.get(key);
+      if (previous && previous !== encoded) {
+        issues.push(`tool_schema_changed:${typeof name === 'string' ? name : 'anonymous'}`);
+        continue;
+      }
+      if (!previous) {
+        toolDefinitions.set(key, encoded);
+        tools.push(structuredClone(definition));
+      }
+    }
+  }
+  const invalid = issues.some(issue => ['context_rewritten_use_per_call_messages', 'system_context_changed', 'assistant_history_mismatch', 'unsupported_request_messages', 'duplicate_request_id', 'invalid_request_tools'].includes(issue) || issue.startsWith('tool_schema_changed:'));
   return { format: 'gateway.messages_list.v1', messages_list: invalid ? null : messages,
-    tools: projection.calls[0]?.request.tools ?? [], callCount: projection.callCount, issues };
+    tools, callCount: projection.callCount, issues };
+}
+
+function jsonText(value: unknown): string {
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      if (parsed && typeof parsed === 'object') return value;
+    } catch {}
+    return JSON.stringify(value);
+  }
+  return JSON.stringify(value ?? null);
+}
+
+function textContent(value: unknown): string | null {
+  if (typeof value === 'string') return value;
+  if (value == null) return '';
+  if (!Array.isArray(value)) return JSON.stringify(value);
+  const text = value.filter(block => block?.type === 'text' && typeof block.text === 'string').map(block => block.text).join('');
+  return value.every(block => block?.type === 'text') ? text : null;
+}
+
+/** Directly consumable by ms-swift with Qwen3.5's qwen3_5 agent template. */
+export function qwen35SftExport(events: JournalEvent[]) {
+  const projection = messagesListExport(events);
+  const issues = [...projection.issues];
+  const messages: Array<{ role: string; content: string }> = [];
+  const appendAssistant = (content: string, reasoning?: string) => {
+    const think = reasoning?.trim() ? `<think>\n${reasoning.trim()}\n</think>\n\n` : '';
+    if (think || content) messages.push({ role: 'assistant', content: think + content });
+  };
+  if (projection.messages_list) for (const message of projection.messages_list) {
+    if (!message || typeof message !== 'object') { issues.push('qwen3_5_invalid_message'); continue; }
+    if (message.role === 'assistant' && Array.isArray(message.content)) {
+      const reasoning = message.content.filter((block: any) => block?.type === 'thinking').map((block: any) => block.thinking ?? '').join('');
+      const content = message.content.filter((block: any) => block?.type === 'text').map((block: any) => block.text ?? '').join('');
+      appendAssistant(content, reasoning);
+      for (const block of message.content.filter((item: any) => item?.type === 'tool_use')) {
+        messages.push({ role: 'tool_call', content: JSON.stringify({ name: block.name, arguments: block.input ?? {} }) });
+      }
+      if (message.content.some((block: any) => !['thinking', 'text', 'tool_use'].includes(block?.type))) issues.push('qwen3_5_unsupported_assistant_block');
+      continue;
+    }
+    if (message.role === 'assistant') {
+      const content = textContent(message.content);
+      if (content === null) issues.push('qwen3_5_unsupported_assistant_content');
+      else appendAssistant(content, typeof message.reasoning_content === 'string' ? message.reasoning_content : undefined);
+      for (const call of message.tool_calls ?? []) {
+        let args: unknown = call?.function?.arguments ?? {};
+        if (typeof args === 'string') {
+          try { args = JSON.parse(args); } catch { issues.push('qwen3_5_invalid_tool_arguments'); continue; }
+        }
+        if (!call?.function?.name || !args || typeof args !== 'object' || Array.isArray(args)) { issues.push('qwen3_5_invalid_tool_call'); continue; }
+        messages.push({ role: 'tool_call', content: JSON.stringify({ name: call.function.name, arguments: args }) });
+      }
+      continue;
+    }
+    if (message.role === 'tool') {
+      messages.push({ role: 'tool_response', content: jsonText(message.content) });
+      continue;
+    }
+    if (message.role === 'user' && Array.isArray(message.content)) {
+      const plain: string[] = [];
+      for (const block of message.content) {
+        if (block?.type === 'text' && typeof block.text === 'string') plain.push(block.text);
+        else if (block?.type === 'tool_result') messages.push({ role: 'tool_response', content: jsonText(block.content) });
+        else issues.push('qwen3_5_unsupported_user_block');
+      }
+      const content = plain.join('');
+      if (content && content.trim() !== 'Tool loaded.') messages.push({ role: 'user', content });
+      continue;
+    }
+    if (message.role === 'system' || message.role === 'user') {
+      const content = textContent(message.content);
+      if (content === null) issues.push('qwen3_5_unsupported_message_content');
+      else if (!(message.role === 'user' && content.trim() === 'Tool loaded.')) messages.push({ role: message.role, content });
+      continue;
+    }
+    issues.push(`qwen3_5_unsupported_role:${String(message.role)}`);
+  }
+  if (!projection.messages_list) issues.push('qwen3_5_source_conversation_unavailable');
+  if (!messages.length) issues.push('qwen3_5_empty_conversation');
+  const finalMessage = messages.at(-1);
+  const finalAnswer = finalMessage?.role === 'assistant'
+    ? finalMessage.content.replace(/^<think>[\s\S]*?<\/think>\s*/, '').trim() : '';
+  if (!finalAnswer) issues.push('qwen3_5_missing_final_assistant');
+  const toolCalls = messages.filter(message => message.role === 'tool_call').length;
+  const toolResponses = messages.filter(message => message.role === 'tool_response').length;
+  if (toolCalls !== toolResponses) issues.push('qwen3_5_unbalanced_tool_roundtrip');
+  let tools: string | null = null;
+  try {
+    const value = typeof projection.tools === 'string' ? JSON.parse(projection.tools) : projection.tools;
+    if (!Array.isArray(value)) throw new Error('invalid tools');
+    tools = JSON.stringify(value);
+    const definedNames = new Set(value.map((tool: any) => tool?.function?.name ?? tool?.name).filter((name: unknown) => typeof name === 'string'));
+    const calledNames = messages
+      .filter(message => message.role === 'tool_call')
+      .map(message => { try { return JSON.parse(message.content)?.name; } catch { return null; } })
+      .filter((name): name is string => typeof name === 'string');
+    for (const name of new Set(calledNames)) {
+      if (!definedNames.has(name)) issues.push(`qwen3_5_missing_tool_schema:${name}`);
+    }
+  } catch { issues.push('qwen3_5_invalid_tools'); }
+  const uniqueIssues = [...new Set(issues)];
+  return {
+    format: 'ms-swift.qwen3_5.sft.v1', agent_template: 'qwen3_5',
+    sftReady: uniqueIssues.length === 0, messages: uniqueIssues.length ? null : messages,
+    tools, callCount: projection.callCount, issues: uniqueIssues,
+  };
 }

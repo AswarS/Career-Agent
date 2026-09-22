@@ -98,6 +98,35 @@ Gateway 每次记录事件后自动、原子更新 `data/trajectories/<runId>.me
 
 `GET /v1/runs/:id/trajectory?format=messages` 返回 `gateway.messages.v1`：`calls` 中每项是一次主 Agent 模型调用，包含原始 `request`（含 messages/system/tools/模型参数）、合并后的 `assistant`（含 reasoning 和工具参数）、`usage`、`complete` 及关联的工具调用和结果。不返回 `rawBody` 或流式 delta events。请求仍原样保留 `stream` 参数以便溯源，但 assistant 已是合并后的消息。
 
+`GET /v1/runs/:id/trajectory?format=qwen3_5_sft` 返回可直接作为 ms-swift Qwen3.5 Agent SFT 样本的 `messages` 和 JSON 字符串 `tools`，并标记 `agent_template=qwen3_5`。工具轮次转换为 `tool_call` / `tool_response`，推理内容保留为 `<think>...</think>`。只有上下文连续、模型响应完整、工具调用与结果平衡且存在最终 assistant 回答时 `sftReady=true`；否则 `messages=null` 并在 `issues` 中说明原因。`trainingReady` 仍表示更严格的 token/logprob 封存条件，与 `sftReady` 含义不同。
+
+不启动前端、直接调用已启动的后端跑一条轨迹：
+
+```powershell
+.\trajectory_gen\scripts\run-backend-trajectory.ps1
+```
+
+To materialize and run the two checked-in `syn_tasks` smoke cases with their
+original Product V2 personas and workspace materials:
+
+```powershell
+bun trajectory_gen/scripts/prepare-syn-task-runs.ts
+.\trajectory_gen\scripts\run-syn-task-trajectories.ps1
+```
+
+WSL/Linux 环境应使用原生 Bash 入口，避免 Windows shell、路径和工具行为进入轨迹：
+
+```bash
+./trajectory_gen/scripts/run-syn-task-trajectories-wsl-isolated.sh
+```
+
+This path does not start the frontend. The backend training harness writes each
+persona through the same `ProfileProductMutationService` used by the product
+profile API before the agent starts, and the generated trajectories are stored
+under `trajectory_gen/trajectories/syn-tasks/runs/`.
+
+PowerShell 包装脚本会读取 `Gateway/.env.training`，复用已就绪的后端，或在未就绪时启动一个隐藏的后端进程；它不启动 Vue/Vite，也不自动执行数据库迁移。它再调用 Node 运行器，默认使用 `trajectory_gen/examples/simple-backend-task.json`，在当前进程内临时启动 Gateway，结束后关闭。输出包含原始事件、逐调用消息、连续消息、Qwen3.5 投影和可直接交给 ms-swift 的 `.jsonl`。PowerShell 参数为 `-EnvFile`、`-Task`、`-Output` 和 `-Cleanup`；也可直接运行 Node 脚本，使用 `--gateway-url http://127.0.0.1:8787` 复用已有 Gateway。
+
 按调用保存上下文快照，不将多次请求中重复的历史消息拼成一段虚构会话。`issues` 说明消息投影缺失或冲突；`trainingReady` 仍遵循真实 token、运行结束及封存检查，不等于消息可读性或业务任务成功。
 
 不指定 format 或使用 `format=events` 仍返回原始事件，兼容既有消费方。原始 `.events.jsonl` 是审计日志，不是可直接投入训练的消息数据集。

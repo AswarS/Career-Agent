@@ -4,7 +4,7 @@ import { randomUUID, createHash } from 'node:crypto';
 import { ApiError } from '../api/validation.ts';
 import { trainingExport, validateTokens } from '../training/export.ts';
 import type { JournalEvent } from '../training/export.ts';
-import { messageExport, messagesListExport } from '../training/messages.ts';
+import { messageExport, messagesListExport, qwen35SftExport } from '../training/messages.ts';
 
 interface State { events: JournalEvent[]; manifest?: any; poisoned?: boolean }
 const canonical = (value: any): string => JSON.stringify(value, (_key, item) => item && typeof item === 'object' && !Array.isArray(item) ? Object.fromEntries(Object.keys(item).sort().map(key => [key, item[key]])) : item);
@@ -132,10 +132,10 @@ export class TraceStore {
       return structuredClone(compact);
     });
   }
-  async export(id: string, format: 'events' | 'messages' | 'messages_list' = 'events') {
+  async export(id: string, format: 'events' | 'messages' | 'messages_list' | 'qwen3_5_sft' = 'events') {
     return this.serial(id, async s => {
       if (!s.events.length && !s.manifest) throw new ApiError(404, 'trajectory_not_found', 'No trajectory recorded');
-      return { schemaVersion: '1.0', runId: id, finalized: Boolean(s.manifest), manifest: structuredClone(s.manifest ?? null), ...(format === 'messages_list' ? messagesListExport(s.events) : format === 'messages' ? messageExport(s.events) : { events: structuredClone(s.events) }), ...trainingExport(s.events, s.manifest?.run.status ?? 'unknown', Boolean(s.manifest)) };
+      return { schemaVersion: '1.0', runId: id, finalized: Boolean(s.manifest), manifest: structuredClone(s.manifest ?? null), ...(format === 'qwen3_5_sft' ? qwen35SftExport(s.events) : format === 'messages_list' ? messagesListExport(s.events) : format === 'messages' ? messageExport(s.events) : { events: structuredClone(s.events) }), ...trainingExport(s.events, s.manifest?.run.status ?? 'unknown', Boolean(s.manifest)) };
     });
   }
 }
