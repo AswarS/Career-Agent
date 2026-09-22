@@ -6,11 +6,17 @@ The scanner expects the flat layout `runs/<scenario_id>/` and uses that task's
 `summary.json` to select the exact `<runId>.*` trajectory files. Timestamp batch
 directories are not scanned.
 
-```bash
-node trajectory_gen/viewer/server.mjs --port 8790
+```powershell
+# Windows PowerShell; port defaults to 8791
+.\trajectory_gen\scripts\start-viewer.ps1
 ```
 
-Open `http://127.0.0.1:8790`. The server binds to localhost and never reads or serves `.env` files.
+```bash
+# WSL/Linux; optional first argument overrides the port
+bash trajectory_gen/scripts/start-viewer.sh 8791
+```
+
+Open `http://127.0.0.1:8791`. The server binds to localhost and never reads or serves `.env` files.
 
 ## Panels
 

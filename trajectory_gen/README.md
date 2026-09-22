@@ -95,11 +95,15 @@ under the same task directory in `artifacts/`, with checksums in
 
 ## Inspect trajectories
 
-```bash
-node trajectory_gen/viewer/server.mjs --port 8790
+```powershell
+.\trajectory_gen\scripts\start-viewer.ps1
 ```
 
-Open `http://127.0.0.1:8790`.
+```bash
+bash trajectory_gen/scripts/start-viewer.sh 8791
+```
+
+Open `http://127.0.0.1:8791`.
 
 To regenerate only the derived Qwen files from an existing immutable Gateway
 journal after an exporter update, use `scripts/reexport-qwen.ts` with the run ID,
