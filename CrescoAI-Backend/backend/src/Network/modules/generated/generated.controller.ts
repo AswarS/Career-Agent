@@ -1,8 +1,6 @@
 import { Body, Controller, Get, Param, Post, Res } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { existsSync, statSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { Public } from '../auth/public.decorator.js';
 import { resolveGeneratedPath, resolveAppPath } from './generated.utils.js';
 import { Repository } from 'typeorm';
@@ -12,12 +10,10 @@ import {
   GeneratedAppEventsService,
   validateAppEventBatch,
 } from '../generated-app/generated-app-events.service.js';
+import { userDataRootDir } from '../../utils/networkTranscriptStorage.js';
 
 // Re-export so consumers can import the pure helpers from the controller path if needed.
 export { resolveGeneratedPath, resolveAppPath };
-
-const networkRootDir = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
-const userDataRootDir = join(networkRootDir, 'user');
 
 @Public()
 @Controller('api/career-agent/generated')

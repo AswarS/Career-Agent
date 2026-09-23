@@ -6,13 +6,16 @@ import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { AgentService } from '../src/Network/modules/agent/agent.service.js';
-import { createConversation as createRuntimeConversation } from '../src/Network/modules/agent/agent.runtime.js';
 import type {
   AgentCreateConversationInput,
+  AgentConversationMetadata,
   AgentSendMessageInput,
   AgentStreamEvent,
 } from '../src/Network/modules/agent/agent.runtime.js';
+
+let createRuntimeConversation: (
+  input: AgentCreateConversationInput,
+) => Promise<AgentConversationMetadata>;
 
 function createDeterministicAgentService() {
   return {
@@ -24,6 +27,22 @@ function createDeterministicAgentService() {
       const userMessageId = `smoke-user-${randomUUID()}`;
       const assistantMessageId = `smoke-assistant-${randomUUID()}`;
       const createdAt = new Date().toISOString();
+      const praxisOpenResultBlock = {
+        id: 'tool-result-smoke-praxis-open',
+        type: 'tool_result' as const,
+        name: 'praxis_open',
+        toolUseId: 'smoke-praxis-open',
+        text: JSON.stringify({
+          schemaVersion: '1.0.0',
+          status: 'ready',
+          message: 'Praxis 已准备好打开。',
+          uiAction: {
+            kind: 'launch_praxis',
+            label: '打开 Praxis',
+            destination: 'home',
+          },
+        }),
+      };
 
       yield {
         type: 'message.created',
@@ -36,6 +55,11 @@ function createDeterministicAgentService() {
         type: 'reasoning.delta',
         messageId: assistantMessageId,
         delta: '正在整理上传材料。',
+      };
+      yield {
+        type: 'message.block.completed',
+        messageId: assistantMessageId,
+        block: praxisOpenResultBlock,
       };
       yield {
         type: 'reply.delta',
@@ -51,6 +75,7 @@ function createDeterministicAgentService() {
         assistantMessageId,
         reply: '已生成联调周计划。',
         reasoning: '正在整理上传材料。',
+        blocks: [praxisOpenResultBlock],
         generatedFiles: [
           {
             kind: 'html',
@@ -81,6 +106,7 @@ describe('Career Agent HTTP smoke flow', () => {
   let tempDatabaseDir = '';
   const previousJwtSecret = process.env.CAREER_AGENT_JWT_SECRET;
   const previousDatabasePath = process.env.CAREER_AGENT_DATABASE_PATH;
+  const previousNetworkDataRoot = process.env.CAREER_AGENT_NETWORK_DATA_ROOT;
   const previousSchemaSync = process.env.CAREER_AGENT_SCHEMA_SYNC;
   const previousPraxisEnabled =
     process.env.CAREER_AGENT_PRAXIS_INTEGRATION_ENABLED;
@@ -94,7 +120,13 @@ describe('Career Agent HTTP smoke flow', () => {
     process.env.CAREER_AGENT_PROFILE_LEGACY_SUGGESTIONS = 'true';
     tempDatabaseDir = await mkdtemp(join(tmpdir(), 'career-agent-http-smoke-'));
     process.env.CAREER_AGENT_DATABASE_PATH = join(tempDatabaseDir, 'smoke.sqlite');
-    const { AppModule } = await import('../src/Network/app.module.js');
+    process.env.CAREER_AGENT_NETWORK_DATA_ROOT = join(tempDatabaseDir, 'network-data');
+    const [{ AppModule }, { AgentService }, agentRuntime] = await Promise.all([
+      import('../src/Network/app.module.js'),
+      import('../src/Network/modules/agent/agent.service.js'),
+      import('../src/Network/modules/agent/agent.runtime.js'),
+    ]);
+    createRuntimeConversation = agentRuntime.createConversation;
     const moduleFixture = await Test.createTestingModule({
       imports: [AppModule],
     })
@@ -118,6 +150,11 @@ describe('Career Agent HTTP smoke flow', () => {
       delete process.env.CAREER_AGENT_DATABASE_PATH;
     } else {
       process.env.CAREER_AGENT_DATABASE_PATH = previousDatabasePath;
+    }
+    if (previousNetworkDataRoot === undefined) {
+      delete process.env.CAREER_AGENT_NETWORK_DATA_ROOT;
+    } else {
+      process.env.CAREER_AGENT_NETWORK_DATA_ROOT = previousNetworkDataRoot;
     }
     if (previousSchemaSync === undefined) {
       delete process.env.CAREER_AGENT_SCHEMA_SYNC;
@@ -309,6 +346,10 @@ describe('Career Agent HTTP smoke flow', () => {
       expect(streamResponse.text).toContain('event: reasoning.delta');
       expect(streamResponse.text).toContain('event: artifact.created');
       expect(streamResponse.text).toContain('event: message.completed');
+      expect(streamResponse.text).toContain('action-launch-praxis-smoke-praxis-open');
+      expect(streamResponse.text.indexOf('action-launch-praxis-smoke-praxis-open')).toBeLessThan(
+        streamResponse.text.indexOf('event: reply.delta'),
+      );
 
       const suggestionsResponse = await request(server)
         .get('/api/career-agent/profile/suggestions')

@@ -624,6 +624,8 @@ function cloneProfileSuggestionPatch(patch: DeepPartial<ProfileRecord>) {
 
 function cloneArtifactRecord(input: ArtifactRecord): ArtifactRecord {
   switch (input.renderMode) {
+    case 'praxis':
+      return { ...input, payload: { ...input.payload } };
     case 'html':
       return {
         ...input,

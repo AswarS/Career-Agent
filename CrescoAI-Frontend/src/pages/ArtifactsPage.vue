@@ -34,6 +34,8 @@ function formatArtifactType(artifact: ArtifactRecord) {
       return '代码题';
     case 'visual-learning':
       return '可视化学习';
+    case 'praxis':
+      return 'Praxis 临时入口';
     case 'app-example':
       return '应用画布';
     case 'generated-app':

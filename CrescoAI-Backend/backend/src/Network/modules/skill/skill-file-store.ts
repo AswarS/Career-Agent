@@ -1,15 +1,13 @@
 import { delimiter, isAbsolute, join, resolve } from 'node:path';
 import { access, readFile, writeFile, mkdir, readdir, rm } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
 import { parseFrontmatter } from '../../../utils/frontmatterParser.js';
+import { userDataRootDir } from '../../utils/networkTranscriptStorage.js';
 import {
   parseSkillFrontmatterFields,
   type LoadedFrom,
 } from '../../../skills/loadSkillsDir.js';
 import { parseArgumentNames } from '../../../utils/argumentSubstitution.js';
 
-const networkRootDir = fileURLToPath(new URL('../../', import.meta.url));
-const userDataRootDir = join(networkRootDir, 'user');
 const externalSkillDirsEnv = 'CAREER_AGENT_EXTERNAL_SKILL_DIRS';
 
 export interface ParsedSkillFile {

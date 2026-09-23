@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import PraxisArtifactFrame from './PraxisArtifactFrame.vue';
 import { storeToRefs } from 'pinia';
 import {
   Expand,
@@ -188,8 +189,13 @@ const artifactNotice = computed(() => {
           {{ artifactNotice }}
         </div>
 
+        <PraxisArtifactFrame
+          v-if="artifactPaneOpen && activeArtifact.renderMode === 'praxis'"
+          :key="`${activeArtifact.id}-${activeArtifact.revision}`"
+        />
+
         <iframe
-          v-if="activeArtifact.renderMode === 'html' && !artifactIssue"
+          v-else-if="activeArtifact.renderMode === 'html' && !artifactIssue"
           class="artifact-frame"
           :sandbox="htmlFrameSandbox"
           :srcdoc="artifactMarkup"

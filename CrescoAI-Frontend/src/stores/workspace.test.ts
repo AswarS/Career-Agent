@@ -12,6 +12,23 @@ describe('useWorkspaceStore', () => {
     setActivePinia(createPinia());
   });
 
+  it('reuses a temporary Praxis entry and refreshes it without an upstream artifact request', async () => {
+    const store = useWorkspaceStore();
+    await store.initialize();
+    store.openPraxisArtifact('thread-001');
+    const id = store.activeArtifactId!;
+    store.openPraxisArtifact('thread-001');
+    expect(store.artifacts.filter((item) => item.id === id)).toHaveLength(1);
+    expect(store.activeArtifact?.renderMode).toBe('praxis');
+    store.closeArtifact();
+    await store.openArtifact(id);
+    expect(store.artifactPaneOpen).toBe(true);
+    await store.refreshArtifact(id);
+    expect(store.activeArtifact?.revision).toBe(2);
+    store.openPraxisArtifact('thread-002');
+    expect(store.activeArtifactId).not.toBe(id);
+  });
+
   it('deduplicates skill results by runtime call id when raw payloads merge', () => {
     const first = {
       skillCallId: 'call-1',

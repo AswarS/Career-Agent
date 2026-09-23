@@ -1,10 +1,14 @@
 import { constants } from 'node:fs';
 import { appendFile, copyFile, mkdir, readdir, rename, stat, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const networkRootDir = fileURLToPath(new URL('../', import.meta.url));
-export const userDataRootDir = join(networkRootDir, 'user');
+const configuredNetworkDataRoot = process.env.CAREER_AGENT_NETWORK_DATA_ROOT?.trim();
+export const networkDataRootDir = configuredNetworkDataRoot
+  ? resolve(configuredNetworkDataRoot)
+  : networkRootDir;
+export const userDataRootDir = join(networkDataRootDir, 'user');
 
 export function getNetworkUserDir(userId: string | number): string {
   return join(userDataRootDir, String(userId));
@@ -55,7 +59,7 @@ export function assertSafeNetworkSessionId(sessionId: string): void {
 }
 
 export function getNetworkUserFilesDir(userId: string | number): string {
-  return join(networkRootDir, 'files', String(userId));
+  return join(networkDataRootDir, 'files', String(userId));
 }
 
 const LEGACY_SERVER_ENTRIES = new Set(['memory', 'transcripts', 'workspace']);

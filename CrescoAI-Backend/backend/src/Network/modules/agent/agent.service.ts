@@ -50,7 +50,7 @@ import {
   getNetworkTranscriptDir,
   getNetworkUserFilesDir,
   getNetworkUserWorkspaceDir,
-  networkRootDir,
+  networkDataRootDir,
 } from '../../utils/networkTranscriptStorage.js';
 import { prepareConversationMemoryTurn } from '../../memory/conversationMemoryRuntime.js';
 import {
@@ -2641,16 +2641,16 @@ export class AgentService {
     const markerIndex = normalized.indexOf(marker);
     if (markerIndex >= 0) {
       const relative = normalized.slice(markerIndex + '/src/Network/'.length);
-      return join(networkRootDir, relative);
+      return join(networkDataRootDir, relative);
     }
 
     if (normalized.startsWith('./src/Network/files/')) {
       const relative = normalized.replace('./src/Network/', '');
-      return join(networkRootDir, relative);
+      return join(networkDataRootDir, relative);
     }
 
     if (normalized.startsWith('files/')) {
-      return join(networkRootDir, normalized);
+      return join(networkDataRootDir, normalized);
     }
 
     return normalized;

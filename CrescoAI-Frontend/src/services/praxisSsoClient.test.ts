@@ -17,7 +17,7 @@ function fakeDocument() {
     acceptCharset: '',
     hidden: false,
     appendChild(input: Record<string, string>) {
-      inputs.push(input);
+      inputs.push({ ...input });
     },
     submit,
   };
@@ -73,6 +73,26 @@ describe('Praxis SSO browser handoff', () => {
     expect(appendForm).toHaveBeenCalledWith(form);
     expect(submit).toHaveBeenCalledOnce();
     expect(form.action).not.toContain('ticket');
+  });
+
+  it('posts into a named artifact frame without changing the top-level target', () => {
+    const { documentRef, form, submit } = fakeDocument();
+    submitPraxisTicket({ ticket: 'ticket', targetUrl: 'https://praxis.example/api/v1/auth/sso' }, documentRef, 'praxis-frame-test');
+    expect(form).toHaveProperty('target', 'praxis-frame-test');
+    expect(submit).toHaveBeenCalledOnce();
+  });
+
+  it('rejects reserved frame names', () => {
+    const { documentRef, submit } = fakeDocument();
+    expect(() => submitPraxisTicket({ ticket: 'ticket', targetUrl: 'https://praxis.example/api/v1/auth/sso' }, documentRef, '_top')).toThrow();
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it('does not submit when the artifact was closed while obtaining a ticket', async () => {
+    const post = vi.fn().mockResolvedValue({ data: { ticket: 'ticket', targetUrl: 'https://praxis.example/api/v1/auth/sso' } });
+    const { documentRef, submit } = fakeDocument();
+    await createPraxisSsoClient(config, { post } as unknown as AxiosInstance).launch(documentRef, 'praxis-frame-test', () => false);
+    expect(submit).not.toHaveBeenCalled();
   });
 
   it('rejects a target that could carry data in its URL', () => {

@@ -778,10 +778,27 @@ export const useWorkspaceStore = defineStore('workspace', {
         throw error;
       }
     },
+    openPraxisArtifact(conversationId: string) {
+      const id = `praxis-entry-${conversationId}`;
+      if (!this.artifacts.some((artifact) => artifact.id === id)) {
+        this.upsertArtifactRecord({
+          id, type: 'praxis', renderMode: 'praxis',
+          title: 'Praxis · 新建实训对话', status: 'ready', revision: 1,
+          updatedAt: new Date().toISOString(),
+          summary: '临时 Praxis 入口；尚未绑定项目，刷新浏览器后不保留。',
+          payload: { conversationId },
+        });
+      }
+      this.activeArtifactId = id;
+      this.artifactPaneOpen = true;
+      this.artifactViewMode = matchesMobileLayoutViewport() ? 'focus' : 'pane';
+      this.closeMobileSideRail();
+    },
     async openArtifact(artifactId: string, viewMode: ArtifactViewMode = 'pane') {
       await this.initialize();
 
-      const artifact = await client.getArtifact(artifactId);
+      const local = this.artifacts.find((item) => item.id === artifactId && item.renderMode === 'praxis');
+      const artifact = local ?? await client.getArtifact(artifactId);
 
       if (!artifact) {
         return;
@@ -834,6 +851,12 @@ export const useWorkspaceStore = defineStore('workspace', {
       const targetArtifactId = artifactId ?? this.activeArtifactId;
 
       if (!targetArtifactId) {
+        return;
+      }
+
+      const local = this.artifacts.find((item) => item.id === targetArtifactId && item.renderMode === 'praxis');
+      if (local) {
+        this.upsertArtifactRecord({ ...local, revision: local.revision + 1, updatedAt: new Date().toISOString() });
         return;
       }
 

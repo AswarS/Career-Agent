@@ -9,6 +9,8 @@ interface PraxisTicketResponse {
 }
 
 interface FormLike {
+  target?: string;
+  remove?(): void;
   method: string;
   action: string;
   enctype: string;
@@ -39,6 +41,7 @@ export function praxisSsoErrorMessage(error: unknown) {
 export function submitPraxisTicket(
   response: PraxisTicketResponse,
   documentRef: SsoDocumentLike = document as unknown as SsoDocumentLike,
+  frameTarget?: string,
 ) {
   const ticket = typeof response.ticket === 'string' ? response.ticket.trim() : '';
   const target = typeof response.targetUrl === 'string'
@@ -58,7 +61,11 @@ export function submitPraxisTicket(
     throw new Error('Praxis SSO 目标地址无效。');
   }
 
+  if (frameTarget && !/^praxis-frame-[A-Za-z0-9-]+$/.test(frameTarget)) {
+    throw new Error('Praxis 工件目标无效。');
+  }
   const form = documentRef.createElement('form');
+  if (frameTarget) form.target = frameTarget;
   form.method = 'POST';
   form.action = targetUrl.toString();
   form.enctype = 'application/x-www-form-urlencoded';
@@ -70,7 +77,12 @@ export function submitPraxisTicket(
   input.value = ticket;
   form.appendChild(input);
   documentRef.body.appendChild(form);
-  form.submit();
+  try {
+    form.submit();
+  } finally {
+    input.value = '';
+    form.remove?.();
+  }
 }
 
 function createHttpClient(config: RuntimeConfig) {
@@ -100,6 +112,8 @@ export function createPraxisSsoClient(
   return {
     async launch(
       documentRef: SsoDocumentLike = document as unknown as SsoDocumentLike,
+      frameTarget?: string,
+      isActive: () => boolean = () => true,
     ) {
       if (!config.apiBaseUrl || config.clientMode !== 'upstream') {
         throw new Error('Praxis SSO 需要已配置的 Career 后端。');
@@ -109,7 +123,7 @@ export function createPraxisSsoClient(
         const response = await client.post<PraxisTicketResponse>(
           CAREER_AGENT_API_ROUTES.praxisSsoTicket(),
         );
-        submitPraxisTicket(response.data, documentRef);
+        if (isActive()) submitPraxisTicket(response.data, documentRef, frameTarget);
       } catch (error) {
         if (axios.isAxiosError(error)) {
           const data = error.response?.data;

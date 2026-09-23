@@ -13,7 +13,7 @@ export type MessageKind = 'markdown' | 'status';
 export type LoadState = 'idle' | 'loading' | 'ready' | 'error';
 export type AgentAccent = 'teal' | 'amber' | 'blue' | 'slate';
 export type ArtifactStatus = 'idle' | 'loading' | 'streaming' | 'ready' | 'stale' | 'error';
-export type ArtifactRenderMode = 'html' | 'markdown' | 'cards' | 'url';
+export type ArtifactRenderMode = 'html' | 'markdown' | 'cards' | 'url' | 'praxis';
 export type ArtifactViewMode = 'pane' | 'focus' | 'immersive';
 export type MessageActionKind = 'open-artifact' | 'launch-praxis';
 export type MessageMediaKind = 'image' | 'audio' | 'video' | 'html' | 'app' | 'file';
@@ -345,7 +345,8 @@ export type ArtifactType =
   | 'coding-assessment'
   | 'visual-learning'
   | 'app-example'
-  | 'generated-app';
+  | 'generated-app'
+  | 'praxis';
 
 interface ArtifactRecordBase {
   id: string;
@@ -386,7 +387,13 @@ export interface CardsArtifactRecord extends ArtifactRecordBase {
   };
 }
 
+export interface PraxisArtifactRecord extends ArtifactRecordBase {
+  renderMode: 'praxis';
+  payload: { conversationId: string };
+}
+
 export type ArtifactRecord =
+  | PraxisArtifactRecord
   | HtmlArtifactRecord
   | UrlArtifactRecord
   | MarkdownArtifactRecord

@@ -297,7 +297,7 @@ async function handleSubmit(submission: DraftMessageSubmission) {
 
 async function handleMessageAction(action: MessageAction) {
   if (action.kind === 'launch-praxis') {
-    await router.push({ name: 'praxis-sso' });
+    workspaceStore.openPraxisArtifact(threadId.value);
     return;
   }
 

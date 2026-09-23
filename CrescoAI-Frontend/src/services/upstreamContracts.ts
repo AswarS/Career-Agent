@@ -256,7 +256,7 @@ function normalizeArtifactStatus(value: UpstreamArtifactRecord['status']): Artif
   return 'idle';
 }
 
-function normalizeArtifactRenderMode(value: string | null | undefined): ArtifactRenderMode {
+function normalizeArtifactRenderMode(value: string | null | undefined): Exclude<ArtifactRenderMode, 'praxis'> {
   return value === 'cards' || value === 'markdown' || value === 'url' ? value : 'html';
 }
 

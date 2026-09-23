@@ -50,6 +50,7 @@ import {
   getNetworkConversationMemoryDir,
   getNetworkUserWorkspaceDir,
   networkRootDir,
+  networkDataRootDir,
   userDataRootDir,
 } from '../../utils/networkTranscriptStorage.js';
 import { deleteConversationMemorySession } from '../../memory/conversationMemoryLifecycle.js';
@@ -303,7 +304,7 @@ interface RuntimeJsonlEvent {
   };
 }
 
-const conversationFilesRootDir = join(networkRootDir, 'files');
+const conversationFilesRootDir = join(networkDataRootDir, 'files');
 const maxUploadBytes = 20 * 1024 * 1024;
 const manifestFileName = '_manifest.json';
 const maxInjectedTextChars = 20_000;
@@ -1093,12 +1094,28 @@ export class ConversationService implements OnModuleInit {
       }
 
       if (event.type === 'message.block.completed') {
+        const completedBlock = sanitizeServerPhysicalPathsInValue(
+          event.block,
+        ) as MessageBlock;
         yield {
           type: 'message.block.completed',
           message_id: event.messageId,
           messageId: event.messageId,
-          block: sanitizeServerPhysicalPathsInValue(event.block) as MessageBlock,
+          block: completedBlock,
         };
+        // Praxis launch is already authorized once its tool result succeeds.
+        // Stream the stable UI action now instead of waiting for the model's
+        // final response (which may be delayed by unrelated turn maintenance).
+        const immediateActions = extractPraxisMessageActions([completedBlock]);
+        if (immediateActions.length) {
+          yield {
+            type: 'artifact.created',
+            message_id: event.messageId,
+            messageId: event.messageId,
+            media: [],
+            actions: immediateActions,
+          };
+        }
         continue;
       }
 
@@ -3835,11 +3852,11 @@ export class ConversationService implements OnModuleInit {
     const markerIndex = normalized.indexOf(marker);
     if (markerIndex >= 0) {
       const relative = normalized.slice(markerIndex + marker.length);
-      return join(networkRootDir, relative);
+      return join(networkDataRootDir, relative);
     }
 
     if (normalized.startsWith('./src/Network/')) {
-      return join(networkRootDir, normalized.replace('./src/Network/', ''));
+      return join(networkDataRootDir, normalized.replace('./src/Network/', ''));
     }
 
     return normalized;

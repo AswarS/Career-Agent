@@ -20,7 +20,7 @@ import { ProfileChangeProposalEntity } from '../profile/entities/profile-change-
 import { ProfileRevisionEntity } from '../profile/entities/profile-revision.entity';
 import { ProfileProjectionJobEntity } from '../profile/entities/profile-projection-job.entity';
 import { ProfileSuggestionEntity } from '../profile/entities/profile-suggestion.entity';
-import { networkRootDir } from '../../utils/networkTranscriptStorage';
+import { networkDataRootDir } from '../../utils/networkTranscriptStorage';
 
 @Injectable()
 export class UserService {
@@ -110,8 +110,8 @@ export class UserService {
 
   private async cleanupUserFiles(userId: number) {
     const targets = [
-      join(networkRootDir, 'user', String(userId)),
-      join(networkRootDir, 'files', String(userId)),
+      join(networkDataRootDir, 'user', String(userId)),
+      join(networkDataRootDir, 'files', String(userId)),
     ];
 
     for (const target of targets) {
