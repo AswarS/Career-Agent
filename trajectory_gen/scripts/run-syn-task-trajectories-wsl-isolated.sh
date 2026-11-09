@@ -25,8 +25,9 @@ command -v bun >/dev/null || { printf 'Linux Bun is not installed.\n' >&2; exit 
 # copied-in requests always exist and match the current materials. The runner
 # reads the manifest and fails on a stale or absent request otherwise. RANGE
 # selects tasks by 1-based sort ordinal ('1-100', '101-', '7', 'all') and must be
-# applied here, before `syn_tasks` is excluded from the runtime copy.
-package_source="$source_root/syn_tasks/eduagentworld_v2_171_tasks_20260921/eduagentworld_v2_171_tasks_20260921"
+# applied here, before the synthetic-task datasets are excluded from the runtime copy.
+source_relative="${SYN_TASK_SOURCE:-trajectory_gen/syn_tasks/eduagentworld_taskset_v1_1868_20261002}"
+package_source="$source_root/$source_relative"
 range="${RANGE:-}"
 if [[ -d "$package_source" ]]; then
   prepare_args=("$source_root/trajectory_gen/scripts/prepare-syn-task-runs.ts")
@@ -39,7 +40,7 @@ fi
 tar -C "$source_root" \
   --exclude=.git \
   --exclude='*/node_modules' \
-  --exclude=syn_tasks \
+  --exclude='trajectory_gen/syn_tasks' \
   --exclude='trajectory_gen/trajectories/syn-tasks/runs' \
   --exclude='Gateway/data' \
   --exclude='CrescoAI-Backend/backend/src/Network/data' \

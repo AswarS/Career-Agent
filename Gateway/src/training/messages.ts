@@ -121,6 +121,10 @@ function textContent(value: unknown): string | null {
   return value.every(block => block?.type === 'text') ? text : null;
 }
 
+function isToolLoadNotice(content: string): boolean {
+  return /^(?:Tool loaded\.\s*)+$/.test(content.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '').trim());
+}
+
 /** Directly consumable by ms-swift with Qwen3.5's qwen3_5 agent template. */
 export function qwen35SftExport(events: JournalEvent[]) {
   const projection = messagesListExport(events);
@@ -168,13 +172,13 @@ export function qwen35SftExport(events: JournalEvent[]) {
         else issues.push('qwen3_5_unsupported_user_block');
       }
       const content = plain.join('');
-      if (content && content.trim() !== 'Tool loaded.') messages.push({ role: 'user', content });
+      if (content && !isToolLoadNotice(content)) messages.push({ role: 'user', content });
       continue;
     }
     if (message.role === 'system' || message.role === 'user') {
       const content = textContent(message.content);
       if (content === null) issues.push('qwen3_5_unsupported_message_content');
-      else if (!(message.role === 'user' && content.trim() === 'Tool loaded.')) messages.push({ role: message.role, content });
+      else if (!(message.role === 'user' && isToolLoadNotice(content))) messages.push({ role: message.role, content });
       continue;
     }
     issues.push(`qwen3_5_unsupported_role:${String(message.role)}`);

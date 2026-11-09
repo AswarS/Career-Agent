@@ -9,8 +9,15 @@
 /skills2/
 /web_app_skills/
 /syn_task/
-/syn_tasks/
+/trajectory_gen/syn_tasks/
 /trajectory_gen/trajectories/
+/trajectory_gen/reports/*.json
+/viewer/
+/scripts/
+/trajectory_gen/
+/training/
+/tmp/
+/EduAgentWorld_StudentCareerTasks_2183_20261023_v1/
 
 # Local Windows launchers
 /start_windows.cmd

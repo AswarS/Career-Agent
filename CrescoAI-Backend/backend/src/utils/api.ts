@@ -28,6 +28,7 @@ import { getTools } from 'src/tools.js'
 import type { AgentId } from 'src/types/ids.js'
 import type { z } from 'zod/v4'
 import { CLI_SYSPROMPT_PREFIXES } from '../constants/system.js'
+import { compactToolDescription, isCompactContextEnabled } from '../constants/compactContext.js'
 import { roughTokenCountEstimation } from '../services/tokenEstimation.js'
 import type { Tool, ToolPermissionContext, Tools } from '../Tool.js'
 import { AGENT_TOOL_NAME } from '../tools/AgentTool/constants.js'
@@ -145,6 +146,7 @@ export async function toolToAPISchema(
   // PR#25424). MCP tools also set inputJSONSchema but each has a stable schema,
   // so including it preserves their GB-flip cache stability.
   const cacheKeyParts = [tool.name]
+  if (isCompactContextEnabled()) cacheKeyParts.push('career-compact-v1')
   if (tool.schemaCacheNamespace) {
     cacheKeyParts.push(tool.schemaCacheNamespace)
   }
@@ -180,6 +182,7 @@ export async function toolToAPISchema(
       }),
       input_schema,
     }
+    if (isCompactContextEnabled()) base.description = compactToolDescription(tool.name, base.description ?? '')
 
     // Only add strict if:
     // 1. Feature flag is enabled

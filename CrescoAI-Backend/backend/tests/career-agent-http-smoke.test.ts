@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AgentService } from '../src/Network/modules/agent/agent.service.js';
 import { createConversation as createRuntimeConversation } from '../src/Network/modules/agent/agent.runtime.js';
+import { configureNetworkBodyParsers } from '../src/Network/body-parsers.js';
 import type {
   AgentCreateConversationInput,
   AgentSendMessageInput,
@@ -102,7 +103,8 @@ describe('Career Agent HTTP smoke flow', () => {
       .useValue(createDeterministicAgentService())
       .compile();
 
-    app = moduleFixture.createNestApplication();
+    app = moduleFixture.createNestApplication({ bodyParser: false });
+    configureNetworkBodyParsers(app);
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
     await app.init();
   });

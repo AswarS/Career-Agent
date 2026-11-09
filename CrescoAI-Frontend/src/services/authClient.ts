@@ -40,6 +40,30 @@ export interface AuthClient {
   logout(): Promise<void>;
 }
 
+export interface RegisterRequest {
+  display_name: string;
+  email?: string;
+  username?: string;
+  password: string;
+}
+
+export function createRegisterRequest(credentials: RegisterCredentials): RegisterRequest {
+  if (typeof credentials.password !== 'string') {
+    throw new Error('密码格式无效，请重新输入。');
+  }
+
+  if (credentials.password.length < 8) {
+    throw new Error('密码至少需要 8 位。');
+  }
+
+  return {
+    display_name: credentials.displayName.trim(),
+    email: credentials.email?.trim() || undefined,
+    username: credentials.username?.trim() || undefined,
+    password: credentials.password,
+  };
+}
+
 function normalizeOptionalString(value: unknown) {
   const normalized = String(value ?? '').trim();
   return normalized || null;
@@ -281,12 +305,11 @@ function createUpstreamAuthClient(config: RuntimeConfig, httpClient?: AxiosInsta
       }, identifier);
     },
     async register(credentials) {
-      return postSession(CAREER_AGENT_API_ROUTES.authRegister(), {
-        display_name: credentials.displayName,
-        email: credentials.email || undefined,
-        username: credentials.username || undefined,
-        password: credentials.password,
-      }, credentials.email || credentials.username);
+      return postSession(
+        CAREER_AGENT_API_ROUTES.authRegister(),
+        createRegisterRequest(credentials),
+        credentials.email || credentials.username,
+      );
     },
     async logout() {
       try {

@@ -68,6 +68,8 @@ export function buildSkillInvocationEnvelope(
     `parent_skill_call_id: ${invocation.parentSkillCallId ?? "null"}`,
     "",
     `Before ending this Skill invocation, call ${RETURN_SKILL_RESULT_TOOL_NAME} with this skill_call_id and skill_name.`,
+      `A final text reply alone does not complete this Skill. If tools or sources are unavailable, report error or insufficient_input through ${RETURN_SKILL_RESULT_TOOL_NAME}; do not stop without reporting.`,
+      "After two consecutive failures of the same external service, stop repeating that service and report the limitation. Use supplied materials when sufficient, and label unverified claims clearly.",
     "Valid outcomes:",
     "- success: this invocation achieved its goal.",
     "- insufficient_input: this invocation cannot continue with the information currently available.",

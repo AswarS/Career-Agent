@@ -8,14 +8,14 @@
 </head>
 <body>
   <header class="topbar">
-    <div><strong>Plan Trace Inspector</strong><span id="run-state" class="muted">加载中</span></div>
-    <div class="toolbar">
+    <div class="brand"><strong>Plan Trace Inspector</strong><nav class="view-tabs"><button id="trace-tab" class="active" type="button">轨迹检查</button><button id="task-tab" type="button">任务检查</button></nav><span id="run-state" class="muted">加载中</span></div>
+    <div id="trace-toolbar" class="toolbar">
       <label for="run-select">轨迹</label><select id="run-select"></select>
       <button id="timezone" type="button" title="切换 UTC 和本地时间">UTC</button>
       <button id="reasoning" type="button" title="显示或隐藏规划推理">显示推理</button>
     </div>
   </header>
-  <main class="layout">
+  <main id="trace-view" class="layout">
     <aside class="source-panel panel">
       <h2>合成任务</h2>
       <dl id="source-meta"></dl>
@@ -36,6 +36,47 @@
       <h2>自动审计</h2><div id="audit"></div>
       <h2>Tool Inventory</h2><div id="tool-inventory"></div>
       <h2>选中步骤</h2><div id="detail-empty" class="empty">选择中间的任一步骤</div><div id="detail" hidden><h3 id="detail-title"></h3><pre id="detail-content"></pre></div>
+    </aside>
+  </main>
+  <main id="task-view" class="task-layout" hidden>
+    <aside class="task-finder panel">
+      <div class="finder-head"><h2>单独检查任务</h2><span id="task-count" class="muted"></span></div>
+      <label class="field-label" for="dataset-select">任务集</label>
+      <select id="dataset-select"></select>
+      <label class="field-label" for="task-search">名称、ID 或指令关键词</label>
+      <div class="search-box"><input id="task-search" type="search" autocomplete="off" placeholder="例如：灵能、简历、scenario ID"><button id="task-search-button" type="button">搜索</button></div>
+      <p class="note">只返回最相关的 Top 10，不把全部任务加载到浏览器。</p>
+      <div id="task-results" class="task-results"><p class="empty">输入关键词，或从下面选择一个本地任务包。</p></div>
+      <h3>从本地文件检查</h3>
+      <div class="file-actions">
+        <label class="file-button">选择任务包目录<input id="task-folder-input" type="file" webkitdirectory multiple></label>
+        <label class="file-button secondary">选择 JSON / 材料文件<input id="task-file-input" type="file" accept=".json,.md,.txt" multiple></label>
+      </div>
+      <p class="note">目录选择时请选择单个 <code>packages/&lt;scenario_id&gt;</code> 目录。文件只在当前浏览器中读取。</p>
+    </aside>
+    <section class="task-main panel">
+      <div id="task-empty" class="task-placeholder"><strong>选择一条任务开始检查</strong><span>可以搜索服务器中的任务，也可以直接选择本地任务包。</span></div>
+      <div id="task-detail" hidden>
+        <div class="section-head"><div><h1 id="task-title"></h1><p id="task-subtitle" class="muted"></p></div><div id="task-badges" class="badges"></div></div>
+        <h3>任务指令</h3><div id="inspect-task-text" class="task-prose"></div>
+        <div class="task-columns">
+          <section><h3>交付物</h3><div id="task-deliverables"></div></section>
+          <section><h3>验收标准</h3><div id="task-criteria"></div></section>
+        </div>
+        <h3>约束</h3><div id="task-constraints"></div>
+        <h3>预期工具链</h3><div id="task-tool-chain" class="chain"></div>
+        <div id="task-invocations" class="invocations"></div>
+        <h3>输入材料及正文</h3><div id="task-materials"></div>
+      </div>
+    </section>
+    <aside class="task-side panel">
+      <div id="task-side-empty" class="empty">选中任务后显示画像、环境和质检结果。</div>
+      <div id="task-side-detail" hidden>
+        <h2>任务元数据</h2><dl id="inspect-task-meta"></dl>
+        <h2>画像摘要</h2><pre id="inspect-persona"></pre>
+        <h2>静态质检</h2><div id="inspect-audits"></div>
+        <details><summary>环境原始数据</summary><pre id="inspect-environment"></pre></details>
+      </div>
     </aside>
   </main>
   <script type="module" src="/app.js"></script>

@@ -13,7 +13,8 @@ $output = Join-Path $repoRoot 'trajectory_gen\trajectories\syn-tasks\runs'
 # Rematerialize the requests from the source packages on every generation, so the
 # runner never reads a stale or absent request. -Range selects tasks by their
 # 1-based sort ordinal, e.g. '1-100', '101-', '7', '1,3,5-9' or 'all'.
-$packageSource = Join-Path $repoRoot 'syn_tasks\eduagentworld_v2_171_tasks_20260921\eduagentworld_v2_171_tasks_20260921'
+$sourceRelative = if ($env:SYN_TASK_SOURCE) { $env:SYN_TASK_SOURCE } else { 'trajectory_gen\syn_tasks\eduagentworld_taskset_v1_1868_20261002' }
+$packageSource = Join-Path $repoRoot $sourceRelative
 if (Test-Path $packageSource) {
   $prepareArgs = @((Join-Path $repoRoot 'trajectory_gen\scripts\prepare-syn-task-runs.ts'))
   if ($Range) { $prepareArgs += @('--range', $Range) }

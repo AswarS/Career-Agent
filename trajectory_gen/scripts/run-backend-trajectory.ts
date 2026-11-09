@@ -9,7 +9,7 @@ import { createGatewayServer } from '../../Gateway/src/api/server.ts';
 import { validateCreateRun } from '../../Gateway/src/api/validation.ts';
 import { loadConfig } from '../../Gateway/src/config.ts';
 import { HttpHarnessClient } from '../../Gateway/src/harness/client.ts';
-import { auditExpectedToolCalls, validateToolExpectation } from './lib/semantic-audit.ts';
+import { auditExpectedToolResults, validateToolExpectation } from './lib/semantic-audit.ts';
 
 const { values } = parseArgs({ options: {
   task: { type: 'string' }, output: { type: 'string' },
@@ -295,9 +295,22 @@ try {
     .map((event: any) => event.payload.name)
     .filter((name: unknown): name is string => typeof name === 'string');
   const semanticAudit = expectedTools
-    ? auditExpectedToolCalls(expectedTools, actualTools)
+    ? auditExpectedToolResults(expectedTools, events.events ?? [])
     : { schemaVersion: 'career-agent.tool-semantic-audit.v1', accepted: true, expectedCallCount: 0, matchedCallCount: 0, missingCallCount: 0, orderValid: true, issues: [] };
   const planSftReady = qwen.sftReady && semanticAudit.accepted;
+  const validationStatus = planSftReady ? 'passed' : 'rejected';
+  const validationReport = {
+    schemaVersion: 'career-agent.trajectory-validation.v1',
+    status: validationStatus,
+    retained: true,
+    trainingEligible: planSftReady,
+    runStatus: snapshot.status,
+    structuralSftReady: qwen.sftReady,
+    semanticAudit,
+    issues: [...qwen.issues, ...semanticAudit.issues],
+    expectedTools: expectedTools ?? [],
+    actualTools,
+  };
 
   const base = resolve(output, runId!);
   await Promise.all([
@@ -305,12 +318,21 @@ try {
     writeFile(`${base}.calls.json`, JSON.stringify(calls, null, 2) + '\n', { flag: 'wx' }),
     writeFile(`${base}.messages.json`, JSON.stringify(messages, null, 2) + '\n', { flag: 'wx' }),
     writeFile(`${base}.qwen3_5_sft.json`, JSON.stringify(qwen, null, 2) + '\n', { flag: 'wx' }),
+    writeFile(`${base}.validation.json`, JSON.stringify(validationReport, null, 2) + '\n', { flag: 'wx' }),
     writeFile(resolve(output, 'run.json'), JSON.stringify(snapshot, null, 2) + '\n'),
   ]);
+  let rejectedQwenJsonl: string | null = null;
   if (planSftReady) {
     await writeFile(`${base}.qwen3_5_sft.jsonl`, JSON.stringify({ messages: qwen.messages, tools: qwen.tools }) + '\n', { flag: 'wx' });
   } else {
     await removeTrainingJsonl();
+    rejectedQwenJsonl = `${base}.qwen3_5_sft.rejected.jsonl`;
+    await writeFile(rejectedQwenJsonl, JSON.stringify({
+      schemaVersion: 'career-agent.rejected-qwen-trajectory.v1',
+      validation: validationReport,
+      messages: qwen.messages ?? null,
+      tools: qwen.tools ?? null,
+    }) + '\n', { flag: 'wx' });
   }
 
   stage('exporting generated workspace artifacts');
@@ -323,8 +345,9 @@ try {
     artifactWorkspaceError: artifactExport.workspaceError,
     sftReady: planSftReady, structuralSftReady: qwen.sftReady,
     sftIssues: [...qwen.issues, ...semanticAudit.issues], semanticAudit,
-    trainingReady: events.trainingReady, trainingReasons: events.reasons,
+    validationStatus, retained: true, validationReport: `${base}.validation.json`,
     qwenJsonl: planSftReady ? `${base}.qwen3_5_sft.jsonl` : null,
+    rejectedQwenJsonl,
   };
   await writeFile(resolve(output, 'summary.json'), JSON.stringify(result, null, 2) + '\n');
   stage(`complete: ${result.eventCount} events, ${result.callCount} model calls, ${result.artifactCount} artifacts, SFT ready=${result.sftReady}`);

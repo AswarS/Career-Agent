@@ -244,10 +244,15 @@ export class HarnessCore {
 
   async cancel(id: string, timedOut = false) {
     const e = this.entry(id);
-    if (['completed', 'failed', 'cancelled', 'timed_out'].includes(e.snapshot.status)) return this.get(id);
+    if (['completed', 'failed', 'cancelled', 'timed_out'].includes(e.snapshot.status)) {
+      if (e.snapshot.harness) await e.work;
+      return this.get(id);
+    }
     e.snapshot.status = timedOut ? 'timed_out' : 'cancelled';
     e.abort.abort(); clearTimeout(e.timer);
-    // Abort is propagated immediately; cleanup is explicit after execution settles.
+    // Do not let Gateway seal the journal while the cancelled tool is still
+    // emitting its final result. Deleting the user remains explicit cleanup.
+    if (e.snapshot.harness) await e.work;
     return this.get(id);
   }
 

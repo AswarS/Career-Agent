@@ -101,3 +101,21 @@ test('Qwen export rejects a called tool with no captured schema', () => {
   assert.equal(result.sftReady, false);
   assert.ok(result.issues.includes('qwen3_5_missing_tool_schema:UnknownDeferredTool'));
 });
+
+for (const arrayContent of [false, true]) test(`tool-load notice with reminder is removed (array=${arrayContent})`, () => {
+  const notice = 'Tool loaded.<system-reminder>Runtime hint</system-reminder>';
+  const real = notice + ' Please continue with my question.';
+  const wrap = (text: string) => arrayContent ? [{ type: 'text', text }] : text;
+  const result = qwen35SftExport([
+    event(1, { ...request.payload, body: { ...request.payload.body, messages: [
+      ...request.payload.body.messages,
+      { role: 'user', content: wrap(notice) },
+      { role: 'user', content: wrap('Tool loaded.Tool loaded.') },
+      { role: 'user', content: wrap(real) },
+    ] } }),
+    event(2, { type: 'model.response', identity, protocol: 'openai', status: 200, complete: true,
+      response: { message: { role: 'assistant', content: 'done' } } }),
+  ]);
+  assert.equal(result.sftReady, true);
+  assert.deepEqual(result.messages?.map(m => m.content), [request.payload.body.messages[0].content, real, 'done']);
+});

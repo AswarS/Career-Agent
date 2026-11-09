@@ -2,7 +2,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import type { HarnessClient, HarnessSnapshot } from './client.ts';
 import { RunStore } from '../sessions/run-store.ts';
 import { ApiError } from '../api/validation.ts';
-import { UserSimulator, questionRequest, validateAnswers } from '../user-simulator/simulator.ts';
+import { UserSimulator, UserSimulationError, questionRequest, validateAnswers } from '../user-simulator/simulator.ts';
 
 const terminal = new Set(['completed', 'failed', 'cancelled', 'timed_out']);
 export class HarnessRunner {
@@ -58,9 +58,16 @@ export class HarnessRunner {
         }
         else { await delay(this.pollMs); snapshot = await this.client.get(id); }
       }
-    } catch {
+    } catch (error) {
       // No automatic POST retry: inference may already have started on the backend.
-      this.store.update(id, { status: this.stopped.has(id) ? 'cancelled' : controller.signal.aborted ? 'timed_out' : 'failed', error: this.stopped.has(id) ? null : 'harness_or_user_simulation_failed' });
+      const code = error instanceof UserSimulationError ? error.message : 'harness_or_user_simulation_failed';
+      if (!this.stopped.has(id) && !controller.signal.aborted) {
+        try {
+          await this.record?.(id, { type: 'run.failure', code, stage: error instanceof UserSimulationError ? error.stage : 'harness_execution',
+            ...(error instanceof UserSimulationError ? { attempts: error.attempts, httpStatus: error.httpStatus, finishReason: error.finishReason, elapsedMs: error.elapsedMs } : {}) });
+        } catch { /* Keep the original failure if diagnostic storage also fails. */ }
+      }
+      this.store.update(id, { status: this.stopped.has(id) ? 'cancelled' : controller.signal.aborted ? 'timed_out' : 'failed', error: this.stopped.has(id) ? null : code });
       try { await this.client.cancel(id); }
       catch { this.store.update(id, { error: 'harness_unreachable_execution_state_unknown' }); }
     } finally { clearTimeout(timer); }
@@ -78,6 +85,7 @@ export class HarnessRunner {
     if (supplied !== undefined && run.input.userSimulator) throw new ApiError(409, 'automatic_user_terminal', 'This run uses the automatic user terminal');
     if (supplied === undefined && (!run.input.userSimulator || !this.simulator)) throw new ApiError(400, 'answers_required', 'Supply answers for an external user terminal');
     let deliveryStarted = false;
+    let stage = 'question_validation';
     const work = (async () => {
       const snapshot = known ?? await this.client.get(id);
       if (snapshot.status !== 'waiting_user' || snapshot.pendingQuestion?.toolUseId !== toolUseId) throw new ApiError(409, 'question_not_waiting', 'Tool does not match the pending question');
@@ -85,16 +93,22 @@ export class HarnessRunner {
       const request = questionRequest(this.store.get(id), snapshot.visibleHistory ?? []);
       const controller = this.controllers.get(id)!;
       let answers: Record<string, string>;
-      if (supplied === undefined) answers = await this.simulator!.answer(run.input.userSimulator!.modelProfile, request, controller.signal);
+      if (supplied === undefined) {
+        stage = 'simulator_http';
+        answers = await this.simulator!.answer(run.input.userSimulator!.modelProfile, request, controller.signal,
+          event => this.record?.(id, { ...event, toolUseId }) ?? Promise.resolve());
+      }
       else {
         try { answers = validateAnswers(request, supplied); }
         catch { throw new ApiError(400, 'invalid_answers', 'Provide one non-empty string answer per question, keyed by exact question text'); }
       }
       controller.signal.throwIfAborted();
+      stage = 'answer_record';
       deliveryStarted = true;
       await this.record?.(id, { type: 'user.answer', toolUseId, questions: request.questions, answers, source: supplied === undefined ? 'user_simulator' : 'external_terminal' });
       controller.signal.throwIfAborted();
       let result: HarnessSnapshot;
+      stage = 'answer_delivery';
       try { result = await this.client.respond!(id, toolUseId, answers); }
       catch {
         // This endpoint is idempotent. Retry the same answer once; never resample the user.
@@ -106,6 +120,9 @@ export class HarnessRunner {
       return result;
     })().catch(error => {
       if (!deliveryStarted && supplied !== undefined) this.answers.delete(key);
+      if (supplied === undefined && !(error instanceof UserSimulationError) && !this.controllers.get(id)?.signal.aborted) {
+        throw new UserSimulationError(`user_${stage}_failed`, stage);
+      }
       throw error;
     });
     this.answers.set(key, { signature, work });

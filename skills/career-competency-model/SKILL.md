@@ -211,6 +211,8 @@ The JSON must use this top-level structure:
 
 Use English JSON keys and concise values in the user's language. Validate that all referenced IDs exist before writing. Do not embed the user's profile or personal data in the artifact.
 
+For each source, omit `url`, `publisher`, `accessed_at`, and `relevance` when unavailable; these optional fields must be strings if present, not `null`. Do not invent missing source information.
+
 After `Write` succeeds, use `Read` on that exact artifact path. Verify the persisted file—not only the in-memory draft—before returning success:
 
 - it is complete, valid JSON;

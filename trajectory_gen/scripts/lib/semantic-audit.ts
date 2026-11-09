@@ -59,3 +59,34 @@ export function auditExpectedToolCalls(expectedTools: string[], actualTools: str
     issues,
   };
 }
+
+function hasFailedOutcome(value: unknown, depth = 0): boolean {
+  if (depth > 16) return true;
+  if (typeof value === 'string') {
+    try { return hasFailedOutcome(JSON.parse(value), depth + 1); } catch { return false; }
+  }
+  if (Array.isArray(value)) return value.some(item => hasFailedOutcome(item, depth + 1));
+  if (!value || typeof value !== 'object') return false;
+  const object = value as Record<string, unknown>;
+  if (object.outcome === 'error' || object.outcome === 'insufficient_input' || object.outcome === 'partial') return true;
+  return Object.values(object).some(item => hasFailedOutcome(item, depth + 1));
+}
+
+/** Required workflows must succeed, not merely emit the right tool names. */
+export function auditExpectedToolResults(expectedTools: string[], events: Array<{ payload: any }>): ToolSemanticAudit {
+  const calls = events.map(e => e.payload).filter(p => p?.type === 'tool.call');
+  const results = new Map<string, any[]>();
+  for (const { payload: p } of events) {
+    if (p?.type === 'tool.result') results.set(p.toolUseId, [...(results.get(p.toolUseId) ?? []), p]);
+  }
+  const audit = auditExpectedToolCalls(expectedTools, calls.map(p => p.name));
+  const successful = calls.filter(call => {
+    const paired = results.get(call.toolUseId) ?? [];
+    return paired.length === 1 && paired[0].isError === false && !hasFailedOutcome(paired[0].content);
+  }).map(call => call.name);
+  if (!auditExpectedToolCalls(expectedTools, successful).accepted) {
+    audit.accepted = false;
+    audit.issues.push('expected_tool_results_unsuccessful');
+  }
+  return audit;
+}

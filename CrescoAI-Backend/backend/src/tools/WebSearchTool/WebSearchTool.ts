@@ -63,6 +63,8 @@ export type { WebSearchProgress } from '../../types/tools.js'
 
 import type { WebSearchProgress } from '../../types/tools.js'
 
+import { anySearchHttpError } from './anySearchErrors.js'
+
 const ANYSEARCH_ENDPOINT = 'https://api.anysearch.com/v1/search'
 const DEFAULT_MAX_RESULTS = 5
 const DEFAULT_TIMEOUT_MS = 30_000
@@ -340,9 +342,7 @@ export const WebSearchTool = buildTool({
       const responseText = await response.text()
 
       if (!response.ok) {
-        throw new Error(
-          `AnySearch request failed (${response.status} ${response.statusText}): ${responseText.slice(0, 1_000)}`,
-        )
+        throw new Error(anySearchHttpError(response.status, responseText))
       }
 
       let responseJson: unknown
@@ -360,7 +360,7 @@ export const WebSearchTool = buildTool({
       }
       if (parsed.data.code !== 0) {
         throw new Error(
-          `AnySearch search failed (code ${parsed.data.code}): ${parsed.data.message ?? 'Unknown error'}`,
+          `AnySearch search failed (code ${parsed.data.code})`,
         )
       }
 

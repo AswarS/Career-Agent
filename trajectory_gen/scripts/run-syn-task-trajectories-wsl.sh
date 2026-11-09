@@ -10,7 +10,8 @@ export OUTPUT="${OUTPUT:-$repo_root/trajectory_gen/trajectories/syn-tasks/runs}"
 # tree, and this script then just consumes the resulting manifest.
 range="${RANGE:-}"
 manifest="$repo_root/trajectory_gen/trajectories/syn-tasks/manifest.json"
-package_source="$repo_root/syn_tasks/eduagentworld_v2_171_tasks_20260921/eduagentworld_v2_171_tasks_20260921"
+source_relative="${SYN_TASK_SOURCE:-trajectory_gen/syn_tasks/eduagentworld_taskset_v1_1868_20261002}"
+package_source="$repo_root/$source_relative"
 
 if [[ -n "$range" ]]; then
   [[ -d "$package_source" ]] || {

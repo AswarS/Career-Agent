@@ -13,7 +13,7 @@ import { HarnessCore } from '../../CrescoAI-Backend/backend/src/Network/modules/
 import { RunStore } from '../src/sessions/run-store.ts';
 import { HarnessRunner } from '../src/harness/runner.ts';
 import type { HarnessClient, HarnessSnapshot } from '../src/harness/client.ts';
-import { UserSimulator, questionRequest, simulatorPrompt, validateAnswers } from '../src/user-simulator/simulator.ts';
+import { UserSimulator, UserSimulationError, parseSimulatorAnswers, questionRequest, simulatorPrompt, validateAnswers } from '../src/user-simulator/simulator.ts';
 import { loadConfig } from '../src/config.ts';
 import { createGatewayServer } from '../src/api/server.ts';
 import { validateCreateRun } from '../src/api/validation.ts';
@@ -32,7 +32,7 @@ async function listen(server: Server, t: TestContext) {
   t.after(() => new Promise<void>(resolve => { server.close(() => resolve()); server.closeAllConnections(); }));
   return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 }
-async function coreFixture(t: TestContext, count = 1, parallel = false) {
+async function coreFixture(t: TestContext, count = 1, parallel = false, onDispose: () => Promise<void> = async () => {}) {
   const root = await mkdtemp(join(tmpdir(), 'career-user-test-'));
   const waiters = new Map<string, () => void>(); const received: unknown[] = [];
   let user = 0;
@@ -59,7 +59,7 @@ async function coreFixture(t: TestContext, count = 1, parallel = false) {
       yield { type: 'message.completed', status: 'done', reply: '完成' };
     },
     respond: async (binding, id, answers) => { received.push({ conversation: binding.conversationId, id, answers }); waiters.get(`${binding.conversationId}:${id}`)!(); },
-    dispose: async () => {}, cleanup: async () => {},
+    dispose: onDispose, cleanup: async () => {},
   });
   t.after(async () => { await core.shutdown(); await rm(root, { recursive: true, force: true }); });
   const client: HarnessClient = {
@@ -257,4 +257,85 @@ test('answer capture failure prevents tool delivery', async t => {
   t.after(() => runner.shutdown()); runner.launch(run.runId);
   await until(() => store.get(run.runId).status === 'failed');
   assert.equal(model.requests.length, 1); assert.equal(f.received.length, 0);
+});
+
+test('accepts a complete JSON fence but rejects prose, extra keys and partial JSON', () => {
+  const run = new RunStore().create(task());
+  run.pendingQuestion = { toolUseId: 'q', questions: [question] };
+  const request = questionRequest(run);
+  const json = JSON.stringify({ answers: answer });
+  assert.deepEqual(parseSimulatorAnswers(request, '```json\n' + json + '\n```'), answer);
+  assert.deepEqual(parseSimulatorAnswers(request, '```\r\n' + json + '\r\n```'), answer);
+  for (const text of ['Here is the answer: ' + json, '```json\n' + json, JSON.stringify({ answers: { ...answer, extra: 'x' } }), 'null']) {
+    assert.throws(() => parseSimulatorAnswers(request, text), UserSimulationError);
+  }
+});
+
+test('retries malformed simulator output once before recording and delivering exactly one answer', async t => {
+  const f = await coreFixture(t);
+  let calls = 0;
+  const url = await listen(createServer((req, res) => {
+    req.resume(); calls++;
+    res.end(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: calls === 1 ? 'not JSON' : '```json\n' + JSON.stringify({ answers: answer }) + '\n```' } }] }));
+  }), t);
+  const store = new RunStore(10, true), run = store.create(task());
+  const events: any[] = [];
+  const runner = new HarnessRunner(store, f.client, 5, new UserSimulator({ user: { provider: 'openai', baseUrl: url, apiKey: 'secret', model: 'user' } }), async (_id, event) => { events.push(event); });
+  t.after(() => runner.shutdown()); runner.launch(run.runId);
+  await until(() => store.get(run.runId).status === 'completed');
+  assert.equal(calls, 2); assert.equal(f.received.length, 1);
+  assert.equal(events.filter(e => e.type === 'user.answer').length, 1);
+  assert.equal(events.find(e => e.type === 'user.simulation.retry').stage, 'simulator_parse');
+});
+
+test('exhausted format retries preserve a safe failure stage and never invent an answer', async t => {
+  const f = await coreFixture(t); let calls = 0;
+  const url = await listen(createServer((req, res) => {
+    req.resume(); calls++;
+    res.end(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: 'private payload must not be logged' } }] }));
+  }), t);
+  const store = new RunStore(10, true), run = store.create(task());
+  const events: any[] = [];
+  const runner = new HarnessRunner(store, f.client, 5, new UserSimulator({ user: { provider: 'openai', baseUrl: url, apiKey: 'secret', model: 'user' } }), async (_id, e) => { events.push(e); });
+  t.after(() => runner.shutdown()); runner.launch(run.runId);
+  await until(() => store.get(run.runId).status === 'failed');
+  await runner.drain(run.runId);
+  assert.equal(calls, 2); assert.equal(f.received.length, 0);
+  assert.equal(store.get(run.runId).error, 'user_simulator_invalid_json');
+  const failure = events.find(e => e.type === 'run.failure');
+  assert.equal(failure.code, 'user_simulator_invalid_json'); assert.equal(failure.stage, 'simulator_parse');
+  assert.equal(failure.attempts, 2); assert.equal(failure.httpStatus, 200); assert.ok(failure.elapsedMs >= 0);
+  assert.ok(!JSON.stringify(events).includes('private payload'));
+  assert.ok(!JSON.stringify(events).includes('secret'));
+});
+
+test('authentication failures are not retried and retain HTTP status', async t => {
+  const f = await coreFixture(t); let calls = 0;
+  const url = await listen(createServer((req, res) => { req.resume(); calls++; res.writeHead(401); res.end('sensitive provider error'); }), t);
+  const store = new RunStore(10, true), run = store.create(task()); const events: any[] = [];
+  const runner = new HarnessRunner(store, f.client, 5, new UserSimulator({ user: { provider: 'openai', baseUrl: url, apiKey: 'secret', model: 'user' } }), async (_id, e) => { events.push(e); });
+  t.after(() => runner.shutdown()); runner.launch(run.runId);
+  await until(() => store.get(run.runId).status === 'failed');
+  assert.equal(calls, 1); assert.equal(f.received.length, 0);
+  const failure = events.find(e => e.type === 'run.failure');
+  assert.equal(failure.stage, 'simulator_http'); assert.equal(failure.httpStatus, 401);
+  assert.ok(!JSON.stringify(events).includes('sensitive provider error'));
+});
+
+test('backend cancellation waits for in-flight tool completion before acknowledging', async t => {
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  let disposing = false;
+  const f = await coreFixture(t, 1, false, async () => { disposing = true; await gate; });
+  const run = new RunStore().create(task(false)); f.core.prepare(run);
+  await until(() => f.core.get(run.runId).status === 'ready'); f.core.start(run.runId);
+  await until(() => f.core.get(run.runId).status === 'waiting_user');
+  let acknowledged = false;
+  const cancelling = f.core.cancel(run.runId).then(() => { acknowledged = true; });
+  try {
+    await until(() => disposing);
+    assert.equal(acknowledged, false);
+  } finally { release(); }
+  await cancelling;
+  assert.equal(acknowledged, true);
 });

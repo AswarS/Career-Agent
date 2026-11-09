@@ -9,22 +9,25 @@ import { validateEduAgentWorldPersona } from '../../CrescoAI-Backend/backend/src
 import { selectByRange, TaskRangeError } from './lib/task-range.ts';
 
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
-const sourceRoot = resolve(repoRoot, 'syn_tasks/eduagentworld_v2_171_tasks_20260921/eduagentworld_v2_171_tasks_20260921');
-const packagesRoot = resolve(sourceRoot, 'packages');
-const outputRoot = resolve(repoRoot, 'trajectory_gen/trajectories/syn-tasks/requests');
-// Kept as the no-argument default so existing batch workflows keep generating
-// the same two tasks they always did; use --range to pick others.
+const defaultSource = 'trajectory_gen/syn_tasks/eduagentworld_taskset_v1_1868_20261002';
+// Keep no-argument runs small; use --range to pick a deliberate batch.
 const defaultScenarios = [
-  'hybrid_v2_edu_env_002e18dab8e4c3e75d705d7e_t02',
-  'hybrid_v2_edu_env_072669e978f6827c2de37a3d_t02',
+  'hybrid_v2_edu_env_0009fcc1e19d0f2da9938452_m01',
+  'hybrid_v2_edu_env_0009fcc1e19d0f2da9938452_t01',
 ];
 
 const { values } = parseArgs({
   options: {
     range: { type: 'string' },
+    source: { type: 'string' },
+    'output-root': { type: 'string' },
     list: { type: 'boolean', default: false },
   },
 });
+
+const sourceRoot = resolve(repoRoot, values.source || process.env.SYN_TASK_SOURCE || defaultSource);
+const packagesRoot = resolve(sourceRoot, 'packages');
+const outputRoot = resolve(repoRoot, values['output-root'] || 'trajectory_gen/trajectories/syn-tasks/requests');
 
 async function orderedPackages() {
   try {
@@ -163,12 +166,13 @@ for (const [position, scenarioId] of scenarios.entries()) {
       expectedTools,
     }, null, 2)}\n`, 'utf8'),
   ]);
-  cases.push({ ordinal, scenarioId, taskId: task.id, title: task.title, request: name, personaFields: Object.keys(persona.product_fields).length, materials: materialRecords });
+  const taskPackageSha256 = sha256(Buffer.from(JSON.stringify({ task, environment, invocationBindings, persona, manifest, materialRecords })));
+  cases.push({ taskPackageSha256, ordinal, scenarioId, taskId: task.id, title: task.title, request: name, personaFields: Object.keys(persona.product_fields).length, materials: materialRecords });
 }
 
 await writeFile(resolve(dirname(outputRoot), 'manifest.json'), `${JSON.stringify({
   schemaVersion: 'career-agent.syn-task-trajectory-cases.v1',
-  sourceRoot: relative(repoRoot, sourceRoot).replaceAll('\\', '/'),
+  sourceRoot: sourceRoot.replaceAll('\\', '/'),
   packageCount: allScenarios.length,
   range: values.range ?? null,
   cases,

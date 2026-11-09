@@ -124,3 +124,19 @@ test('configuration refuses unprotected remote binding and invalid numbers', () 
   assert.equal(loadConfig({ GATEWAY_HOST: '0.0.0.0', GATEWAY_API_TOKEN: 'test' }).host, '0.0.0.0');
   for (const port of ['0', '-1', '65536', '8787junk']) assert.throws(() => loadConfig({ GATEWAY_PORT: port }), /PORT/);
 });
+
+test('configuration overrides model names without rewriting profile credentials', () => {
+  const policy = { provider: 'openai', baseUrl: 'https://models.example/v1', apiKey: 'policy-secret', model: 'old-policy' };
+  const user = { provider: 'openai', baseUrl: 'https://models.example/v1', apiKey: 'user-secret', model: 'old-user' };
+  const config = loadConfig({
+    GATEWAY_PUBLIC_URL: 'http://127.0.0.1:8787',
+    GATEWAY_MODELS_JSON: JSON.stringify({ policy }),
+    GATEWAY_USER_MODELS_JSON: JSON.stringify({ user }),
+    GATEWAY_MODEL_OVERRIDE: ' Intern-S2-Preview ',
+    GATEWAY_USER_MODEL_OVERRIDE: 'Intern-S2-Preview',
+  });
+  assert.equal(config.models?.policy.model, 'Intern-S2-Preview');
+  assert.equal(config.userModels?.user.model, 'Intern-S2-Preview');
+  assert.equal(config.models?.policy.apiKey, 'policy-secret');
+  assert.equal(config.userModels?.user.apiKey, 'user-secret');
+});

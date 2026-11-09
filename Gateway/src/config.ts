@@ -23,6 +23,17 @@ function modelProfiles(raw: string | undefined, variable: string): Record<string
   return value as Record<string, ModelProfile>;
 }
 
+function overrideProfileModels(
+  profiles: Record<string, ModelProfile>,
+  override: string | undefined,
+): Record<string, ModelProfile> {
+  const model = override?.trim();
+  if (!model) return profiles;
+  return Object.fromEntries(
+    Object.entries(profiles).map(([name, profile]) => [name, { ...profile, model }]),
+  );
+}
+
 function httpUrl(value: string, field: string) {
   let url: URL;
   try { url = new URL(value); } catch { throw new ConfigError(`${field}: must be a valid absolute HTTP(S) URL`); }
@@ -61,8 +72,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig 
   const harnessUrl = env.GATEWAY_HARNESS_URL?.trim();
   const harnessToken = env.GATEWAY_HARNESS_TOKEN?.trim();
   const publicUrl = env.GATEWAY_PUBLIC_URL?.replace(/\/$/, '');
-  const models = modelProfiles(env.GATEWAY_MODELS_JSON, 'GATEWAY_MODELS_JSON');
-  const userModels = modelProfiles(env.GATEWAY_USER_MODELS_JSON, 'GATEWAY_USER_MODELS_JSON');
+  const models = overrideProfileModels(
+    modelProfiles(env.GATEWAY_MODELS_JSON, 'GATEWAY_MODELS_JSON'),
+    env.GATEWAY_MODEL_OVERRIDE,
+  );
+  const userModels = overrideProfileModels(
+    modelProfiles(env.GATEWAY_USER_MODELS_JSON, 'GATEWAY_USER_MODELS_JSON'),
+    env.GATEWAY_USER_MODEL_OVERRIDE,
+  );
   if (Object.keys(models).length && !publicUrl) throw new ConfigError('GATEWAY_PUBLIC_URL is required for model proxy');
   if (publicUrl) {
     const url = httpUrl(publicUrl, 'GATEWAY_PUBLIC_URL');
